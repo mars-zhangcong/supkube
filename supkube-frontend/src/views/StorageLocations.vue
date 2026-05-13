@@ -43,6 +43,13 @@
             {{ formatTime(row.status?.lastValidationTime) }}
           </template>
         </el-table-column>
+        <el-table-column label="Actions" width="150">
+          <template #default="{ row }">
+            <el-button size="small" @click="handleVerify(row)" :loading="verifying">
+              Verify
+            </el-button>
+          </template>
+        </el-table-column>
       </el-table>
     </el-card>
 
@@ -93,12 +100,13 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
-import { getStorageLocations, createStorageLocation } from '../api/velero'
+import { getStorageLocations, createStorageLocation, verifyStorageLocation } from '../api/velero'
 import { ElMessage } from 'element-plus'
 
 const locations = ref([])
 const loading = ref(false)
 const creating = ref(false)
+const verifying = ref(false)
 const showCreateDialog = ref(false)
 
 const createForm = ref({
@@ -165,6 +173,24 @@ const handleCreate = async () => {
     ElMessage.error('Failed to create storage location: ' + (e.response?.data?.error || e.message))
   } finally {
     creating.value = false
+  }
+}
+
+const handleVerify = async (row) => {
+  verifying.value = true
+  try {
+    const res = await verifyStorageLocation(row.metadata?.name || row.name)
+    const phase = res.data?.phase || res.data?.status?.phase || 'Unknown'
+    if (phase === 'Available') {
+      ElMessage.success(`Storage location "${row.metadata?.name || row.name}" is available`)
+    } else {
+      ElMessage.warning(`Storage location "${row.metadata?.name || row.name}" status: ${phase}`)
+    }
+    await fetchLocations()
+  } catch (e) {
+    ElMessage.error('Failed to verify storage location: ' + (e.response?.data?.error || e.message))
+  } finally {
+    verifying.value = false
   }
 }
 

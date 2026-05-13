@@ -108,12 +108,14 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { RefreshRight, Close } from '@element-plus/icons-vue'
-import { getRestores, createRestore, getBackups, getNamespaces } from '../api/velero'
+import { getRestores, createRestore, getBackups, getNamespaces, getBackupResources } from '../api/velero'
 import { ElMessage } from 'element-plus'
 
 const route = useRoute()
 const restores = ref([])
 const availableBackups = ref([])
+const backupResources = ref(null)
+const loadingResources = ref(false)
 const namespaces = ref([])
 const loading = ref(false)
 const creating = ref(false)
@@ -171,6 +173,23 @@ const fetchBackups = async () => {
     availableBackups.value = items.filter(b => b.status?.phase === 'Completed')
   } catch (e) {
     console.error('Failed to load backups:', e)
+  }
+}
+
+const fetchResourcePreview = async (backupName) => {
+  if (!backupName) {
+    backupResources.value = null
+    return
+  }
+  loadingResources.value = true
+  try {
+    const res = await getBackupResources(backupName)
+    backupResources.value = res.data
+  } catch (e) {
+    backupResources.value = null
+    console.error('Failed to load resource preview:', e)
+  } finally {
+    loadingResources.value = false
   }
 }
 
