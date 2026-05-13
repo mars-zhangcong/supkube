@@ -1,0 +1,28 @@
+# Build stage
+FROM golang:1.21-alpine AS builder
+
+RUN apk add --no-cache git
+
+WORKDIR /app
+
+# Cache dependencies
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Build
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /supkube-backend .
+
+# Runtime stage
+FROM alpine:3.19
+
+RUN apk add --no-cache ca-certificates tzdata
+
+RUN adduser -D -u 1000 appuser
+USER appuser
+
+COPY --from=builder /supkube-backend /usr/local/bin/supkube-backend
+
+EXPOSE 8080
+
+ENTRYPOINT ["supkube-backend"]
