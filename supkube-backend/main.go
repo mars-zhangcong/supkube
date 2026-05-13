@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 
-	"github.com/supvault/supvault-backend/cmd/server"
+	"github.com/supkube/supkube-backend/cmd/server"
 )
 
 func main() {

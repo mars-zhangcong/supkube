@@ -2,7 +2,7 @@ package server
 
 import (
 	"github.com/gin-gonic/gin"
-	v1 "github.com/supvault/supvault-backend/internal/api/v1"
+	v1 "github.com/supkube/supkube-backend/internal/api/v1"
 )
 
 func Run() error {

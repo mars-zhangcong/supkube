@@ -1,4 +1,4 @@
-module github.com/supvault/supvault-backend
+module github.com/supkube/supkube-backend
 
 go 1.21
 

@@ -28,7 +28,7 @@
       </el-aside>
       <el-container>
         <el-header>
-          <h2>SupVault — Kubernetes Data Protection</h2>
+          <h2>SupKube — Kubernetes Data Protection</h2>
         </el-header>
         <el-main>
           <router-view />

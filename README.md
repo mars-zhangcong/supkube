@@ -1,18 +1,18 @@
-# SupVault
+# SupKube
 
 A Kubernetes-native data protection UI built on top of [Velero](https://velero.io), inspired by [Kasten K10](https://docs.kasten.io).
 
 ## Overview
 
-SupVault provides a clean, intuitive web interface for managing Kubernetes backup and restore operations powered by Velero. It aims to bring the ease-of-use of commercial solutions like Kasten K10 to the open-source Velero ecosystem.
+SupKube provides a clean, intuitive web interface for managing Kubernetes backup and restore operations powered by Velero. It aims to bring the ease-of-use of commercial solutions like Kasten K10 to the open-source Velero ecosystem.
 
 ## Architecture
 
 ```
-supvault/
-├── supvault-backend/    # Go + Gin REST API (wraps Velero CRDs)
-├── supvault-frontend/   # Vue 3 + Element Plus UI
-└── supvault-helm/       # Helm Chart for K8S deployment
+supkube/
+├── supkube-backend/    # Go + Gin REST API (wraps Velero CRDs)
+├── supkube-frontend/   # Vue 3 + Element Plus UI
+└── supkube-helm/       # Helm Chart for K8S deployment
 ```
 
 ## Features (MVP)
@@ -35,14 +35,14 @@ supvault/
 
 ### Backend
 ```bash
-cd supvault-backend
+cd supkube-backend
 go mod tidy
 go run main.go
 ```
 
 ### Frontend
 ```bash
-cd supvault-frontend
+cd supkube-frontend
 npm install
 npm run dev
 ```
