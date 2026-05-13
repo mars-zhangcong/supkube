@@ -1,7 +1,15 @@
 <template>
   <div class="dashboard">
     <el-row :gutter="20">
-      <el-col :span="6">
+      <el-col :span="4">
+        <el-card>
+          <div class="stat">
+            <div class="stat-value">{{ stats.nodes }}</div>
+            <div class="stat-label">Nodes</div>
+          </div>
+        </el-card>
+      </el-col>
+      <el-col :span="4">
         <el-card>
           <div class="stat">
             <div class="stat-value">{{ stats.namespaces }}</div>
@@ -9,7 +17,15 @@
           </div>
         </el-card>
       </el-col>
-      <el-col :span="6">
+      <el-col :span="4">
+        <el-card>
+          <div class="stat">
+            <div class="stat-value success">{{ stats.protectedApps }}</div>
+            <div class="stat-label">Protected</div>
+          </div>
+        </el-card>
+      </el-col>
+      <el-col :span="4">
         <el-card>
           <div class="stat">
             <div class="stat-value">{{ stats.backups }}</div>
@@ -17,7 +33,7 @@
           </div>
         </el-card>
       </el-col>
-      <el-col :span="6">
+      <el-col :span="4">
         <el-card>
           <div class="stat">
             <div class="stat-value success">{{ stats.successful }}</div>
@@ -25,7 +41,7 @@
           </div>
         </el-card>
       </el-col>
-      <el-col :span="6">
+      <el-col :span="4">
         <el-card>
           <div class="stat">
             <div class="stat-value danger">{{ stats.failed }}</div>
@@ -106,9 +122,9 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
-import { getDashboardSummary, getBackups, getRestores, getNamespaces } from '../api/velero'
+import { getDashboardSummary, getBackups, getRestores, getNamespaces, getApplications } from '../api/velero'
 
-const stats = ref({ namespaces: 0, nodes: 0, backups: 0, successful: 0, failed: 0 })
+const stats = ref({ nodes: 0, namespaces: 0, protectedApps: 0, backups: 0, successful: 0, failed: 0 })
 const recentBackups = ref([])
 const recentRestores = ref([])
 const loading = ref(false)
@@ -143,9 +159,16 @@ const fetchData = async () => {
     stats.value.failed = data.backupSummary?.failed ?? 0
     recentBackups.value = (data.recentBackups || []).slice(0, 5)
 
-    // Still fetch restores separately (not in summary)
-    const restoresRes = await getRestores()
+    // Still fetch restores and applications separately (not in summary)
+    const [restoresRes, appsRes] = await Promise.all([
+      getRestores(),
+      getApplications().catch(() => null)
+    ])
     recentRestores.value = (restoresRes.data.items || []).slice(0, 5)
+    if (appsRes) {
+      const apps = appsRes.data.items || []
+      stats.value.protectedApps = apps.filter(a => a.protected).length
+    }
   } catch (e) {
     // Fallback to individual endpoints if summary not available
     try {
