@@ -12,6 +12,8 @@ export const getApplications = () => api.get('/applications')
 // Backups
 export const getBackups = () => api.get('/backups')
 export const getBackup = (name) => api.get(`/backups/${name}`)
+export const getBackupResources = (name) => api.get(`/backups/${name}/resources`)
+export const getBackupLogs = (name) => api.get(`/backups/${name}/logs`)
 export const createBackup = (data) => api.post('/backups', data)
 export const deleteBackup = (name) => api.delete(`/backups/${name}`)
 
@@ -29,3 +31,4 @@ export const deleteSchedule = (name) => api.delete(`/schedules/${name}`)
 // Storage locations
 export const getStorageLocations = () => api.get('/storage-locations')
 export const createStorageLocation = (data) => api.post('/storage-locations', data)
+export const verifyStorageLocation = (name) => api.post(`/storage-locations/${name}/verify`)

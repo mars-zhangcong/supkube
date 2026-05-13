@@ -32,6 +32,7 @@ func Run() error {
 		api.GET("/backups", v1.ListBackups)
 		api.POST("/backups", v1.CreateBackup)
 		api.GET("/backups/:name", v1.GetBackup)
+		api.GET("/backups/:name/resources", v1.GetBackupResources)
 		api.DELETE("/backups/:name", v1.DeleteBackup)
 
 		// Restores
@@ -47,7 +48,8 @@ func Run() error {
 
 		// Storage locations
 		api.GET("/storage-locations", v1.ListStorageLocations)
-		api.POST("/storage-locations", v1.CreateStorageLocation)
+		api.POST("/storage-locations", v1.CreateStorageLocationWithSecret)
+		api.POST("/storage-locations/:name/verify", v1.VerifyStorageLocation)
 	}
 
 	return r.Run(":8080")
