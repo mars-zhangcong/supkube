@@ -139,7 +139,7 @@ onMounted(async () => {
     const restoreItems = restoresRes.data.items || []
     recentRestores.value = restoreItems.slice(0, 5)
 
-    const namespaces = nsRes.data.items || nsRes.data || []
+    const namespaces = nsRes.data.namespaces || nsRes.data.items || nsRes.data || []
     stats.value.namespaces = Array.isArray(namespaces) ? namespaces.length : 0
   } catch (e) {
     console.error('Failed to load dashboard data:', e)

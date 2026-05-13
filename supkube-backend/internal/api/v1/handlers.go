@@ -3,6 +3,7 @@ package v1
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
@@ -36,7 +37,7 @@ func ListNamespaces(c *gin.Context) {
 	for _, ns := range nsList.Items {
 		names = append(names, ns.Name)
 	}
-	c.JSON(http.StatusOK, gin.H{"namespaces": names})
+	c.JSON(http.StatusOK, gin.H{"items": names, "total": len(names)})
 }
 
 // ListBackups returns all Velero backups
@@ -47,11 +48,12 @@ func ListBackups(c *gin.Context) {
 		return
 	}
 	backupList := &velerov1.BackupList{}
-	if err := cl.List(context.Background(), backupList, client.InNamespace("velero")); err != nil {
+	namespace := c.DefaultQuery("namespace", "velero")
+	if err := cl.List(context.Background(), backupList, client.InNamespace(namespace)); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, backupList)
+	c.JSON(http.StatusOK, gin.H{"items": backupList.Items, "total": len(backupList.Items)})
 }
 
 // CreateBackup creates a new Velero backup
@@ -78,6 +80,15 @@ func CreateBackup(c *gin.Context) {
 		Spec: velerov1.BackupSpec{
 			IncludedNamespaces: req.IncludedNamespaces,
 		},
+	}
+	// Apply TTL if provided
+	if req.TTL != "" {
+		duration, parseErr := time.ParseDuration(req.TTL)
+		if parseErr != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid TTL format: " + parseErr.Error()})
+			return
+		}
+		backup.Spec.TTL = metav1.Duration{Duration: duration}
 	}
 	if err := cl.Create(context.Background(), backup); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -130,11 +141,12 @@ func ListRestores(c *gin.Context) {
 		return
 	}
 	restoreList := &velerov1.RestoreList{}
-	if err := cl.List(context.Background(), restoreList, client.InNamespace("velero")); err != nil {
+	namespace := c.DefaultQuery("namespace", "velero")
+	if err := cl.List(context.Background(), restoreList, client.InNamespace(namespace)); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, restoreList)
+	c.JSON(http.StatusOK, gin.H{"items": restoreList.Items, "total": len(restoreList.Items)})
 }
 
 // CreateRestore creates a new Velero restore
@@ -196,11 +208,12 @@ func ListSchedules(c *gin.Context) {
 		return
 	}
 	scheduleList := &velerov1.ScheduleList{}
-	if err := cl.List(context.Background(), scheduleList, client.InNamespace("velero")); err != nil {
+	namespace := c.DefaultQuery("namespace", "velero")
+	if err := cl.List(context.Background(), scheduleList, client.InNamespace(namespace)); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, scheduleList)
+	c.JSON(http.StatusOK, gin.H{"items": scheduleList.Items, "total": len(scheduleList.Items)})
 }
 
 // CreateSchedule creates a new Velero schedule
@@ -266,11 +279,12 @@ func ListStorageLocations(c *gin.Context) {
 		return
 	}
 	bslList := &velerov1.BackupStorageLocationList{}
-	if err := cl.List(context.Background(), bslList, client.InNamespace("velero")); err != nil {
+	namespace := c.DefaultQuery("namespace", "velero")
+	if err := cl.List(context.Background(), bslList, client.InNamespace(namespace)); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, bslList)
+	c.JSON(http.StatusOK, gin.H{"items": bslList.Items, "total": len(bslList.Items)})
 }
 
 // CreateStorageLocation creates a new backup storage location

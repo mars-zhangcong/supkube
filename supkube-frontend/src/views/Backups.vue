@@ -164,7 +164,7 @@ const fetchBackups = async () => {
 const fetchNamespaces = async () => {
   try {
     const res = await getNamespaces()
-    const items = res.data.items || res.data || []
+    const items = res.data.namespaces || res.data.items || res.data || []
     namespaces.value = items.map(ns => ns.metadata?.name || ns).filter(Boolean)
   } catch (e) {
     console.error('Failed to load namespaces:', e)
