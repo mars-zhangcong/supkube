@@ -63,6 +63,14 @@
             </el-option>
           </el-select>
         </el-form-item>
+        <el-form-item v-if="backupResources" label="Resource Preview">
+          <div v-loading="loadingResources" style="width: 100%; border: 1px solid #eee; border-radius: 4px; padding: 8px; font-size: 13px;">
+            <p><strong>Namespaces:</strong> {{ (backupResources.includedNamespaces || ['*']).join(', ') }}</p>
+            <p><strong>Items:</strong> {{ backupResources.itemsBackedUp ?? '-' }} / {{ backupResources.totalItems ?? '-' }}</p>
+            <p v-if="backupResources.includedResources"><strong>Resources:</strong> {{ backupResources.includedResources.join(', ') }}</p>
+            <p v-if="backupResources.labelSelector"><strong>Labels:</strong> {{ JSON.stringify(backupResources.labelSelector) }}</p>
+          </div>
+        </el-form-item>
         <el-form-item label="Included Namespaces">
           <el-select
             v-model="createForm.includedNamespaces"
@@ -105,7 +113,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { RefreshRight, Close } from '@element-plus/icons-vue'
 import { getRestores, createRestore, getBackups, getNamespaces, getBackupResources } from '../api/velero'
@@ -241,6 +249,11 @@ const handleCreate = async () => {
     creating.value = false
   }
 }
+
+// Watch for backup selection to load resource preview
+watch(() => createForm.value.backupName, (newVal) => {
+  fetchResourcePreview(newVal)
+})
 
 const startPolling = () => {
   stopPolling()
