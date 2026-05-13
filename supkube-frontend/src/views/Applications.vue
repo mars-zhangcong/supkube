@@ -54,11 +54,83 @@
         </el-table-column>
       </el-table>
     </el-card>
+
+    <!-- Application Details Drawer -->
+    <el-drawer
+      v-model="drawerVisible"
+      :title="selectedApp ? selectedApp.namespace : ''"
+      direction="rtl"
+      size="520px"
+    >
+      <div v-if="selectedApp" class="app-details">
+        <!-- Labels -->
+        <div class="detail-section">
+          <div class="detail-section-title">LABELS</div>
+          <div class="labels-container">
+            <el-tag
+              v-for="(val, key) in selectedAppLabels"
+              :key="key"
+              size="small"
+              class="label-tag"
+            >{{ key }}:{{ val }}</el-tag>
+            <span v-if="!selectedAppLabels || Object.keys(selectedAppLabels).length === 0" class="no-data">No labels</span>
+          </div>
+        </div>
+
+        <!-- kubectl -->
+        <div class="detail-section">
+          <div class="detail-section-title">kubectl</div>
+          <div class="kubectl-block">
+            <code>$ kubectl get --raw /api/v1/namespaces/{{ selectedApp.namespace }}</code>
+            <el-button size="small" text class="copy-btn" @click="copyKubectl">copy</el-button>
+          </div>
+        </div>
+
+        <!-- Data (PVCs) -->
+        <div class="detail-section">
+          <div class="detail-section-title collapsible" @click="dataExpanded = !dataExpanded">
+            Data <span class="count">({{ selectedApp.pvcs ? selectedApp.pvcs.length : 0 }})</span>
+            <span class="chevron">{{ dataExpanded ? '∧' : '∨' }}</span>
+          </div>
+          <div v-if="dataExpanded" class="detail-table">
+            <div class="detail-table-header">
+              <span>PVC</span>
+              <span>SIZE</span>
+            </div>
+            <div v-if="selectedApp.pvcs && selectedApp.pvcs.length > 0">
+              <div v-for="pvc in selectedApp.pvcs" :key="pvc.name" class="detail-table-row">
+                <span>📄 {{ pvc.name }}</span>
+                <span>{{ pvc.size || '-' }}</span>
+              </div>
+            </div>
+            <div v-else class="no-data">No PVCs found</div>
+          </div>
+        </div>
+
+        <!-- Workloads -->
+        <div class="detail-section">
+          <div class="detail-section-title collapsible" @click="workloadsExpanded = !workloadsExpanded">
+            Workloads <span class="count">({{ selectedApp.workloads || 0 }})</span>
+            <span class="chevron">{{ workloadsExpanded ? '∧' : '∨' }}</span>
+          </div>
+          <div v-if="workloadsExpanded" class="detail-table">
+            <div class="no-data">Workload details available via kubectl</div>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="detail-actions">
+          <el-button type="primary" @click="handleCommand('backup', selectedApp)">Backup Now</el-button>
+          <el-button @click="handleCommand('restore', selectedApp)">Restore</el-button>
+          <el-button @click="handleCommand('policy', selectedApp)">Create Policy</el-button>
+        </div>
+      </div>
+    </el-drawer>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { getApplications } from '../api/velero'
 import { ElMessage } from 'element-plus'
@@ -66,6 +138,15 @@ import { ElMessage } from 'element-plus'
 const router = useRouter()
 const applications = ref([])
 const loading = ref(false)
+const drawerVisible = ref(false)
+const selectedApp = ref(null)
+const dataExpanded = ref(true)
+const workloadsExpanded = ref(false)
+
+const selectedAppLabels = computed(() => {
+  if (!selectedApp.value) return {}
+  return selectedApp.value.labels || {}
+})
 
 const formatTime = (ts) => {
   if (!ts) return ''
@@ -98,9 +179,20 @@ const handleCommand = (command, row) => {
       router.push({ path: '/policies', query: { namespace: row.namespace } })
       break
     case 'details':
-      ElMessage.info(`Namespace: ${row.namespace} — ${row.workloads} workload(s)`)
+      selectedApp.value = row
+      dataExpanded.value = true
+      workloadsExpanded.value = false
+      drawerVisible.value = true
       break
   }
+}
+
+const copyKubectl = () => {
+  if (!selectedApp.value) return
+  const cmd = `kubectl get --raw /api/v1/namespaces/${selectedApp.value.namespace}`
+  navigator.clipboard.writeText(cmd).then(() => {
+    ElMessage.success('Copied to clipboard')
+  })
 }
 
 onMounted(() => {
@@ -143,48 +235,84 @@ onMounted(() => {
   font-size: 11px;
   font-weight: bold;
 }
-.status-compliant {
-  color: #67c23a;
+.status-compliant { color: #67c23a; }
+.status-compliant .status-icon { border: 2px solid #67c23a; color: #67c23a; }
+.status-unmanaged { color: #e6a23c; }
+.status-unmanaged .status-icon { border: 2px solid #e6a23c; color: #e6a23c; }
+.workload-count { color: #606266; font-size: 13px; }
+.last-backup { display: flex; flex-direction: column; gap: 2px; }
+.backup-time { color: #409eff; font-size: 12px; }
+.no-restore { color: #c0c4cc; font-size: 13px; }
+.more-btn { padding: 4px 8px; font-size: 18px; color: #606266; }
+.dots { font-size: 20px; line-height: 1; letter-spacing: 1px; }
+:deep(.app-row:hover .more-btn) { color: #409eff; }
+
+/* Drawer styles */
+.app-details { padding: 0 4px; }
+.detail-section { margin-bottom: 24px; }
+.detail-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #909399;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
 }
-.status-compliant .status-icon {
-  border: 2px solid #67c23a;
-  color: #67c23a;
-}
-.status-unmanaged {
-  color: #e6a23c;
-}
-.status-unmanaged .status-icon {
-  border: 2px solid #e6a23c;
-  color: #e6a23c;
-}
-.workload-count {
-  color: #606266;
-  font-size: 13px;
-}
-.last-backup {
+.detail-section-title.collapsible {
+  cursor: pointer;
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+  text-transform: none;
+  letter-spacing: 0;
+  padding: 8px 0;
+  border-bottom: 1px solid #f0f0f0;
 }
-.backup-time {
-  color: #409eff;
+.count { color: #909399; font-weight: 400; }
+.chevron { margin-left: auto; color: #909399; }
+.labels-container { display: flex; flex-wrap: wrap; gap: 6px; }
+.label-tag { font-size: 11px; }
+.kubectl-block {
+  background: #1a1a2e;
+  color: #a8d8a8;
+  padding: 12px 16px;
+  border-radius: 6px;
+  font-family: 'Courier New', monospace;
   font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
-.no-restore {
-  color: #c0c4cc;
+.copy-btn { color: #a8d8a8 !important; font-size: 12px; }
+.detail-table { margin-top: 8px; }
+.detail-table-header {
+  display: grid;
+  grid-template-columns: 1fr 100px;
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #909399;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid #f0f0f0;
+}
+.detail-table-row {
+  display: grid;
+  grid-template-columns: 1fr 100px;
+  padding: 10px 12px;
   font-size: 13px;
+  border-bottom: 1px solid #f9f9f9;
 }
-.more-btn {
-  padding: 4px 8px;
-  font-size: 18px;
-  color: #606266;
-}
-.dots {
-  font-size: 20px;
-  line-height: 1;
-  letter-spacing: 1px;
-}
-:deep(.app-row:hover .more-btn) {
-  color: #409eff;
+.no-data { color: #c0c4cc; font-size: 13px; padding: 8px 0; }
+.detail-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 16px;
+  border-top: 1px solid #f0f0f0;
+  margin-top: 8px;
 }
 </style>
