@@ -424,6 +424,72 @@ func TestE2E_SchedulePauseResume(t *testing.T) {
 	})
 }
 
+// --- E2E: Applications API ---
+
+func TestE2E_ApplicationsList(t *testing.T) {
+	requireBackend(t)
+
+	resp, err := http.Get(baseURL + "/applications")
+	if err != nil {
+		t.Fatalf("failed to get applications: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var result map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&result)
+
+	// Verify response structure
+	items, ok := result["items"].([]interface{})
+	if !ok {
+		t.Fatal("expected 'items' array in response")
+	}
+
+	total, ok := result["total"].(float64)
+	if !ok {
+		t.Fatal("expected 'total' field in response")
+	}
+	if int(total) != len(items) {
+		t.Errorf("total (%d) doesn't match items length (%d)", int(total), len(items))
+	}
+
+	// Verify each item has required fields
+	for i, item := range items {
+		app := item.(map[string]interface{})
+		if _, ok := app["namespace"]; !ok {
+			t.Errorf("item %d: expected 'namespace' field", i)
+		}
+		if _, ok := app["workloads"]; !ok {
+			t.Errorf("item %d: expected 'workloads' field", i)
+		}
+		if _, ok := app["protected"]; !ok {
+			t.Errorf("item %d: expected 'protected' field", i)
+		}
+		// Protected namespaces should have lastBackupTime and lastBackupName
+		if protected, ok := app["protected"].(bool); ok && protected {
+			if _, ok := app["lastBackupTime"]; !ok {
+				t.Errorf("item %d: protected namespace should have 'lastBackupTime'", i)
+			}
+			if _, ok := app["lastBackupName"]; !ok {
+				t.Errorf("item %d: protected namespace should have 'lastBackupName'", i)
+			}
+		}
+	}
+
+	// Verify system namespaces are excluded (kube-system, kube-public, velero)
+	for _, item := range items {
+		app := item.(map[string]interface{})
+		ns := app["namespace"].(string)
+		if ns == "kube-system" || ns == "kube-public" || ns == "velero" || ns == "kube-node-lease" {
+			t.Errorf("system namespace %s should be excluded from applications list", ns)
+		}
+	}
+}
+
 // --- E2E: Error handling ---
 
 func TestE2E_GetNonexistentBackup(t *testing.T) {
