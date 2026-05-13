@@ -1,12 +1,14 @@
 # Backend
-supvault-backend/vendor/
-supvault-backend/bin/
+supkube-backend/vendor/
+supkube-backend/bin/
 
 # Frontend
-supvault-frontend/node_modules/
-supvault-frontend/dist/
-supvault-frontend/.env.local
+supkube-frontend/node_modules/
+supkube-frontend/dist/
+supkube-frontend/.env.local
 
 # General
+node_modules/
+dist/
 .DS_Store
 *.log
