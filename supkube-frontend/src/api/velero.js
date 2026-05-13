@@ -8,6 +8,7 @@ export const getStatus = () => api.get('/status')
 export const getDashboardSummary = () => api.get('/dashboard/summary')
 export const getNamespaces = () => api.get('/namespaces')
 export const getApplications = () => api.get('/applications')
+export const getApplicationDetail = (namespace) => api.get(`/applications/${namespace}/details`)
 
 // Backups
 export const getBackups = () => api.get('/backups')

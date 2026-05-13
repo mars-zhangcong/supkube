@@ -58,11 +58,18 @@
     <!-- Application Details Drawer -->
     <el-drawer
       v-model="drawerVisible"
-      :title="selectedApp ? selectedApp.namespace : ''"
+      title="Application Details"
       direction="rtl"
       size="520px"
+      :destroy-on-close="true"
     >
-      <div v-if="selectedApp" class="app-details">
+      <div v-if="selectedApp" class="app-details" v-loading="detailLoading">
+        <!-- App Name with icon -->
+        <div class="detail-app-name">
+          <span class="app-icon-box">📦</span>
+          <span>{{ selectedApp.namespace }}</span>
+        </div>
+
         <!-- Labels -->
         <div class="detail-section">
           <div class="detail-section-title">LABELS</div>
@@ -81,40 +88,144 @@
         <div class="detail-section">
           <div class="detail-section-title">kubectl</div>
           <div class="kubectl-block">
-            <code>$ kubectl get --raw /api/v1/namespaces/{{ selectedApp.namespace }}</code>
+            <code>$ kubectl get all -n {{ selectedApp.namespace }}</code>
             <el-button size="small" text class="copy-btn" @click="copyKubectl">copy</el-button>
           </div>
         </div>
 
-        <!-- Data (PVCs) -->
-        <div class="detail-section">
-          <div class="detail-section-title collapsible" @click="dataExpanded = !dataExpanded">
-            Data <span class="count">({{ selectedApp.pvcs ? selectedApp.pvcs.length : 0 }})</span>
-            <span class="chevron">{{ dataExpanded ? '∧' : '∨' }}</span>
+        <!-- Pods -->
+        <div class="detail-section" v-if="detailData.pods">
+          <div class="detail-section-title collapsible" @click="podsExpanded = !podsExpanded">
+            Pods <span class="count">({{ detailData.pods.length }})</span>
+            <span class="chevron">{{ podsExpanded ? '∧' : '∨' }}</span>
           </div>
-          <div v-if="dataExpanded" class="detail-table">
-            <div class="detail-table-header">
-              <span>PVC</span>
-              <span>SIZE</span>
+          <div v-if="podsExpanded" class="detail-table">
+            <div class="detail-table-header detail-table-4col">
+              <span>NAME</span>
+              <span>STATUS</span>
+              <span>READY</span>
+              <span>RESTARTS</span>
             </div>
-            <div v-if="selectedApp.pvcs && selectedApp.pvcs.length > 0">
-              <div v-for="pvc in selectedApp.pvcs" :key="pvc.name" class="detail-table-row">
-                <span>📄 {{ pvc.name }}</span>
-                <span>{{ pvc.size || '-' }}</span>
+            <div v-if="detailData.pods.length > 0">
+              <div v-for="pod in detailData.pods" :key="pod.name" class="detail-table-row detail-table-4col">
+                <span class="resource-name">{{ pod.name }}</span>
+                <span :class="pod.status === 'Running' ? 'status-ok' : 'status-warn'">{{ pod.status }}</span>
+                <span>{{ pod.ready }}</span>
+                <span>{{ pod.restarts || 0 }}</span>
+              </div>
+            </div>
+            <div v-else class="no-data">No pods found</div>
+          </div>
+        </div>
+
+        <!-- Services -->
+        <div class="detail-section" v-if="detailData.services">
+          <div class="detail-section-title collapsible" @click="servicesExpanded = !servicesExpanded">
+            Services <span class="count">({{ detailData.services.length }})</span>
+            <span class="chevron">{{ servicesExpanded ? '∧' : '∨' }}</span>
+          </div>
+          <div v-if="servicesExpanded" class="detail-table">
+            <div class="detail-table-header detail-table-3col">
+              <span>NAME</span>
+              <span>TYPE</span>
+              <span>PORTS</span>
+            </div>
+            <div v-if="detailData.services.length > 0">
+              <div v-for="svc in detailData.services" :key="svc.name" class="detail-table-row detail-table-3col">
+                <span class="resource-name">{{ svc.name }}</span>
+                <span>{{ svc.type }}</span>
+                <span>{{ svc.ports }}</span>
+              </div>
+            </div>
+            <div v-else class="no-data">No services found</div>
+          </div>
+        </div>
+
+        <!-- Deployments -->
+        <div class="detail-section" v-if="detailData.deployments">
+          <div class="detail-section-title collapsible" @click="deploymentsExpanded = !deploymentsExpanded">
+            Deployments <span class="count">({{ detailData.deployments.length }})</span>
+            <span class="chevron">{{ deploymentsExpanded ? '∧' : '∨' }}</span>
+          </div>
+          <div v-if="deploymentsExpanded" class="detail-table">
+            <div class="detail-table-header detail-table-3col">
+              <span>NAME</span>
+              <span>READY</span>
+              <span>AVAILABLE</span>
+            </div>
+            <div v-if="detailData.deployments.length > 0">
+              <div v-for="dep in detailData.deployments" :key="dep.name" class="detail-table-row detail-table-3col">
+                <span class="resource-name">{{ dep.name }}</span>
+                <span>{{ dep.ready }}</span>
+                <span>{{ dep.available }}</span>
+              </div>
+            </div>
+            <div v-else class="no-data">No deployments found</div>
+          </div>
+        </div>
+
+        <!-- StatefulSets -->
+        <div class="detail-section" v-if="detailData.statefulSets">
+          <div class="detail-section-title collapsible" @click="statefulsetsExpanded = !statefulsetsExpanded">
+            StatefulSets <span class="count">({{ detailData.statefulSets.length }})</span>
+            <span class="chevron">{{ statefulsetsExpanded ? '∧' : '∨' }}</span>
+          </div>
+          <div v-if="statefulsetsExpanded" class="detail-table">
+            <div class="detail-table-header detail-table-2col">
+              <span>NAME</span>
+              <span>READY</span>
+            </div>
+            <div v-if="detailData.statefulSets.length > 0">
+              <div v-for="sts in detailData.statefulSets" :key="sts.name" class="detail-table-row detail-table-2col">
+                <span class="resource-name">{{ sts.name }}</span>
+                <span>{{ sts.ready }}</span>
+              </div>
+            </div>
+            <div v-else class="no-data">No statefulsets found</div>
+          </div>
+        </div>
+
+        <!-- PVCs -->
+        <div class="detail-section" v-if="detailData.pvcs">
+          <div class="detail-section-title collapsible" @click="pvcsExpanded = !pvcsExpanded">
+            PVCs <span class="count">({{ detailData.pvcs.length }})</span>
+            <span class="chevron">{{ pvcsExpanded ? '∧' : '∨' }}</span>
+          </div>
+          <div v-if="pvcsExpanded" class="detail-table">
+            <div class="detail-table-header detail-table-3col">
+              <span>NAME</span>
+              <span>STATUS</span>
+              <span>CAPACITY</span>
+            </div>
+            <div v-if="detailData.pvcs.length > 0">
+              <div v-for="pvc in detailData.pvcs" :key="pvc.name" class="detail-table-row detail-table-3col">
+                <span class="resource-name">📄 {{ pvc.name }}</span>
+                <span :class="pvc.status === 'Bound' ? 'status-ok' : 'status-warn'">{{ pvc.status }}</span>
+                <span>{{ pvc.capacity || pvc.size || '-' }}</span>
               </div>
             </div>
             <div v-else class="no-data">No PVCs found</div>
           </div>
         </div>
 
-        <!-- Workloads -->
-        <div class="detail-section">
-          <div class="detail-section-title collapsible" @click="workloadsExpanded = !workloadsExpanded">
-            Workloads <span class="count">({{ selectedApp.workloads || 0 }})</span>
-            <span class="chevron">{{ workloadsExpanded ? '∧' : '∨' }}</span>
+        <!-- ConfigMaps -->
+        <div class="detail-section" v-if="detailData.configMaps">
+          <div class="detail-section-title collapsible" @click="configmapsExpanded = !configmapsExpanded">
+            ConfigMaps <span class="count">({{ detailData.configMaps.length }})</span>
+            <span class="chevron">{{ configmapsExpanded ? '∧' : '∨' }}</span>
           </div>
-          <div v-if="workloadsExpanded" class="detail-table">
-            <div class="no-data">Workload details available via kubectl</div>
+          <div v-if="configmapsExpanded" class="detail-table">
+            <div class="detail-table-header detail-table-2col">
+              <span>NAME</span>
+              <span>DATA</span>
+            </div>
+            <div v-if="detailData.configMaps.length > 0">
+              <div v-for="cm in detailData.configMaps" :key="cm.name" class="detail-table-row detail-table-2col">
+                <span class="resource-name">{{ cm.name }}</span>
+                <span>{{ cm.data || '-' }}</span>
+              </div>
+            </div>
+            <div v-else class="no-data">No configmaps found</div>
           </div>
         </div>
 
@@ -132,7 +243,7 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { getApplications } from '../api/velero'
+import { getApplications, getApplicationDetail } from '../api/velero'
 import { ElMessage } from 'element-plus'
 
 const router = useRouter()
@@ -140,12 +251,20 @@ const applications = ref([])
 const loading = ref(false)
 const drawerVisible = ref(false)
 const selectedApp = ref(null)
-const dataExpanded = ref(true)
-const workloadsExpanded = ref(false)
+const detailLoading = ref(false)
+const detailData = ref({})
+
+// Expand/collapse states
+const podsExpanded = ref(true)
+const servicesExpanded = ref(true)
+const deploymentsExpanded = ref(true)
+const statefulsetsExpanded = ref(true)
+const pvcsExpanded = ref(true)
+const configmapsExpanded = ref(false)
 
 const selectedAppLabels = computed(() => {
-  if (!selectedApp.value) return {}
-  return selectedApp.value.labels || {}
+  if (!detailData.value || !detailData.value.labels) return {}
+  return detailData.value.labels
 })
 
 const formatTime = (ts) => {
@@ -179,17 +298,38 @@ const handleCommand = (command, row) => {
       router.push({ path: '/policies', query: { namespace: row.namespace } })
       break
     case 'details':
-      selectedApp.value = row
-      dataExpanded.value = true
-      workloadsExpanded.value = false
-      drawerVisible.value = true
+      openDetail(row)
       break
+  }
+}
+
+const openDetail = async (row) => {
+  selectedApp.value = row
+  detailData.value = {}
+  detailLoading.value = true
+  drawerVisible.value = true
+  // Reset expand states
+  podsExpanded.value = true
+  servicesExpanded.value = true
+  deploymentsExpanded.value = true
+  statefulsetsExpanded.value = true
+  pvcsExpanded.value = true
+  configmapsExpanded.value = false
+  try {
+    const res = await getApplicationDetail(row.namespace)
+    detailData.value = res.data || {}
+  } catch (e) {
+    console.warn('Failed to load application details:', e)
+    // Fallback to basic row data
+    detailData.value = { ...row }
+  } finally {
+    detailLoading.value = false
   }
 }
 
 const copyKubectl = () => {
   if (!selectedApp.value) return
-  const cmd = `kubectl get --raw /api/v1/namespaces/${selectedApp.value.namespace}`
+  const cmd = `kubectl get all -n ${selectedApp.value.namespace}`
   navigator.clipboard.writeText(cmd).then(() => {
     ElMessage.success('Copied to clipboard')
   })
@@ -291,7 +431,6 @@ onMounted(() => {
 .detail-table { margin-top: 8px; }
 .detail-table-header {
   display: grid;
-  grid-template-columns: 1fr 100px;
   padding: 6px 12px;
   font-size: 11px;
   font-weight: 600;
@@ -302,11 +441,16 @@ onMounted(() => {
 }
 .detail-table-row {
   display: grid;
-  grid-template-columns: 1fr 100px;
   padding: 10px 12px;
   font-size: 13px;
   border-bottom: 1px solid #f9f9f9;
 }
+.detail-table-2col { grid-template-columns: 1fr 100px; }
+.detail-table-3col { grid-template-columns: 1fr 100px 100px; }
+.detail-table-4col { grid-template-columns: 1fr 80px 60px 70px; }
+.resource-name { font-weight: 500; word-break: break-all; }
+.status-ok { color: #67c23a; font-weight: 500; }
+.status-warn { color: #e6a23c; font-weight: 500; }
 .no-data { color: #c0c4cc; font-size: 13px; padding: 8px 0; }
 .detail-actions {
   display: flex;
