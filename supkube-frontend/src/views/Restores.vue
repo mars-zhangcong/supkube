@@ -105,7 +105,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { RefreshRight, Close } from '@element-plus/icons-vue'
 import { getRestores, createRestore, getBackups, getNamespaces } from '../api/velero'
@@ -118,6 +118,7 @@ const namespaces = ref([])
 const loading = ref(false)
 const creating = ref(false)
 const showCreateDialog = ref(false)
+let pollTimer = null
 
 const createForm = ref({
   name: '',
@@ -204,7 +205,7 @@ const handleCreate = async () => {
       restorePVs: createForm.value.restorePVs
     }
     await createRestore(payload)
-    ElMessage.success(`Restore "${createForm.value.name}" created`)
+    ElMessage.success(`Restore "${createForm.value.name}" created. Monitoring progress...`)
     showCreateDialog.value = false
     createForm.value = {
       name: '',
@@ -214,10 +215,23 @@ const handleCreate = async () => {
       restorePVs: true
     }
     await fetchRestores()
+    startPolling()
   } catch (e) {
     ElMessage.error('Failed to create restore: ' + (e.response?.data?.error || e.message))
   } finally {
     creating.value = false
+  }
+}
+
+const startPolling = () => {
+  stopPolling()
+  pollTimer = setInterval(fetchRestores, 5000)
+}
+
+const stopPolling = () => {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
   }
 }
 
@@ -231,6 +245,10 @@ onMounted(() => {
     createForm.value.backupName = route.query.backup
     showCreateDialog.value = true
   }
+})
+
+onUnmounted(() => {
+  stopPolling()
 })
 </script>
 
