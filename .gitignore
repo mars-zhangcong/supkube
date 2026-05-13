@@ -1,0 +1,12 @@
+# Backend
+supvault-backend/vendor/
+supvault-backend/bin/
+
+# Frontend
+supvault-frontend/node_modules/
+supvault-frontend/dist/
+supvault-frontend/.env.local
+
+# General
+.DS_Store
+*.log
