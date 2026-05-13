@@ -5,6 +5,7 @@ const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1'
 const api = axios.create({ baseURL: BASE_URL })
 
 export const getStatus = () => api.get('/status')
+export const getDashboardSummary = () => api.get('/dashboard/summary')
 export const getNamespaces = () => api.get('/namespaces')
 
 // Backups
@@ -21,6 +22,7 @@ export const createRestore = (data) => api.post('/restores', data)
 // Schedules
 export const getSchedules = () => api.get('/schedules')
 export const createSchedule = (data) => api.post('/schedules', data)
+export const patchSchedule = (name, data) => api.patch(`/schedules/${name}`, data)
 export const deleteSchedule = (name) => api.delete(`/schedules/${name}`)
 
 // Storage locations

@@ -25,6 +25,7 @@ func Run() error {
 	{
 		api.GET("/status", v1.GetStatus)
 		api.GET("/namespaces", v1.ListNamespaces)
+		api.GET("/dashboard/summary", v1.GetDashboardSummary)
 
 		// Backups
 		api.GET("/backups", v1.ListBackups)
@@ -40,6 +41,7 @@ func Run() error {
 		// Schedules
 		api.GET("/schedules", v1.ListSchedules)
 		api.POST("/schedules", v1.CreateSchedule)
+		api.PATCH("/schedules/:name", v1.PatchSchedule)
 		api.DELETE("/schedules/:name", v1.DeleteSchedule)
 
 		// Storage locations

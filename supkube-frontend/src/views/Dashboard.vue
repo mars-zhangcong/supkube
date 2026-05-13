@@ -97,13 +97,14 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { getBackups, getRestores, getNamespaces } from '../api/velero'
+import { ref, onMounted, onUnmounted } from 'vue'
+import { getDashboardSummary, getBackups, getRestores, getNamespaces } from '../api/velero'
 
-const stats = ref({ namespaces: 0, backups: 0, successful: 0, failed: 0 })
+const stats = ref({ namespaces: 0, nodes: 0, backups: 0, successful: 0, failed: 0 })
 const recentBackups = ref([])
 const recentRestores = ref([])
 const loading = ref(false)
+let refreshTimer = null
 
 const statusType = (phase) => {
   const map = {
@@ -121,30 +122,59 @@ const formatTime = (ts) => {
   return new Date(ts).toLocaleString()
 }
 
-onMounted(async () => {
+const fetchData = async () => {
   loading.value = true
   try {
-    const [backupsRes, restoresRes, nsRes] = await Promise.all([
-      getBackups(),
-      getRestores(),
-      getNamespaces()
-    ])
+    // Try the aggregated summary endpoint first
+    const summaryRes = await getDashboardSummary()
+    const data = summaryRes.data
+    stats.value.nodes = data.cluster?.nodes ?? 0
+    stats.value.namespaces = data.cluster?.namespaces ?? 0
+    stats.value.backups = data.backupSummary?.total ?? 0
+    stats.value.successful = data.backupSummary?.completed ?? 0
+    stats.value.failed = data.backupSummary?.failed ?? 0
+    recentBackups.value = (data.recentBackups || []).slice(0, 5)
 
-    const items = backupsRes.data.items || []
-    recentBackups.value = items.slice(0, 5)
-    stats.value.backups = items.length
-    stats.value.successful = items.filter(b => b.status?.phase === 'Completed').length
-    stats.value.failed = items.filter(b => b.status?.phase === 'Failed').length
-
-    const restoreItems = restoresRes.data.items || []
-    recentRestores.value = restoreItems.slice(0, 5)
-
-    const namespaces = nsRes.data.namespaces || nsRes.data.items || nsRes.data || []
-    stats.value.namespaces = Array.isArray(namespaces) ? namespaces.length : 0
+    // Still fetch restores separately (not in summary)
+    const restoresRes = await getRestores()
+    recentRestores.value = (restoresRes.data.items || []).slice(0, 5)
   } catch (e) {
-    console.error('Failed to load dashboard data:', e)
+    // Fallback to individual endpoints if summary not available
+    try {
+      const [backupsRes, restoresRes, nsRes] = await Promise.all([
+        getBackups(),
+        getRestores(),
+        getNamespaces()
+      ])
+
+      const items = backupsRes.data.items || []
+      recentBackups.value = items.slice(0, 5)
+      stats.value.backups = items.length
+      stats.value.successful = items.filter(b => b.status?.phase === 'Completed').length
+      stats.value.failed = items.filter(b => b.status?.phase === 'Failed').length
+
+      const restoreItems = restoresRes.data.items || []
+      recentRestores.value = restoreItems.slice(0, 5)
+
+      const namespaces = nsRes.data.namespaces || nsRes.data.items || nsRes.data || []
+      stats.value.namespaces = Array.isArray(namespaces) ? namespaces.length : 0
+    } catch (fallbackErr) {
+      console.error('Failed to load dashboard data:', fallbackErr)
+    }
   } finally {
     loading.value = false
+  }
+}
+
+onMounted(() => {
+  fetchData()
+  refreshTimer = setInterval(fetchData, 30000)
+})
+
+onUnmounted(() => {
+  if (refreshTimer) {
+    clearInterval(refreshTimer)
+    refreshTimer = null
   }
 })
 </script>
