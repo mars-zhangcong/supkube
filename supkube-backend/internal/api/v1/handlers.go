@@ -61,10 +61,9 @@ func CreateBackup(c *gin.Context) {
 	var req struct {
 		Name               string            `json:"name" binding:"required"`
 		IncludedNamespaces []string          `json:"includedNamespaces"`
-		IncludedResources  []string          `json:"includedResources"`
+		TTL                string            `json:"ttl"`
 		LabelSelector      map[string]string `json:"labelSelector"`
 		StorageLocation    string            `json:"storageLocation"`
-		TTL                string            `json:"ttl"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -82,15 +81,7 @@ func CreateBackup(c *gin.Context) {
 		},
 		Spec: velerov1.BackupSpec{
 			IncludedNamespaces: req.IncludedNamespaces,
-			IncludedResources:  req.IncludedResources,
-			StorageLocation:    req.StorageLocation,
 		},
-	}
-	// Apply label selector if provided
-	if len(req.LabelSelector) > 0 {
-		backup.Spec.LabelSelector = &metav1.LabelSelector{
-			MatchLabels: req.LabelSelector,
-		}
 	}
 	// Apply TTL if provided
 	if req.TTL != "" {
@@ -100,6 +91,16 @@ func CreateBackup(c *gin.Context) {
 			return
 		}
 		backup.Spec.TTL = metav1.Duration{Duration: duration}
+	}
+	// Apply label selector if provided
+	if len(req.LabelSelector) > 0 {
+		backup.Spec.LabelSelector = &metav1.LabelSelector{
+			MatchLabels: req.LabelSelector,
+		}
+	}
+	// Apply storage location if provided
+	if req.StorageLocation != "" {
+		backup.Spec.StorageLocation = req.StorageLocation
 	}
 	if err := cl.Create(context.Background(), backup); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

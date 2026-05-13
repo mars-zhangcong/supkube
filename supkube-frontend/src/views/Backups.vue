@@ -95,6 +95,10 @@
         <el-form-item label="TTL">
           <el-input v-model="createForm.ttl" placeholder="720h (30 days)" />
         </el-form-item>
+        <el-form-item label="Label Selector">
+          <el-input v-model="createForm.labelSelectorStr" placeholder="app=nginx, env=prod" />
+          <span style="font-size: 12px; color: #999">Comma-separated key=value pairs to filter resources</span>
+        </el-form-item>
         <el-form-item label="Storage Location">
           <el-input v-model="createForm.storageLocation" placeholder="default" />
         </el-form-item>
@@ -113,7 +117,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Plus } from '@element-plus/icons-vue'
 import { getBackups, createBackup, deleteBackup, getNamespaces } from '../api/velero'
@@ -125,11 +129,13 @@ const namespaces = ref([])
 const loading = ref(false)
 const creating = ref(false)
 const showCreateDialog = ref(false)
+let pollTimer = null
 
 const createForm = ref({
   name: '',
   includedNamespaces: [],
   excludedNamespaces: [],
+  labelSelectorStr: '',
   ttl: '720h',
   storageLocation: 'default',
   snapshotVolumes: true
@@ -174,6 +180,28 @@ const fetchNamespaces = async () => {
   }
 }
 
+const parseLabelSelector = (str) => {
+  if (!str || !str.trim()) return undefined
+  const labels = {}
+  str.split(',').forEach(pair => {
+    const [key, value] = pair.trim().split('=')
+    if (key && value) labels[key.trim()] = value.trim()
+  })
+  return Object.keys(labels).length > 0 ? labels : undefined
+}
+
+const startPolling = () => {
+  stopPolling()
+  pollTimer = setInterval(fetchBackups, 5000)
+}
+
+const stopPolling = () => {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+}
+
 const handleCreate = async () => {
   if (!createForm.value.name) {
     ElMessage.warning('Please enter a backup name')
@@ -187,22 +215,25 @@ const handleCreate = async () => {
         ? createForm.value.includedNamespaces : undefined,
       excludedNamespaces: createForm.value.excludedNamespaces.length > 0
         ? createForm.value.excludedNamespaces : undefined,
+      labelSelector: parseLabelSelector(createForm.value.labelSelectorStr),
       ttl: createForm.value.ttl || '720h',
       storageLocation: createForm.value.storageLocation || 'default',
       snapshotVolumes: createForm.value.snapshotVolumes
     }
     await createBackup(payload)
-    ElMessage.success(`Backup "${createForm.value.name}" created`)
+    ElMessage.success(`Backup "${createForm.value.name}" created. Monitoring progress...`)
     showCreateDialog.value = false
     createForm.value = {
       name: '',
       includedNamespaces: [],
       excludedNamespaces: [],
+      labelSelectorStr: '',
       ttl: '720h',
       storageLocation: 'default',
       snapshotVolumes: true
     }
     await fetchBackups()
+    startPolling()
   } catch (e) {
     ElMessage.error('Failed to create backup: ' + (e.response?.data?.error || e.message))
   } finally {
@@ -238,6 +269,10 @@ const viewDetail = (row) => {
 onMounted(() => {
   fetchBackups()
   fetchNamespaces()
+})
+
+onUnmounted(() => {
+  stopPolling()
 })
 </script>
 
