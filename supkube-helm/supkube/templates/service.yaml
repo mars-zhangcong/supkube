@@ -6,9 +6,9 @@ metadata:
     {{- include "supkube.labels" . | nindent 4 }}
     app.kubernetes.io/component: backend
 spec:
-  type: {{ .Values.service.type }}
+  type: {{ .Values.service.backend.type }}
   ports:
-    - port: {{ .Values.service.backendPort }}
+    - port: {{ .Values.service.backend.port }}
       targetPort: http
       protocol: TCP
       name: http
@@ -24,12 +24,15 @@ metadata:
     {{- include "supkube.labels" . | nindent 4 }}
     app.kubernetes.io/component: frontend
 spec:
-  type: {{ .Values.service.type }}
+  type: {{ .Values.service.frontend.type }}
   ports:
-    - port: {{ .Values.service.frontendPort }}
+    - port: {{ .Values.service.frontend.port }}
       targetPort: http
       protocol: TCP
       name: http
+      {{- if and (eq .Values.service.frontend.type "NodePort") .Values.service.frontend.nodePort }}
+      nodePort: {{ .Values.service.frontend.nodePort }}
+      {{- end }}
   selector:
     {{- include "supkube.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: frontend
