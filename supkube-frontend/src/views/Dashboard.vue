@@ -45,23 +45,31 @@
         </div>
       </template>
       <el-table :data="recentBackups" style="width: 100%" v-loading="loading">
-        <el-table-column prop="metadata.name" label="Name" />
-        <el-table-column prop="metadata.namespace" label="Namespace" />
+        <el-table-column label="Name">
+          <template #default="{ row }">
+            {{ row.name || row.metadata?.name || '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="Namespace">
+          <template #default="{ row }">
+            {{ row.namespace || row.metadata?.namespace || '-' }}
+          </template>
+        </el-table-column>
         <el-table-column label="Status">
           <template #default="{ row }">
-            <el-tag :type="statusType(row.status?.phase)">
-              {{ row.status?.phase || 'Unknown' }}
+            <el-tag :type="statusType(row.phase || row.status?.phase)">
+              {{ row.phase || row.status?.phase || 'Unknown' }}
             </el-tag>
           </template>
         </el-table-column>
         <el-table-column label="Created">
           <template #default="{ row }">
-            {{ formatTime(row.metadata?.creationTimestamp) }}
+            {{ formatTime(row.createdAt || row.metadata?.creationTimestamp) }}
           </template>
         </el-table-column>
         <el-table-column label="Expires">
           <template #default="{ row }">
-            {{ formatTime(row.status?.expiration) }}
+            {{ formatTime(row.expiration || row.status?.expiration) }}
           </template>
         </el-table-column>
       </el-table>

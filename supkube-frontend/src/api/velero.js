@@ -7,6 +7,7 @@ const api = axios.create({ baseURL: BASE_URL })
 export const getStatus = () => api.get('/status')
 export const getDashboardSummary = () => api.get('/dashboard/summary')
 export const getNamespaces = () => api.get('/namespaces')
+export const getApplications = () => api.get('/applications')
 
 // Backups
 export const getBackups = () => api.get('/backups')

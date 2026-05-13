@@ -26,6 +26,7 @@ func Run() error {
 		api.GET("/status", v1.GetStatus)
 		api.GET("/namespaces", v1.ListNamespaces)
 		api.GET("/dashboard/summary", v1.GetDashboardSummary)
+		api.GET("/applications", v1.ListApplications)
 
 		// Backups
 		api.GET("/backups", v1.ListBackups)
