@@ -28,6 +28,7 @@ var systemNamespaces = map[string]bool{
 	"kube-public":     true,
 	"kube-node-lease": true,
 	"velero":          true,
+	"supkube":         true,
 }
 
 // ListApplications returns namespace-level application info with workload counts and protection status

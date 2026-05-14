@@ -32,14 +32,15 @@ type ResourceItem struct {
 
 // ApplicationDetail represents detailed resource info for a namespace
 type ApplicationDetail struct {
-	Namespace    string         `json:"namespace"`
-	Pods         []ResourceItem `json:"pods"`
-	Services     []ResourceItem `json:"services"`
-	Deployments  []ResourceItem `json:"deployments"`
-	StatefulSets []ResourceItem `json:"statefulSets"`
-	ReplicaSets  []ResourceItem `json:"replicaSets"`
-	PVCs         []ResourceItem `json:"pvcs"`
-	ConfigMaps   []ResourceItem `json:"configMaps"`
+	Namespace    string            `json:"namespace"`
+	Labels       map[string]string `json:"labels"`
+	Pods         []ResourceItem    `json:"pods"`
+	Services     []ResourceItem    `json:"services"`
+	Deployments  []ResourceItem    `json:"deployments"`
+	StatefulSets []ResourceItem    `json:"statefulSets"`
+	ReplicaSets  []ResourceItem    `json:"replicaSets"`
+	PVCs         []ResourceItem    `json:"pvcs"`
+	ConfigMaps   []ResourceItem    `json:"configMaps"`
 }
 
 func formatAge(t time.Time) string {
@@ -66,7 +67,13 @@ func GetApplicationDetails(c *gin.Context) {
 		return
 	}
 
-	detail := ApplicationDetail{Namespace: ns}
+	detail := ApplicationDetail{Namespace: ns, Labels: map[string]string{}}
+
+	// Get namespace labels
+	nsObj, err := k8sClient.CoreV1().Namespaces().Get(context.Background(), ns, metav1.GetOptions{})
+	if err == nil && nsObj.Labels != nil {
+		detail.Labels = nsObj.Labels
+	}
 
 	// Get Pods
 	pods, err := k8sClient.CoreV1().Pods(ns).List(context.Background(), metav1.ListOptions{})
