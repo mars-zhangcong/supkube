@@ -29,6 +29,7 @@
       <el-container>
         <el-header>
           <h2>SupKube — Kubernetes Data Protection</h2>
+          <span class="version-badge">v0.5.1</span>
         </el-header>
         <el-main>
           <router-view />
@@ -119,6 +120,7 @@ h1, h2, h3, h4, h5, h6 {
 .el-header {
   display: flex;
   align-items: center;
+  gap: 12px;
   border-bottom: 1px solid #ebeef5;
   padding: 0 20px;
 }
@@ -126,6 +128,16 @@ h1, h2, h3, h4, h5, h6 {
   font-size: var(--font-size-lg);
   font-weight: 600;
   margin: 0;
+}
+.version-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 10px;
+  background: #ecf5ff;
+  color: #409eff;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 .el-main {
   padding: 20px;

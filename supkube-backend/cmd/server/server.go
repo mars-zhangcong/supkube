@@ -40,6 +40,8 @@ func Run() error {
 		api.GET("/restores", v1.ListRestores)
 		api.POST("/restores", v1.CreateRestore)
 		api.GET("/restores/:name", v1.GetRestore)
+		api.GET("/restores/:name/results", v1.GetRestoreResults)
+		api.DELETE("/restores/:name", v1.DeleteRestore)
 
 		// Schedules
 		api.GET("/schedules", v1.ListSchedules)

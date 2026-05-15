@@ -14,15 +14,33 @@
         </el-table-column>
         <el-table-column label="Status" width="180">
           <template #default="{ row }">
-            <span class="status-badge" :class="row.protected ? 'status-compliant' : 'status-unmanaged'">
-              <span class="status-icon">{{ row.protected ? '✓' : '!' }}</span>
-              {{ row.protected ? 'Compliant' : 'Unmanaged' }}
+            <span class="status-badge" :class="`status-${complianceClass(row)}`">
+              <span class="status-icon">{{ complianceIcon(row) }}</span>
+              {{ complianceLabel(row) }}
             </span>
           </template>
         </el-table-column>
         <el-table-column label="Workloads" width="120">
           <template #default="{ row }">
             <span class="workload-count">⚙ {{ row.workloads }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="Labels" min-width="280">
+          <template #default="{ row }">
+            <div class="row-labels">
+              <el-tag
+                v-for="entry in rowLabelPreview(row)"
+                :key="entry[0]"
+                size="small"
+                effect="plain"
+                round
+                class="row-label-tag"
+              >{{ entry[0] }}:{{ entry[1] }}</el-tag>
+              <span v-if="rowLabelHidden(row) > 0" class="row-labels-more">
+                +{{ rowLabelHidden(row) }} more
+              </span>
+              <span v-if="rowLabelCount(row) === 0" class="row-labels-empty">—</span>
+            </div>
           </template>
         </el-table-column>
         <el-table-column label="Last Backup" min-width="220">
@@ -62,6 +80,7 @@
       direction="rtl"
       size="520px"
       :destroy-on-close="true"
+      class="app-details-drawer"
     >
       <div v-if="selectedApp" class="app-details" v-loading="detailLoading">
         <!-- App Name with icon -->
@@ -71,17 +90,26 @@
         </div>
 
         <!-- Labels -->
-        <div class="detail-section">
+        <div class="detail-section labels-section">
           <div class="detail-section-title">LABELS</div>
           <div class="labels-container">
             <el-tag
-              v-for="(val, key) in selectedAppLabels"
-              :key="key"
-              size="small"
+              v-for="entry in visibleLabelEntries"
+              :key="entry[0]"
+              size="default"
+              effect="plain"
+              round
               class="label-tag"
-            >{{ key }}:{{ val }}</el-tag>
-            <span v-if="!selectedAppLabels || Object.keys(selectedAppLabels).length === 0" class="no-data">No labels</span>
+            >{{ entry[0] }}:{{ entry[1] }}</el-tag>
+            <span v-if="labelEntries.length === 0" class="no-data">No labels</span>
           </div>
+          <a
+            v-if="hiddenLabelCount > 0"
+            class="labels-toggle"
+            @click="labelsExpanded = !labelsExpanded"
+          >
+            {{ labelsExpanded ? 'Show fewer labels' : `Show ${hiddenLabelCount} more labels ...` }}
+          </a>
         </div>
 
         <!-- kubectl -->
@@ -267,9 +295,82 @@ const selectedAppLabels = computed(() => {
   return detailData.value.labels
 })
 
+// Sort labels deterministically — short user labels first, kubernetes.io/* last —
+// so the most informative tags fit in the collapsed preview row.
+const LABEL_PREVIEW_COUNT = 5
+const labelsExpanded = ref(false)
+const labelEntries = computed(() => {
+  const entries = Object.entries(selectedAppLabels.value || {})
+  return entries.sort(([a], [b]) => {
+    const aSys = a.includes('kubernetes.io/') || a.includes('k8s.io/')
+    const bSys = b.includes('kubernetes.io/') || b.includes('k8s.io/')
+    if (aSys !== bSys) return aSys ? 1 : -1
+    return a.localeCompare(b)
+  })
+})
+const visibleLabelEntries = computed(() =>
+  labelsExpanded.value ? labelEntries.value : labelEntries.value.slice(0, LABEL_PREVIEW_COUNT)
+)
+const hiddenLabelCount = computed(() =>
+  Math.max(0, labelEntries.value.length - LABEL_PREVIEW_COUNT)
+)
+
 const formatTime = (ts) => {
   if (!ts) return ''
   return new Date(ts).toLocaleString()
+}
+
+// In-row label preview: show up to 2 user labels per row so the table stays
+// scannable. The Details drawer shows the full set.
+const ROW_LABEL_PREVIEW = 2
+const sortLabelEntries = (labels) => {
+  return Object.entries(labels || {}).sort(([a], [b]) => {
+    const aSys = a.includes('kubernetes.io/') || a.includes('k8s.io/')
+    const bSys = b.includes('kubernetes.io/') || b.includes('k8s.io/')
+    if (aSys !== bSys) return aSys ? 1 : -1
+    return a.localeCompare(b)
+  })
+}
+const rowLabelCount = (row) => Object.keys(row?.labels || {}).length
+const rowLabelPreview = (row) => sortLabelEntries(row?.labels).slice(0, ROW_LABEL_PREVIEW)
+const rowLabelHidden = (row) => Math.max(0, rowLabelCount(row) - ROW_LABEL_PREVIEW)
+
+// Status badge values come from the backend's ComplianceStatus field.
+// Older payloads (pre-0.5.1) only carry the `protected` boolean; fall back
+// to that so the UI doesn't break during a rolling upgrade.
+const complianceOf = (row) => {
+  if (row?.complianceStatus) return row.complianceStatus
+  return row?.protected ? 'Compliant' : 'Unmanaged'
+}
+const complianceClass = (row) => {
+  const c = complianceOf(row)
+  return {
+    Compliant: 'compliant',
+    Unmanaged: 'unmanaged',
+    NonCompliant: 'noncompliant',
+    InProgress: 'inprogress',
+    Empty: 'empty'
+  }[c] || 'unmanaged'
+}
+const complianceIcon = (row) => {
+  const c = complianceOf(row)
+  return {
+    Compliant: '✓',
+    Unmanaged: '!',
+    NonCompliant: '✕',
+    InProgress: '⟳',
+    Empty: '–'
+  }[c] || '!'
+}
+const complianceLabel = (row) => {
+  const c = complianceOf(row)
+  return {
+    Compliant: 'Compliant',
+    Unmanaged: 'Unmanaged',
+    NonCompliant: 'Non-Compliant',
+    InProgress: 'Backup In Progress',
+    Empty: 'Empty'
+  }[c] || c
 }
 
 const fetchApplications = async () => {
@@ -379,7 +480,42 @@ onMounted(() => {
 .status-compliant .status-icon { border: 2px solid #67c23a; color: #67c23a; }
 .status-unmanaged { color: #e6a23c; }
 .status-unmanaged .status-icon { border: 2px solid #e6a23c; color: #e6a23c; }
+.status-noncompliant { color: #f56c6c; }
+.status-noncompliant .status-icon { border: 2px solid #f56c6c; color: #f56c6c; }
+.status-inprogress { color: #409eff; }
+.status-inprogress .status-icon { border: 2px solid #409eff; color: #409eff; }
+.status-empty { color: #c0c4cc; }
+.status-empty .status-icon { border: 2px solid #c0c4cc; color: #c0c4cc; }
 .workload-count { color: #606266; font-size: 13px; }
+.row-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.row-label-tag {
+  font-size: 11px;
+  padding: 2px 10px;
+  height: auto;
+  line-height: 1.5;
+  font-weight: 500;
+  border-radius: 12px;
+  background: #f5f7fa;
+  border-color: #e4e7ed;
+  color: #303133;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.row-labels-more {
+  font-size: 12px;
+  color: #909399;
+}
+.row-labels-empty {
+  color: #c0c4cc;
+  font-size: 13px;
+}
 .last-backup { display: flex; flex-direction: column; gap: 2px; }
 .backup-time { color: #409eff; font-size: 12px; }
 .no-restore { color: #c0c4cc; font-size: 13px; }
@@ -387,8 +523,48 @@ onMounted(() => {
 .dots { font-size: 20px; line-height: 1; letter-spacing: 1px; }
 :deep(.app-row:hover .more-btn) { color: #409eff; }
 
+/* Drawer header — Kasten-style: centered, bold, black, large */
+:deep(.app-details-drawer .el-drawer__header) {
+  margin-bottom: 0;
+  padding: 20px 24px;
+  border-bottom: 1px solid #ebeef5;
+}
+:deep(.app-details-drawer .el-drawer__title) {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1f2329;
+  text-align: center;
+  width: 100%;
+  letter-spacing: -0.01em;
+}
+:deep(.app-details-drawer .el-drawer__close-btn) {
+  font-size: 18px;
+  color: #606266;
+}
+:deep(.app-details-drawer .el-drawer__body) {
+  padding: 24px;
+}
+
 /* Drawer styles */
 .app-details { padding: 0 4px; }
+.detail-app-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 22px;
+  font-weight: 700;
+  color: #1f2329;
+  margin-bottom: 28px;
+  letter-spacing: -0.01em;
+}
+.app-icon-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  font-size: 22px;
+}
 .detail-section { margin-bottom: 24px; }
 .detail-section-title {
   font-size: 11px;
@@ -413,8 +589,27 @@ onMounted(() => {
 }
 .count { color: #909399; font-weight: 400; }
 .chevron { margin-left: auto; color: #909399; }
-.labels-container { display: flex; flex-wrap: wrap; gap: 6px; }
-.label-tag { font-size: 11px; }
+.labels-section { border-bottom: 1px solid #f0f0f0; padding-bottom: 16px; }
+.labels-container { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.label-tag {
+  font-size: 12px;
+  padding: 4px 12px;
+  height: auto;
+  line-height: 1.4;
+  font-weight: 500;
+  border-radius: 14px;
+  background: #f5f7fa;
+  border-color: #e4e7ed;
+  color: #303133;
+}
+.labels-toggle {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 13px;
+  color: #409eff;
+  cursor: pointer;
+}
+.labels-toggle:hover { text-decoration: underline; }
 .kubectl-block {
   background: #1a1a2e;
   color: #a8d8a8;

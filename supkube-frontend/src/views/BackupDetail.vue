@@ -20,8 +20,8 @@
               {{ backup?.metadata?.namespace }}
             </el-descriptions-item>
             <el-descriptions-item label="Status">
-              <el-tag :type="statusType(backup?.status?.phase)">
-                {{ backup?.status?.phase || 'Unknown' }}
+              <el-tag :type="phaseTagType(backup?.status?.phase)">
+                {{ normalizePhase(backup?.status?.phase) }}
               </el-tag>
             </el-descriptions-item>
             <el-descriptions-item label="Created">
@@ -102,22 +102,12 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getBackup, deleteBackup } from '../api/velero'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { normalizePhase, phaseTagType } from '../utils/phase'
 
 const route = useRoute()
 const router = useRouter()
 const backup = ref(null)
 const loading = ref(false)
-
-const statusType = (phase) => {
-  const map = {
-    Completed: 'success',
-    InProgress: 'warning',
-    Failed: 'danger',
-    PartiallyFailed: 'warning',
-    Deleting: 'info'
-  }
-  return map[phase] || 'info'
-}
 
 const formatTime = (ts) => {
   if (!ts) return '-'

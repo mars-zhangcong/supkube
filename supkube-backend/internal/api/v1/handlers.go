@@ -17,7 +17,7 @@ import (
 func GetStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "ok",
-		"version": "0.1.0",
+		"version": "0.5.1",
 	})
 }
 
@@ -210,6 +210,57 @@ func GetRestore(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, restore)
+}
+
+// DeleteRestore deletes a restore
+func DeleteRestore(c *gin.Context) {
+	name := c.Param("name")
+	cl, err := k8s.GetRuntimeClient()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	restore := &velerov1.Restore{}
+	if err := cl.Get(context.Background(), client.ObjectKey{Name: name, Namespace: "velero"}, restore); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	if err := cl.Delete(context.Background(), restore); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "restore deleted"})
+}
+
+// GetRestoreResults returns structured errors/warnings from the restore status.
+// Velero stores the full log/results files in object storage via DownloadRequest;
+// that flow will be wired in v0.6. For now this endpoint exposes everything that's
+// already in the Restore CR's .status — which covers validation failures, per-
+// resource errors, and warnings and is enough to debug most Failed restores.
+func GetRestoreResults(c *gin.Context) {
+	name := c.Param("name")
+	cl, err := k8s.GetRuntimeClient()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	restore := &velerov1.Restore{}
+	if err := cl.Get(context.Background(), client.ObjectKey{Name: name, Namespace: "velero"}, restore); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	status := restore.Status
+	c.JSON(http.StatusOK, gin.H{
+		"name":              restore.Name,
+		"phase":             string(status.Phase),
+		"failureReason":     status.FailureReason,
+		"validationErrors":  status.ValidationErrors,
+		"errors":            status.Errors,
+		"warnings":          status.Warnings,
+		"progress":          status.Progress,
+		"startTimestamp":    status.StartTimestamp,
+		"completionTimestamp": status.CompletionTimestamp,
+	})
 }
 
 // ListSchedules returns all Velero schedules

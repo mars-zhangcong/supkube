@@ -35,7 +35,7 @@
         </el-table-column>
         <el-table-column label="TTL">
           <template #default="{ row }">
-            {{ row.spec?.template?.ttl || '720h' }}
+            {{ formatTTL(row.spec?.template?.ttl) }}
           </template>
         </el-table-column>
         <el-table-column label="Actions" width="250">
@@ -144,6 +144,21 @@ const createForm = ref({
 const formatTime = (ts) => {
   if (!ts) return '-'
   return new Date(ts).toLocaleString()
+}
+
+// Velero schedule.spec.template.ttl defaults to zero when unset; the actual
+// retention then falls back to Velero's server-side default (30 days). Show
+// users the effective retention instead of the misleading literal "0s".
+const formatTTL = (ttl) => {
+  if (!ttl || ttl === '0s' || ttl === '0' || ttl === '0h' || ttl === '0h0m0s') {
+    return 'Default (30d)'
+  }
+  const match = /^(\d+)h$/.exec(ttl)
+  if (match) {
+    const hours = parseInt(match[1], 10)
+    if (hours > 0 && hours % 24 === 0) return `${hours / 24}d`
+  }
+  return ttl
 }
 
 const onPresetChange = (val) => {

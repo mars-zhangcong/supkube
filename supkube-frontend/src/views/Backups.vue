@@ -18,8 +18,8 @@
         </el-table-column>
         <el-table-column label="Status">
           <template #default="{ row }">
-            <el-tag :type="statusType(row.status?.phase)">
-              {{ row.status?.phase || 'Unknown' }}
+            <el-tag :type="phaseTagType(row.status?.phase)">
+              {{ normalizePhase(row.status?.phase) }}
             </el-tag>
           </template>
         </el-table-column>
@@ -122,6 +122,7 @@ import { useRouter } from 'vue-router'
 import { Plus } from '@element-plus/icons-vue'
 import { getBackups, createBackup, deleteBackup, getNamespaces } from '../api/velero'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { normalizePhase, phaseTagType } from '../utils/phase'
 
 const router = useRouter()
 const backups = ref([])
@@ -141,16 +142,6 @@ const createForm = ref({
   snapshotVolumes: true
 })
 
-const statusType = (phase) => {
-  const map = {
-    Completed: 'success',
-    InProgress: 'warning',
-    Failed: 'danger',
-    PartiallyFailed: 'warning',
-    Deleting: 'info'
-  }
-  return map[phase] || 'info'
-}
 
 const formatTime = (ts) => {
   if (!ts) return '-'

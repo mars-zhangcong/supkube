@@ -19,8 +19,8 @@
         </el-table-column>
         <el-table-column label="Status">
           <template #default="{ row }">
-            <el-tag :type="statusType(row.status?.phase)">
-              {{ row.status?.phase || 'Unknown' }}
+            <el-tag :type="phaseTagType(row.status?.phase)">
+              {{ normalizePhase(row.status?.phase) }}
             </el-tag>
           </template>
         </el-table-column>
@@ -34,8 +34,54 @@
             {{ formatTime(row.metadata?.creationTimestamp) }}
           </template>
         </el-table-column>
+        <el-table-column label="Actions" width="240">
+          <template #default="{ row }">
+            <el-button size="small" @click="viewResults(row)">
+              Results
+            </el-button>
+            <el-button size="small" type="danger" @click="handleDelete(row)">
+              Delete
+            </el-button>
+          </template>
+        </el-table-column>
       </el-table>
     </el-card>
+
+    <!-- Results Drawer -->
+    <el-drawer v-model="showResultsDrawer" :title="`Restore Results: ${resultsRestoreName}`" size="640px">
+      <div v-loading="loadingResults">
+        <template v-if="results">
+          <el-descriptions :column="1" border>
+            <el-descriptions-item label="Phase">
+              <el-tag :type="phaseTagType(results.phase)">{{ normalizePhase(results.phase) }}</el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item v-if="results.startTimestamp" label="Started">
+              {{ formatTime(results.startTimestamp) }}
+            </el-descriptions-item>
+            <el-descriptions-item v-if="results.completionTimestamp" label="Completed">
+              {{ formatTime(results.completionTimestamp) }}
+            </el-descriptions-item>
+            <el-descriptions-item label="Progress">
+              {{ results.progress?.itemsRestored ?? '-' }} / {{ results.progress?.totalItems ?? '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item v-if="results.failureReason" label="Failure Reason">
+              <pre class="result-block result-error">{{ results.failureReason }}</pre>
+            </el-descriptions-item>
+          </el-descriptions>
+
+          <h4 v-if="results.validationErrors?.length" style="margin-top: 16px">Validation Errors ({{ results.validationErrors.length }})</h4>
+          <ul v-if="results.validationErrors?.length" class="result-block result-error">
+            <li v-for="(e, idx) in results.validationErrors" :key="idx">{{ e }}</li>
+          </ul>
+
+          <h4 v-if="results.errors" style="margin-top: 16px">Errors ({{ results.errors }})</h4>
+          <h4 v-if="results.warnings" style="margin-top: 16px">Warnings ({{ results.warnings }})</h4>
+          <p v-if="!results.validationErrors?.length && !results.errors && !results.warnings && !results.failureReason" class="result-empty">
+            No errors or warnings reported. Full log file viewer is coming in v0.6.
+          </p>
+        </template>
+      </div>
+    </el-drawer>
 
     <!-- Create Restore Dialog -->
     <el-dialog v-model="showCreateDialog" title="Create Restore" width="500px">
@@ -57,8 +103,8 @@
               :value="b.metadata.name"
             >
               <span>{{ b.metadata.name }}</span>
-              <el-tag size="small" :type="statusType(b.status?.phase)" style="margin-left: 8px">
-                {{ b.status?.phase }}
+              <el-tag size="small" :type="phaseTagType(b.status?.phase)" style="margin-left: 8px">
+                {{ normalizePhase(b.status?.phase) }}
               </el-tag>
             </el-option>
           </el-select>
@@ -116,8 +162,9 @@
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { RefreshRight, Close } from '@element-plus/icons-vue'
-import { getRestores, createRestore, getBackups, getNamespaces, getBackupResources } from '../api/velero'
-import { ElMessage } from 'element-plus'
+import { getRestores, createRestore, getBackups, getNamespaces, getBackupResources, deleteRestore, getRestoreResults } from '../api/velero'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { normalizePhase, phaseTagType } from '../utils/phase'
 
 const route = useRoute()
 const restores = ref([])
@@ -128,6 +175,10 @@ const namespaces = ref([])
 const loading = ref(false)
 const creating = ref(false)
 const showCreateDialog = ref(false)
+const showResultsDrawer = ref(false)
+const resultsRestoreName = ref('')
+const results = ref(null)
+const loadingResults = ref(false)
 let pollTimer = null
 
 const createForm = ref({
@@ -138,14 +189,42 @@ const createForm = ref({
   restorePVs: true
 })
 
-const statusType = (phase) => {
-  const map = {
-    Completed: 'success',
-    InProgress: 'warning',
-    Failed: 'danger',
-    PartiallyFailed: 'warning'
+const viewResults = async (row) => {
+  const name = row?.metadata?.name
+  if (!name) return
+  resultsRestoreName.value = name
+  results.value = null
+  showResultsDrawer.value = true
+  loadingResults.value = true
+  try {
+    const res = await getRestoreResults(name)
+    results.value = res.data
+  } catch (e) {
+    ElMessage.error('Failed to load restore results: ' + (e.response?.data?.error || e.message))
+  } finally {
+    loadingResults.value = false
   }
-  return map[phase] || 'info'
+}
+
+const handleDelete = async (row) => {
+  const name = row?.metadata?.name
+  if (!name) return
+  try {
+    await ElMessageBox.confirm(
+      `Delete restore "${name}"? This removes the restore CR; restored objects in the cluster are NOT affected.`,
+      'Confirm Delete',
+      { type: 'warning' }
+    )
+  } catch {
+    return
+  }
+  try {
+    await deleteRestore(name)
+    ElMessage.success(`Restore "${name}" deleted`)
+    await fetchRestores()
+  } catch (e) {
+    ElMessage.error('Failed to delete restore: ' + (e.response?.data?.error || e.message))
+  }
 }
 
 const formatTime = (ts) => {
@@ -298,5 +377,24 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   margin-bottom: 8px;
+}
+.result-block {
+  background: #fafafa;
+  border: 1px solid #eee;
+  border-radius: 4px;
+  padding: 10px 14px;
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 8px 0;
+}
+.result-error {
+  background: #fef0f0;
+  border-color: #fbc4c4;
+  color: #5b2929;
+}
+.result-empty {
+  color: #909399;
+  font-size: 13px;
 }
 </style>

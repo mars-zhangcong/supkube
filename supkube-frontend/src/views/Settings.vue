@@ -74,7 +74,7 @@ const loading = ref(false)
 const veleroStatus = ref({ connected: false, version: '', namespace: '', plugins: [] })
 const clusterInfo = ref({ k8sVersion: '', nodes: 0, namespaces: 0 })
 const supkubeInfo = ref({ version: '' })
-const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1'
+const apiUrl = import.meta.env.VITE_API_URL || '/api/v1'
 
 const fetchData = async () => {
   loading.value = true

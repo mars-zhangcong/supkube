@@ -73,8 +73,8 @@
         </el-table-column>
         <el-table-column label="Status">
           <template #default="{ row }">
-            <el-tag :type="statusType(row.phase || row.status?.phase)">
-              {{ row.phase || row.status?.phase || 'Unknown' }}
+            <el-tag :type="phaseTagType(row.phase ?? row.status?.phase)">
+              {{ normalizePhase(row.phase ?? row.status?.phase) }}
             </el-tag>
           </template>
         </el-table-column>
@@ -105,8 +105,8 @@
         <el-table-column prop="spec.backupName" label="From Backup" />
         <el-table-column label="Status">
           <template #default="{ row }">
-            <el-tag :type="statusType(row.status?.phase)">
-              {{ row.status?.phase || 'Unknown' }}
+            <el-tag :type="phaseTagType(row.status?.phase)">
+              {{ normalizePhase(row.status?.phase) }}
             </el-tag>
           </template>
         </el-table-column>
@@ -123,23 +123,13 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import { getDashboardSummary, getBackups, getRestores, getNamespaces, getApplications } from '../api/velero'
+import { normalizePhase, phaseTagType } from '../utils/phase'
 
 const stats = ref({ nodes: 0, namespaces: 0, protectedApps: 0, backups: 0, successful: 0, failed: 0 })
 const recentBackups = ref([])
 const recentRestores = ref([])
 const loading = ref(false)
 let refreshTimer = null
-
-const statusType = (phase) => {
-  const map = {
-    Completed: 'success',
-    InProgress: 'warning',
-    Failed: 'danger',
-    PartiallyFailed: 'warning',
-    Deleting: 'info'
-  }
-  return map[phase] || 'info'
-}
 
 const formatTime = (ts) => {
   if (!ts) return '-'
