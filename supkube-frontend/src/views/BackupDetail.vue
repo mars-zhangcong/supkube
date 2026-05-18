@@ -2,10 +2,91 @@
   <div class="backup-detail">
     <div class="page-header">
       <el-button @click="$router.push('/backups')" text>
-        ← Back to Backups
+        ← Back to Restore Points
       </el-button>
-      <h3>Backup: {{ backup?.metadata?.name }}</h3>
+      <h3>
+        Restore Point: <span class="rp-name">{{ backup?.metadata?.name }}</span>
+        <el-tag :type="rpTypeBadge.type" size="small" effect="plain" class="rp-type-tag">
+          {{ rpTypeBadge.label }}
+        </el-tag>
+      </h3>
+      <div v-if="fingerprint" class="fingerprint-row">
+        <span class="fingerprint-label">Fingerprint:</span>
+        <code class="fingerprint-short">{{ fingerprintShort }}</code>
+        <el-button text size="small" class="fingerprint-copy" @click="copyFingerprint">
+          {{ copied ? '✓ Copied' : 'copy' }}
+        </el-button>
+      </div>
     </div>
+
+    <!-- Action Layer Cards: Snapshot (L1, local) + Export (L2, object storage) -->
+    <el-row :gutter="20" style="margin-bottom: 20px" v-loading="loading">
+      <el-col :span="12">
+        <el-card class="action-card" :class="`action-card-${snapshotState.tone}`">
+          <template #header>
+            <div class="action-card-header">
+              <span class="action-icon">📸</span>
+              <span class="action-title">Snapshot</span>
+              <span class="action-subtitle">Local · L1</span>
+              <el-tag :type="snapshotState.tagType" size="small" effect="plain" style="margin-left: auto">
+                {{ snapshotState.label }}
+              </el-tag>
+            </div>
+          </template>
+          <el-descriptions :column="1" border size="small">
+            <el-descriptions-item label="Mode">{{ volumeModeLabel }}</el-descriptions-item>
+            <el-descriptions-item label="CSI Volumes">
+              <span v-if="hasCSIProgress">
+                <span :class="csiAllOk ? 'csi-ok' : 'csi-partial'">
+                  {{ backup?.status?.csiVolumeSnapshotsCompleted ?? 0 }}
+                </span>
+                / {{ backup?.status?.csiVolumeSnapshotsAttempted ?? 0 }} completed
+              </span>
+              <span v-else class="muted">—</span>
+            </el-descriptions-item>
+            <el-descriptions-item label="Started">{{ formatTime(backup?.status?.startTimestamp) }}</el-descriptions-item>
+            <el-descriptions-item label="Snapshot Location">
+              <code v-if="backup?.spec?.volumeSnapshotLocations?.length">{{ backup.spec.volumeSnapshotLocations.join(', ') }}</code>
+              <span v-else class="muted">default (Velero auto-selects)</span>
+            </el-descriptions-item>
+          </el-descriptions>
+          <p class="action-caveat" v-if="snapshotState.tone === 'warn'">
+            ⚠ Snapshot is not a durable backup. Data is lost if the underlying storage fails.
+          </p>
+        </el-card>
+      </el-col>
+
+      <el-col :span="12">
+        <el-card class="action-card" :class="`action-card-${exportState.tone}`">
+          <template #header>
+            <div class="action-card-header">
+              <span class="action-icon">📦</span>
+              <span class="action-title">Export</span>
+              <span class="action-subtitle">Object Storage · L2</span>
+              <el-tag :type="exportState.tagType" size="small" effect="plain" style="margin-left: auto">
+                {{ exportState.label }}
+              </el-tag>
+            </div>
+          </template>
+          <el-descriptions :column="1" border size="small">
+            <el-descriptions-item label="Profile">
+              <code>{{ backup?.spec?.storageLocation || 'default' }}</code>
+            </el-descriptions-item>
+            <el-descriptions-item label="Items">
+              {{ backup?.status?.progress?.itemsBackedUp ?? '-' }} / {{ backup?.status?.progress?.totalItems ?? '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="Completed">{{ formatTime(backup?.status?.completionTimestamp) }}</el-descriptions-item>
+            <el-descriptions-item label="Expires">{{ formatTime(backup?.status?.expiration) }}</el-descriptions-item>
+            <el-descriptions-item label="Object Path">
+              <code class="object-path">backups/{{ backup?.metadata?.name }}/</code>
+            </el-descriptions-item>
+          </el-descriptions>
+          <p class="action-caveat caveat-success" v-if="exportState.tone === 'ok'">
+            ✓ This restore point is a durable backup (data is in object storage).
+          </p>
+        </el-card>
+      </el-col>
+    </el-row>
 
     <el-row :gutter="20" v-loading="loading">
       <!-- Overview Card -->
@@ -71,22 +152,12 @@
           </el-descriptions>
         </el-card>
 
-        <!-- CSI snapshot progress — only shown when this backup used CSI mode -->
-        <el-card v-if="hasCSIProgress" style="margin-top: 20px">
-          <template #header>📸 CSI Volume Snapshots</template>
+        <!-- CSI snapshot progress now lives in the top Snapshot action card (v0.7).
+             Keep this slot for future "item operations" detail if needed. -->
+        <el-card v-if="backup?.status?.backupItemOperationsAttempted" style="margin-top: 20px">
+          <template #header>Item Operations</template>
           <el-descriptions :column="1" border>
-            <el-descriptions-item label="Attempted">
-              {{ backup?.status?.csiVolumeSnapshotsAttempted ?? 0 }}
-            </el-descriptions-item>
-            <el-descriptions-item label="Completed">
-              <span :class="csiAllOk ? 'csi-ok' : 'csi-partial'">
-                {{ backup?.status?.csiVolumeSnapshotsCompleted ?? 0 }}
-              </span>
-              <span v-if="!csiAllOk" class="csi-warn">
-                · {{ (backup.status.csiVolumeSnapshotsAttempted - backup.status.csiVolumeSnapshotsCompleted) }} did not complete
-              </span>
-            </el-descriptions-item>
-            <el-descriptions-item v-if="backup?.status?.backupItemOperationsAttempted" label="Item Operations">
+            <el-descriptions-item label="Operations">
               {{ backup.status.backupItemOperationsCompleted ?? 0 }} / {{ backup.status.backupItemOperationsAttempted }}
             </el-descriptions-item>
           </el-descriptions>
@@ -159,6 +230,88 @@ const csiAllOk = computed(() => {
   return (s.csiVolumeSnapshotsCompleted || 0) >= (s.csiVolumeSnapshotsAttempted || 0)
 })
 
+// --- v0.7 Actions Model: Restore Point as Snapshot (L1) + Export (L2) ---
+// State for each layer is derived from the same Velero Backup spec/status.
+// In v0.7, every Velero Backup IS an "Export" (Velero always writes the
+// metadata tarball to BSL). Snapshot layer reflects the volume-data handling
+// step. v0.9 will properly decouple these via self-managed snapshot
+// scheduler — but the UI mental model starts here.
+
+// Velero hides the source K8s cluster UID in spec.metadata; fall back to the
+// resource UID + creationTimestamp + storage location, hashed.
+async function sha256Hex(s) {
+  const enc = new TextEncoder().encode(s)
+  const buf = await crypto.subtle.digest('SHA-256', enc)
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('')
+}
+const fingerprint = ref('')
+const fingerprintShort = computed(() => fingerprint.value.slice(0, 16))
+const copied = ref(false)
+async function computeFingerprint() {
+  const b = backup.value
+  if (!b) { fingerprint.value = ''; return }
+  const seed = [
+    b.metadata?.uid || '',
+    b.metadata?.creationTimestamp || '',
+    b.spec?.storageLocation || 'default'
+  ].join('|')
+  fingerprint.value = await sha256Hex(seed)
+}
+function copyFingerprint() {
+  if (!fingerprint.value) return
+  navigator.clipboard.writeText(fingerprint.value).then(() => {
+    copied.value = true
+    setTimeout(() => { copied.value = false }, 1500)
+  })
+}
+
+// Restore Point Type — v0.7 derived from labels/spec. Kasten:
+//   Local Snapshot   = snapshot-only (in v0.7 not actually achievable via
+//                      Velero, but we surface the intent)
+//   Exported Backup  = the normal case: Velero wrote tarball + (optional)
+//                      moved CSI snapshot data to BSL
+//   Imported Backup  = synced from BSL by another cluster's Velero (we tag
+//                      via annotation supkube.io/imported-from when the
+//                      import flow lands in v0.7-import)
+const rpType = computed(() => {
+  const ann = backup.value?.metadata?.annotations || {}
+  if (ann['supkube.io/imported-from']) return 'Imported'
+  // Velero always exports; "snapshot only" requires self-managed scheduler
+  // (v0.9). For now anything with status.completionTimestamp is Exported.
+  if (backup.value?.status?.completionTimestamp) return 'Exported'
+  return 'Snapshot'
+})
+const rpTypeBadge = computed(() => {
+  switch (rpType.value) {
+    case 'Imported': return { label: 'Imported Backup', type: 'info' }
+    case 'Exported': return { label: 'Exported Backup', type: 'success' }
+    default: return { label: 'Local Snapshot', type: 'warning' }
+  }
+})
+
+// Snapshot layer status: derived from CSI counters + phase
+const snapshotState = computed(() => {
+  const phase = backup.value?.status?.phase
+  const s = backup.value?.status || {}
+  const isFS = backup.value?.spec?.defaultVolumesToFsBackup === true
+  if (!phase) return { label: 'Pending', tagType: 'info', tone: 'pending' }
+  if (phase === 'InProgress') return { label: 'In Progress', tagType: 'warning', tone: 'pending' }
+  if (isFS) return { label: 'N/A (filesystem mode)', tagType: 'info', tone: 'info' }
+  const attempted = s.csiVolumeSnapshotsAttempted || 0
+  const completed = s.csiVolumeSnapshotsCompleted || 0
+  if (attempted === 0) return { label: 'No volumes', tagType: 'info', tone: 'info' }
+  if (completed >= attempted) return { label: `Completed (${completed}/${attempted})`, tagType: 'success', tone: 'ok' }
+  return { label: `Partial (${completed}/${attempted})`, tagType: 'danger', tone: 'warn' }
+})
+const exportState = computed(() => {
+  const phase = backup.value?.status?.phase
+  if (!phase) return { label: 'Pending', tagType: 'info', tone: 'pending' }
+  if (phase === 'InProgress') return { label: 'Uploading', tagType: 'warning', tone: 'pending' }
+  if (phase === 'Completed') return { label: 'Completed', tagType: 'success', tone: 'ok' }
+  if (phase === 'PartiallyFailed') return { label: 'Partial', tagType: 'warning', tone: 'warn' }
+  return { label: phase, tagType: 'danger', tone: 'warn' }
+})
+
 const formatTime = (ts) => {
   if (!ts) return '-'
   return new Date(ts).toLocaleString()
@@ -169,6 +322,7 @@ const fetchBackup = async () => {
   try {
     const res = await getBackup(route.params.name)
     backup.value = res.data
+    await computeFingerprint()
   } catch (e) {
     ElMessage.error('Failed to load backup details')
     console.error(e)
@@ -209,7 +363,89 @@ onMounted(() => {
 }
 .page-header h3 {
   margin: 8px 0 0 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
+.rp-name {
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 16px;
+  color: #303133;
+}
+.rp-type-tag {
+  margin-left: 4px;
+}
+.fingerprint-row {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.fingerprint-label {
+  color: #909399;
+}
+.fingerprint-short {
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  background: #f5f7fa;
+  padding: 2px 8px;
+  border-radius: 4px;
+  color: #606266;
+  font-size: 11px;
+}
+.fingerprint-copy {
+  font-size: 12px !important;
+  padding: 2px 8px !important;
+}
+
+/* Action layer cards */
+.action-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.action-icon {
+  font-size: 20px;
+}
+.action-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #303133;
+}
+.action-subtitle {
+  font-size: 11px;
+  color: #909399;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.action-caveat {
+  margin: 12px 0 0 0;
+  padding: 8px 12px;
+  font-size: 12px;
+  background: #fef0f0;
+  border-radius: 4px;
+  color: #5b2929;
+  line-height: 1.5;
+}
+.caveat-success {
+  background: #f0f9eb;
+  color: #225a17;
+}
+.action-card-ok { border-left: 3px solid #67c23a; }
+.action-card-warn { border-left: 3px solid #e6a23c; }
+.action-card-pending { border-left: 3px solid #909399; }
+.action-card-info { border-left: 3px solid #909399; }
+
+.object-path {
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: #606266;
+  background: #f5f7fa;
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+.muted { color: #c0c4cc; }
 .csi-ok { color: #67c23a; font-weight: 600; }
 .csi-partial { color: #e6a23c; font-weight: 600; }
 .csi-warn { color: #f56c6c; font-size: 12px; margin-left: 6px; }

@@ -62,6 +62,20 @@
         </el-card>
       </el-col>
     </el-row>
+
+    <!-- Data Protection Policy Settings (v0.7-policy-2) -->
+    <el-card style="margin-top: 20px">
+      <template #header>Data Protection Policy</template>
+      <el-form label-width="320px" label-position="left">
+        <el-form-item label="Block snapshot-only policies">
+          <el-switch v-model="blockSnapshotOnly" @change="saveBlockSnapshotOnly" />
+          <span class="form-hint">
+            When enabled, the Create Policy form refuses to save policies that disable Export.
+            Recommended for production clusters where every restore point must be durable.
+          </span>
+        </el-form-item>
+      </el-form>
+    </el-card>
   </div>
 </template>
 
@@ -75,6 +89,15 @@ const veleroStatus = ref({ connected: false, version: '', namespace: '', plugins
 const clusterInfo = ref({ k8sVersion: '', nodes: 0, namespaces: 0 })
 const supkubeInfo = ref({ version: '' })
 const apiUrl = import.meta.env.VITE_API_URL || '/api/v1'
+
+// v0.7-policy-2: global block toggle for snapshot-only policies. Stored
+// in localStorage for now — v0.8 RBAC will move this to a CRD setting.
+const BLOCK_KEY = 'supkube.policy.blockSnapshotOnly'
+const blockSnapshotOnly = ref(localStorage.getItem(BLOCK_KEY) === 'true')
+const saveBlockSnapshotOnly = (v) => {
+  localStorage.setItem(BLOCK_KEY, String(v))
+  ElMessage.success(v ? 'Snapshot-only policies are now blocked' : 'Snapshot-only policies are now allowed')
+}
 
 const fetchData = async () => {
   loading.value = true
@@ -115,5 +138,13 @@ onMounted(() => {
 <style scoped>
 .settings-page h3 {
   margin: 0 0 16px 0;
+}
+.form-hint {
+  display: block;
+  font-size: 12px;
+  color: #909399;
+  line-height: 1.5;
+  margin-top: 6px;
+  max-width: 620px;
 }
 </style>

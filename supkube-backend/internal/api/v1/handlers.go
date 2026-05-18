@@ -17,7 +17,7 @@ import (
 func GetStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "ok",
-		"version": "0.6.0-alpha",
+		"version": "0.7.0-alpha",
 	})
 }
 
@@ -291,12 +291,22 @@ func ListSchedules(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"items": scheduleList.Items, "total": len(scheduleList.Items)})
 }
 
-// CreateSchedule creates a new Velero schedule
+// CreateSchedule creates a new Velero schedule.
+// v0.7 Actions model: the UI collapses Snapshot+Export intent into a single
+// Velero Schedule, but carries the original intent in annotations so the
+// v0.9 self-managed scheduler can split it back out. Annotations on the
+// Schedule itself (not on the template) — they describe policy intent, not
+// per-backup metadata.
 func CreateSchedule(c *gin.Context) {
 	var req struct {
-		Name               string   `json:"name" binding:"required"`
-		Schedule           string   `json:"schedule" binding:"required"`
-		IncludedNamespaces []string `json:"includedNamespaces"`
+		Name                     string            `json:"name" binding:"required"`
+		Schedule                 string            `json:"schedule" binding:"required"`
+		IncludedNamespaces       []string          `json:"includedNamespaces"`
+		TTL                      string            `json:"ttl"`
+		StorageLocation          string            `json:"storageLocation"`
+		SnapshotVolumes          *bool             `json:"snapshotVolumes"`
+		DefaultVolumesToFsBackup *bool             `json:"defaultVolumesToFsBackup"`
+		Annotations              map[string]string `json:"annotations"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -307,16 +317,33 @@ func CreateSchedule(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	template := velerov1.BackupSpec{
+		IncludedNamespaces:       req.IncludedNamespaces,
+		SnapshotVolumes:          req.SnapshotVolumes,
+		DefaultVolumesToFsBackup: req.DefaultVolumesToFsBackup,
+	}
+	if req.TTL != "" {
+		duration, parseErr := time.ParseDuration(req.TTL)
+		if parseErr != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid TTL format: " + parseErr.Error()})
+			return
+		}
+		template.TTL = metav1.Duration{Duration: duration}
+	}
+	if req.StorageLocation != "" {
+		template.StorageLocation = req.StorageLocation
+	}
+
 	schedule := &velerov1.Schedule{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      req.Name,
-			Namespace: "velero",
+			Name:        req.Name,
+			Namespace:   "velero",
+			Annotations: req.Annotations,
 		},
 		Spec: velerov1.ScheduleSpec{
 			Schedule: req.Schedule,
-			Template: velerov1.BackupSpec{
-				IncludedNamespaces: req.IncludedNamespaces,
-			},
+			Template: template,
 		},
 	}
 	if err := cl.Create(context.Background(), schedule); err != nil {

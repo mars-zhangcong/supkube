@@ -51,6 +51,31 @@
       </el-col>
     </el-row>
 
+    <!-- Protection Compliance (v0.7-policy-2) -->
+    <el-card v-if="stats.snapshotOnlyPolicies > 0" class="compliance-card" style="margin-top: 16px">
+      <div class="compliance-row">
+        <span class="compliance-icon">⚠</span>
+        <div class="compliance-text">
+          <strong>{{ stats.snapshotOnlyPolicies }}</strong>
+          {{ stats.snapshotOnlyPolicies === 1 ? 'policy is' : 'policies are' }}
+          configured as <strong>snapshot-only</strong> — these produce restore points that are
+          <strong>not durable backups</strong>. Data is lost if the underlying storage fails.
+        </div>
+        <el-button size="small" @click="$router.push({ path: '/policies', query: { filter: 'snapshot-only' } })">
+          Review
+        </el-button>
+      </div>
+    </el-card>
+    <el-card v-else-if="stats.totalPolicies > 0" class="compliance-card compliance-ok" style="margin-top: 16px">
+      <div class="compliance-row">
+        <span class="compliance-icon-ok">✓</span>
+        <div class="compliance-text">
+          All <strong>{{ stats.totalPolicies }}</strong> {{ stats.totalPolicies === 1 ? 'policy' : 'policies' }}
+          produce durable backups (Snapshot + Export).
+        </div>
+      </div>
+    </el-card>
+
     <el-card style="margin-top: 20px">
       <template #header>
         <div class="card-header">
@@ -122,10 +147,14 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
-import { getDashboardSummary, getBackups, getRestores, getNamespaces, getApplications } from '../api/velero'
+import { getDashboardSummary, getBackups, getRestores, getNamespaces, getApplications, getSchedules } from '../api/velero'
 import { normalizePhase, phaseTagType } from '../utils/phase'
 
-const stats = ref({ nodes: 0, namespaces: 0, protectedApps: 0, backups: 0, successful: 0, failed: 0 })
+const stats = ref({
+  nodes: 0, namespaces: 0, protectedApps: 0,
+  backups: 0, successful: 0, failed: 0,
+  totalPolicies: 0, snapshotOnlyPolicies: 0
+})
 const recentBackups = ref([])
 const recentRestores = ref([])
 const loading = ref(false)
@@ -149,15 +178,24 @@ const fetchData = async () => {
     stats.value.failed = data.backupSummary?.failed ?? 0
     recentBackups.value = (data.recentBackups || []).slice(0, 5)
 
-    // Still fetch restores and applications separately (not in summary)
-    const [restoresRes, appsRes] = await Promise.all([
+    // Still fetch restores, applications, and schedules separately (not in summary)
+    const [restoresRes, appsRes, schedulesRes] = await Promise.all([
       getRestores(),
-      getApplications().catch(() => null)
+      getApplications().catch(() => null),
+      getSchedules().catch(() => null)
     ])
     recentRestores.value = (restoresRes.data.items || []).slice(0, 5)
     if (appsRes) {
       const apps = appsRes.data.items || []
       stats.value.protectedApps = apps.filter(a => a.protected).length
+    }
+    if (schedulesRes) {
+      const schedules = schedulesRes.data.items || []
+      stats.value.totalPolicies = schedules.length
+      // Count snapshot-only policies (v0.7 annotation; older policies treated as L2)
+      stats.value.snapshotOnlyPolicies = schedules.filter(
+        s => s?.metadata?.annotations?.['supkube.io/export-enabled'] === 'false'
+      ).length
     }
   } catch (e) {
     // Fallback to individual endpoints if summary not available
@@ -212,4 +250,34 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
 }
+
+/* Protection Compliance card */
+.compliance-card {
+  border-left: 4px solid #e6a23c;
+  background: #fdf6ec;
+}
+.compliance-card.compliance-ok {
+  border-left-color: #67c23a;
+  background: #f0f9eb;
+}
+.compliance-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.compliance-icon {
+  font-size: 22px;
+  color: #e6a23c;
+}
+.compliance-icon-ok {
+  font-size: 22px;
+  color: #67c23a;
+}
+.compliance-text {
+  flex: 1;
+  font-size: 13px;
+  color: #303133;
+  line-height: 1.5;
+}
+.compliance-text strong { color: #1f2329; }
 </style>

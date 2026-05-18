@@ -58,7 +58,7 @@
       <el-container>
         <el-header>
           <h2>SupKube — Kubernetes Data Protection</h2>
-          <span class="version-badge">v0.6.0-alpha</span>
+          <span class="version-badge">v0.7.0-alpha</span>
         </el-header>
         <el-main>
           <router-view />
