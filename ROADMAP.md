@@ -1,7 +1,7 @@
 # SupKube Roadmap
 
-> Last updated: 2026-05-15
-> Current released version: **v0.5.1**（已部署到本地 docker-desktop K8S）
+> Last updated: 2026-05-18
+> Current released version: **v0.5.2**（已部署到本地 docker-desktop K8S）
 > Reference product: [Kasten K10 by Veeam](https://docs.kasten.io)
 
 ## 当前状态总览
@@ -9,12 +9,13 @@
 | Sprint | 状态 | 备注 |
 |---|---|---|
 | v0.5.0 | ✅ 已发布 | Phase 1 PRD 7 个页面骨架完成；端到端备份恢复链路通畅 |
-| **v0.5.1** | ✅ **已完成 2026-05-15** | P0/P1 共 6 项修复全部上线；详见 [docs/SPRINT-v0.5.1-RETRO.md](docs/SPRINT-v0.5.1-RETRO.md) |
-| v0.5.2（体验小补） | 🟡 进行中 | 列表搜索筛选、Dashboard Failed Restores 卡片等仍未做 |
-| v0.6（Phase 2 核心） | 🔲 待启动 | 跨 ns 恢复前端、CSI 快照、Resource Transform、日志查看 |
-| v0.7（UI 对标 Kasten） | 🔲 待启动 | Dashboard 图表、暗色主题、i18n、全局搜索 |
+| v0.5.1 | ✅ 已完成 2026-05-15 | P0/P1 共 6 项修复；见 [docs/SPRINT-v0.5.1-RETRO.md](docs/SPRINT-v0.5.1-RETRO.md) |
+| **v0.5.2**（Kasten polish + CSI infra）| ✅ **已完成 2026-05-18** | Kasten 风格 sidebar/logo/Restore Points、Storage Locations kebab CRUD、SupVault provider、RFC1123 校验、Applications filter toolbar、CSI 快照基础设施落地。见 [docs/SPRINT-v0.5.2-RETRO.md](docs/SPRINT-v0.5.2-RETRO.md) + [docs/csi-snapshot-setup.md](docs/csi-snapshot-setup.md) |
+| v0.6（Phase 2 核心） | 🟡 B 阶段进行中 | VSL 管理页面、Volume Backup Mode 双选、CSI 进度展示 |
+| v0.7（UI 对标 Kasten） | 🟡 部分提前完成 | Filter toolbar / Multi-select / Kasten sidebar / kebab 已落地；Dashboard 图表、暗色主题、i18n 仍待做 |
+| v0.7.5（Backup Advisor MVP） | 🔲 待启动 | 智能备份分级建议（评分 + 推荐档位 + 一键采纳） |
 | v0.8（安全多租户） | 🔲 待启动 | OIDC、RBAC、审计日志 |
-| v0.9（高阶能力） | 🔲 待启动 | Kanister Blueprints、Hub-Spoke 多集群、Compliance Score |
+| v0.9（高阶能力） | 🔲 待启动 | Kanister Blueprints、Hub-Spoke 多集群、Compliance Score + Advisor 完整版 |
 | v1.0（GA） | 🔲 待启动 | Prometheus、Webhook、文档站 |
 
 ## 项目现状评估
@@ -166,6 +167,44 @@
 
 ---
 
+## v0.7.5 — Backup Advisor MVP (2~3 周)
+
+> **差异化卖点**：从"备份工具"升级为"备份顾问"，帮客户判断"哪些必须备、哪些可低频、哪些可跳过"。
+> 决策背景：K8s 自愈能力强，无脑全备浪费存储/时间/成本；市面其他工具（Velero、Stash、PX-Backup）均无"主动评估"能力。
+> **完整版**留在 v0.9（Compliance Score 集成）。
+
+### 范围（MVP 故意保守）
+
+- [ ] **Backup Advisor 页面**：每个 application 一行
+  - 评分（0-100）
+  - 推荐档位：`High Priority` / `Medium` / `Low` / `Skip Recommended`
+  - 推荐理由列表（"has 2 PVCs"、"no CM/Secret changes in 30d"、"marked as core by user"）
+- [ ] **评分规则引擎 v1**（K8s API 数据，**不**依赖 Prometheus）
+  - 有 PVC：+40
+  - 有 StatefulSet / CRD instances：+20
+  - 用户打 `supkube.io/tier=core` label：+30
+  - 在 default ns 但有 workload：+10
+  - 纯 ReplicaSet 无 PVC 无 Service：-30
+  - 评分阈值：≥70 High / 40-69 Medium / 10-39 Low / <10 Skip Recommended
+- [ ] **"Apply Recommendation" 按钮**：跳到 Policies 创建页，预填好 schedule（频率按档位映射：High=每日 / Medium=每周 / Low=每月）
+- [ ] **永远显示"未保护应用警告"**——`Skip Recommended` 的也要单独列出来，避免 silent skip 导致客户误以为系统替它兜底了
+- [ ] **客户自定义规则**：YAML 配置文件可调整加分权重和阈值（CRD `BackupAdvisorPolicy`）
+
+### MVP 绝对不做（防止过度承诺）
+
+- ❌ 不自动应用策略（必须人工 review + 一键采纳）
+- ❌ 不 silent skip 任何应用
+- ❌ 不依赖 Prometheus / 运行特征数据（v0.9 才做）
+- ❌ 不基于"业务核心/边缘"自动判断（无法可靠实现，只能客户打 label）
+
+### 与现有体系的关系
+
+- 复用 v0.5.1 已加的 `ComplianceStatus` 字段（Compliant/Unmanaged/NonCompliant/Empty/InProgress）
+- Advisor 评分 ≠ Compliance Status：前者回答"该不该备"，后者回答"备得对不对"
+- Applications 列表加一列显示评分徽章；详情抽屉显示完整推荐理由
+
+---
+
 ## v0.8 — 安全与多租户 (3~4 周)
 
 PRD 非功能需求里"Phase 2 加 RBAC"的落地。**决策：认证统一走 OIDC，不做本地用户系统**（运维成本 & 企业集成度考虑）。
@@ -218,11 +257,20 @@ PRD 非功能需求里"Phase 2 加 RBAC"的落地。**决策：认证统一走 O
 - [ ] **BSL 跨集群共享**：UI 标识"此 BSL 被 N 个集群引用"
 - [ ] **Hub 自身高可用**：v0.9 单副本，v1.0 加 leader election
 
-### 合规性
+### 合规性 & Backup Advisor 完整版
 
-- [ ] Compliance Score（per Application）
-- [ ] SLA 配置（RPO/RTO 目标）+ 超限告警
-- [ ] 备份完整性校验（Restore-test 自动化）
+> 在 v0.7.5 Backup Advisor MVP（基于 K8s API 静态规则评分）之上，引入运行时观测数据让评分更准。
+
+- [ ] **Compliance Score**（per Application）—— Advisor 评分 × 实际备份状况双维度
+- [ ] **SLA 配置**（RPO/RTO 目标）+ 超限告警（Compliance Score < 阈值 → 通知 channel）
+- [ ] **Advisor 增强：Prometheus 集成**
+  - 资源变更频率：CM/Secret 改动 N 次/周 → 提升推荐档位
+  - PV 读写活跃度：长时间无 IO 的 PVC 自动降档（Cold tier）
+  - Pod 重启频率：异常高的应用降档（"还在调试，不值得高频备份"）
+- [ ] **Advisor 增强：K8s 审计日志分析**
+  - 检测哪些 ConfigMap/Secret 是手改的（vs GitOps 同步）→ 手改的必须备份
+- [ ] **备份完整性校验**（Restore-test 自动化，定期到隔离 ns 恢复验证）
+- [ ] **持续重评估**：应用变动（PVC 新增、Workload 类型变更）自动重算评分并通知
 
 ---
 
@@ -253,7 +301,8 @@ PRD 非功能需求里"Phase 2 加 RBAC"的落地。**决策：认证统一走 O
 | CSI Snapshots | v0.6 | 待开发 |
 | Pre/Post Hooks (Blueprints) | v0.9 | 待开发 |
 | Application Groups | v0.9 | 待开发 |
-| Compliance Score | v0.9 | 待开发 |
+| **Backup Advisor (智能分级推荐)** | **v0.7.5 MVP / v0.9 完整版** | **🆕 Kasten 未做的差异化能力** |
+| Compliance Score | v0.9 | 待开发，与 Advisor 联动 |
 | RBAC / Multi-tenancy | v0.8 | 待开发 |
 | Multi-cluster | v0.9 | 待开发 |
 | Reporting / Audit | v0.8 / v1.0 | 待开发 |

@@ -71,6 +71,13 @@ Namespace: minio
 - 备份/恢复日志查看（Velero DownloadRequest 流程）
 - Application 详情加 PVC/StatefulSets/Hooks
 
+### B+. v0.7.5 Backup Advisor MVP（2-3 周，新增）
+- **从"备份工具"升级为"备份顾问"** —— 智能评估每个 application 的备份必要性
+- MVP：基于 K8s API 数据 + 规则引擎 + 用户标记 → 输出评分 + 推荐档位（High/Medium/Low/Skip）
+- "Apply Recommendation"按钮自动生成 Policy，但必须人工确认（不自动应用）
+- 详细范围见 [ROADMAP.md](ROADMAP.md) v0.7.5 章节
+- **不要在 v0.6 之前做**：基于真实备份历史数据评分更准
+
 ### C. 思考产品方向（不限时）
 开放问题，未决定：
 

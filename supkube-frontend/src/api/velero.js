@@ -52,5 +52,8 @@ export const deleteSchedule = (name) => api.delete(`/schedules/${name}`)
 
 // Storage locations
 export const getStorageLocations = () => api.get('/storage-locations')
+export const getStorageLocation = (name) => api.get(`/storage-locations/${name}`)
 export const createStorageLocation = (data) => api.post('/storage-locations', data)
+export const updateStorageLocation = (name, data) => api.put(`/storage-locations/${name}`, data)
+export const deleteStorageLocation = (name) => api.delete(`/storage-locations/${name}`)
 export const verifyStorageLocation = (name) => api.post(`/storage-locations/${name}/verify`)

@@ -52,6 +52,9 @@ func Run() error {
 		// Storage locations
 		api.GET("/storage-locations", v1.ListStorageLocations)
 		api.POST("/storage-locations", v1.CreateStorageLocationWithSecret)
+		api.GET("/storage-locations/:name", v1.GetStorageLocation)
+		api.PUT("/storage-locations/:name", v1.UpdateStorageLocation)
+		api.DELETE("/storage-locations/:name", v1.DeleteStorageLocation)
 		api.POST("/storage-locations/:name/verify", v1.VerifyStorageLocation)
 	}
 

@@ -28,16 +28,14 @@ type ApplicationInfo struct {
 }
 
 // systemNamespaces that should be excluded from the applications list.
-// Beyond this hardcoded set, any namespace carrying the label
-// `supkube.io/exclude=true` is also hidden (see ListApplications).
+// We only hide the three K8S kernel-internal namespaces — operator/tooling
+// namespaces like velero, supkube, minio are shown so users can see and
+// protect them too. Hide individual namespaces with the supkube.io/exclude
+// label if needed.
 var systemNamespaces = map[string]bool{
 	"kube-system":     true,
 	"kube-public":     true,
 	"kube-node-lease": true,
-	"velero":          true,
-	"supkube":         true,
-	"minio":           true,
-	"restored-ns":     true,
 }
 
 const excludeLabel = "supkube.io/exclude"

@@ -1,8 +1,12 @@
 <template>
   <div id="app">
     <el-container>
-      <el-aside width="200px">
-        <el-menu :router="true" :default-active="$route.path">
+      <el-aside width="220px">
+        <div class="sidebar-brand">
+          <img src="/supkube-logo.svg" alt="SupKube" class="sidebar-logo" />
+          <span class="sidebar-brand-text">SupKube</span>
+        </div>
+        <el-menu :router="true" :default-active="$route.path" class="sidebar-menu">
           <el-menu-item index="/dashboard">
             <el-icon><Monitor /></el-icon>Dashboard
           </el-menu-item>
@@ -10,7 +14,7 @@
             <el-icon><Grid /></el-icon>Applications
           </el-menu-item>
           <el-menu-item index="/backups">
-            <el-icon><FolderOpened /></el-icon>Backups
+            <el-icon><FolderOpened /></el-icon>Restore Points
           </el-menu-item>
           <el-menu-item index="/restores">
             <el-icon><RefreshRight /></el-icon>Restores
@@ -29,7 +33,7 @@
       <el-container>
         <el-header>
           <h2>SupKube — Kubernetes Data Protection</h2>
-          <span class="version-badge">v0.5.1</span>
+          <span class="version-badge">v0.5.2</span>
         </el-header>
         <el-main>
           <router-view />
@@ -99,23 +103,72 @@ h1, h2, h3, h4, h5, h6 {
 </style>
 
 <style scoped>
+/* Kasten K10-inspired sidebar — light, flat, professional */
 .el-aside {
-  background-color: #1d1f2b;
+  background-color: #ffffff;
+  border-right: 1px solid #e7e9ec;
   min-height: 100vh;
+  padding: 0;
 }
-.el-aside .el-menu {
+
+/* Brand block at the top of the sidebar; height matches el-header (60px)
+ * and shares its border-bottom color so the two bottoms line up across the
+ * sidebar/header boundary. */
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 60px;
+  padding: 0 18px;
+  box-sizing: border-box;
+  border-bottom: 1px solid #ebeef5;
+  margin-bottom: 8px;
+}
+.sidebar-logo {
+  width: 28px;
+  height: 30px;
+  flex-shrink: 0;
+}
+.sidebar-brand-text {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1f2329;
+  letter-spacing: -0.01em;
+}
+.el-aside :deep(.el-menu) {
   border-right: none;
-  background-color: #1d1f2b;
+  background-color: transparent;
 }
-.el-aside .el-menu-item {
-  color: #bbb;
+.el-aside :deep(.el-menu-item) {
+  color: #4a5168;
   font-size: var(--font-size-base);
   font-weight: 500;
+  height: 42px;
+  line-height: 42px;
+  margin: 2px 8px;
+  padding: 0 14px !important;
+  border-radius: 6px;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
-.el-aside .el-menu-item:hover,
-.el-aside .el-menu-item.is-active {
-  background-color: #2d2f3b;
-  color: #fff;
+.el-aside :deep(.el-menu-item .el-icon) {
+  color: #6b7280;
+  font-size: 18px;
+  margin-right: 10px;
+}
+.el-aside :deep(.el-menu-item:hover) {
+  background-color: #f5f7fa;
+  color: #1f2329;
+}
+.el-aside :deep(.el-menu-item:hover .el-icon) {
+  color: #1f2329;
+}
+.el-aside :deep(.el-menu-item.is-active) {
+  background-color: #eef0f3;
+  color: #1f2329;
+  font-weight: 600;
+}
+.el-aside :deep(.el-menu-item.is-active .el-icon) {
+  color: #1f2329;
 }
 .el-header {
   display: flex;
@@ -123,6 +176,7 @@ h1, h2, h3, h4, h5, h6 {
   gap: 12px;
   border-bottom: 1px solid #ebeef5;
   padding: 0 20px;
+  background-color: #ffffff;
 }
 .el-header h2 {
   font-size: var(--font-size-lg);

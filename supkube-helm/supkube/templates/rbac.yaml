@@ -16,8 +16,15 @@ rules:
     resources: ["backups", "restores", "schedules", "backupstoragelocations"]
     verbs: ["get", "list", "watch", "create", "update", "delete"]
   - apiGroups: [""]
-    resources: ["namespaces", "pods", "services", "persistentvolumeclaims", "configmaps", "secrets", "nodes"]
+    resources: ["namespaces", "pods", "services", "persistentvolumeclaims", "configmaps", "nodes"]
     verbs: ["get", "list"]
+  # Secrets: write access needed because creating a BackupStorageLocation also
+  # provisions a credentials Secret in the velero namespace. Cluster-wide for
+  # simplicity in v0.5.x; v0.8 RBAC overhaul will restrict this to a
+  # velero-namespace-scoped Role.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
   - apiGroups: ["apps"]
     resources: ["deployments", "statefulsets", "replicasets", "daemonsets"]
     verbs: ["get", "list"]

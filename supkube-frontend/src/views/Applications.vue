@@ -5,8 +5,37 @@
       <p class="page-desc">View details or perform actions on applications.</p>
     </div>
 
+    <!-- Kasten-style filter toolbar: status quick-filter + free-text name search + selection summary -->
+    <div class="filter-toolbar">
+      <el-select v-model="statusFilter" class="filter-status" placement="bottom-start">
+        <el-option label="All" value="all" />
+        <el-option label="Compliant" value="Compliant" />
+        <el-option label="Unmanaged" value="Unmanaged" />
+        <el-option label="Non-Compliant" value="NonCompliant" />
+        <el-option label="In Progress" value="InProgress" />
+        <el-option label="Empty" value="Empty" />
+      </el-select>
+      <el-input
+        v-model="nameFilter"
+        placeholder="Filter by Name"
+        clearable
+        class="filter-name"
+      >
+        <template #prefix><el-icon><Search /></el-icon></template>
+      </el-input>
+      <span class="filter-spacer"></span>
+      <span class="filter-selected">{{ selectedRows.length }} selected</span>
+    </div>
+
     <el-card>
-      <el-table :data="applications" style="width: 100%" v-loading="loading" row-class-name="app-row">
+      <el-table
+        :data="filteredApplications"
+        style="width: 100%"
+        v-loading="loading"
+        row-class-name="app-row"
+        @selection-change="handleSelectionChange"
+      >
+        <el-table-column type="selection" width="48" />
         <el-table-column prop="namespace" label="Name" sortable min-width="200">
           <template #default="{ row }">
             <span class="app-name">{{ row.namespace }}</span>
@@ -28,14 +57,20 @@
         <el-table-column label="Labels" min-width="280">
           <template #default="{ row }">
             <div class="row-labels">
-              <el-tag
+              <el-tooltip
                 v-for="entry in rowLabelPreview(row)"
                 :key="entry[0]"
-                size="small"
-                effect="plain"
-                round
-                class="row-label-tag"
-              >{{ entry[0] }}:{{ entry[1] }}</el-tag>
+                :content="`${entry[0]}:${entry[1]}`"
+                placement="top"
+                :show-after="300"
+              >
+                <el-tag
+                  size="small"
+                  effect="plain"
+                  round
+                  class="row-label-tag"
+                >{{ entry[0] }}:{{ entry[1] }}</el-tag>
+              </el-tooltip>
               <span v-if="rowLabelHidden(row) > 0" class="row-labels-more">
                 +{{ rowLabelHidden(row) }} more
               </span>
@@ -271,6 +306,7 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { Search } from '@element-plus/icons-vue'
 import { getApplications, getApplicationDetail } from '../api/velero'
 import { ElMessage } from 'element-plus'
 
@@ -281,6 +317,27 @@ const drawerVisible = ref(false)
 const selectedApp = ref(null)
 const detailLoading = ref(false)
 const detailData = ref({})
+
+// Kasten-style filter state
+const statusFilter = ref('all')
+const nameFilter = ref('')
+const selectedRows = ref([])
+
+const filteredApplications = computed(() => {
+  const name = nameFilter.value.trim().toLowerCase()
+  return applications.value.filter((row) => {
+    if (statusFilter.value !== 'all') {
+      const c = row?.complianceStatus || (row?.protected ? 'Compliant' : 'Unmanaged')
+      if (c !== statusFilter.value) return false
+    }
+    if (name && !(row.namespace || '').toLowerCase().includes(name)) return false
+    return true
+  })
+})
+
+const handleSelectionChange = (rows) => {
+  selectedRows.value = rows
+}
 
 // Expand/collapse states
 const podsExpanded = ref(true)
@@ -455,6 +512,26 @@ onMounted(() => {
   color: #909399;
   font-size: 13px;
 }
+.filter-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.filter-status {
+  width: 200px;
+}
+.filter-name {
+  width: 320px;
+}
+.filter-spacer {
+  flex: 1;
+}
+.filter-selected {
+  color: #606266;
+  font-size: 13px;
+  font-weight: 500;
+}
 .app-name {
   font-weight: 600;
   font-size: 14px;
@@ -503,10 +580,18 @@ onMounted(() => {
   background: #f5f7fa;
   border-color: #e4e7ed;
   color: #303133;
+  max-width: 220px;
+}
+/* el-tag wraps its text in .el-tag__content; ellipsis must be applied there
+ * to actually truncate, otherwise text overflows the tag border. */
+.row-label-tag :deep(.el-tag__content),
+.row-label-tag :deep(span) {
+  display: inline-block;
   max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  vertical-align: middle;
 }
 .row-labels-more {
   font-size: 12px;
