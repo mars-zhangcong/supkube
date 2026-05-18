@@ -13,8 +13,14 @@ metadata:
     {{- include "supkube.labels" . | nindent 4 }}
 rules:
   - apiGroups: ["velero.io"]
-    resources: ["backups", "restores", "schedules", "backupstoragelocations"]
+    resources: ["backups", "restores", "schedules", "backupstoragelocations", "volumesnapshotlocations"]
     verbs: ["get", "list", "watch", "create", "update", "delete"]
+  # Read-only access to CSI snapshot resources so SupKube can:
+  #   - list VolumeSnapshotClass options when user picks Volume Backup Mode
+  #   - surface VolumeSnapshot/VolumeSnapshotContent progress in BackupDetail
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshots", "volumesnapshotcontents", "volumesnapshotclasses"]
+    verbs: ["get", "list", "watch"]
   - apiGroups: [""]
     resources: ["namespaces", "pods", "services", "persistentvolumeclaims", "configmaps", "nodes"]
     verbs: ["get", "list"]

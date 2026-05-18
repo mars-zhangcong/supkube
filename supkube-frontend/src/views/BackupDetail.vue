@@ -57,14 +57,37 @@
             <el-descriptions-item label="TTL">
               {{ backup?.spec?.ttl || '-' }}
             </el-descriptions-item>
-            <el-descriptions-item label="Snapshot Volumes">
-              {{ backup?.spec?.snapshotVolumes !== false ? 'Yes' : 'No' }}
+            <el-descriptions-item label="Volume Backup Mode">
+              <el-tag :type="volumeModeTag" size="small">
+                {{ volumeModeLabel }}
+              </el-tag>
             </el-descriptions-item>
             <el-descriptions-item label="Items Backed Up">
               {{ backup?.status?.progress?.itemsBackedUp ?? '-' }} / {{ backup?.status?.progress?.totalItems ?? '-' }}
             </el-descriptions-item>
             <el-descriptions-item label="Format Version">
               {{ backup?.status?.formatVersion || '-' }}
+            </el-descriptions-item>
+          </el-descriptions>
+        </el-card>
+
+        <!-- CSI snapshot progress — only shown when this backup used CSI mode -->
+        <el-card v-if="hasCSIProgress" style="margin-top: 20px">
+          <template #header>📸 CSI Volume Snapshots</template>
+          <el-descriptions :column="1" border>
+            <el-descriptions-item label="Attempted">
+              {{ backup?.status?.csiVolumeSnapshotsAttempted ?? 0 }}
+            </el-descriptions-item>
+            <el-descriptions-item label="Completed">
+              <span :class="csiAllOk ? 'csi-ok' : 'csi-partial'">
+                {{ backup?.status?.csiVolumeSnapshotsCompleted ?? 0 }}
+              </span>
+              <span v-if="!csiAllOk" class="csi-warn">
+                · {{ (backup.status.csiVolumeSnapshotsAttempted - backup.status.csiVolumeSnapshotsCompleted) }} did not complete
+              </span>
+            </el-descriptions-item>
+            <el-descriptions-item v-if="backup?.status?.backupItemOperationsAttempted" label="Item Operations">
+              {{ backup.status.backupItemOperationsCompleted ?? 0 }} / {{ backup.status.backupItemOperationsAttempted }}
             </el-descriptions-item>
           </el-descriptions>
         </el-card>
@@ -98,7 +121,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getBackup, deleteBackup } from '../api/velero'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -108,6 +131,33 @@ const route = useRoute()
 const router = useRouter()
 const backup = ref(null)
 const loading = ref(false)
+
+// Volume backup mode derivation from spec (read-only display).
+// Velero spec: snapshotVolumes true → CSI; defaultVolumesToFsBackup true → FS;
+// both nil/false → no volume backup at all.
+const volumeModeLabel = computed(() => {
+  const spec = backup.value?.spec || {}
+  if (spec.snapshotVolumes === true) return '📸 CSI Snapshot'
+  if (spec.defaultVolumesToFsBackup === true) return '📁 Filesystem (Restic/Kopia)'
+  if (spec.snapshotVolumes === false && !spec.defaultVolumesToFsBackup) return 'No volumes'
+  return 'Default'
+})
+const volumeModeTag = computed(() => {
+  const spec = backup.value?.spec || {}
+  if (spec.snapshotVolumes === true) return 'primary'
+  if (spec.defaultVolumesToFsBackup === true) return 'success'
+  if (spec.snapshotVolumes === false) return 'info'
+  return ''
+})
+const hasCSIProgress = computed(() => {
+  const s = backup.value?.status
+  return s && (s.csiVolumeSnapshotsAttempted || s.csiVolumeSnapshotsCompleted)
+})
+const csiAllOk = computed(() => {
+  const s = backup.value?.status
+  if (!s) return true
+  return (s.csiVolumeSnapshotsCompleted || 0) >= (s.csiVolumeSnapshotsAttempted || 0)
+})
 
 const formatTime = (ts) => {
   if (!ts) return '-'
@@ -160,4 +210,7 @@ onMounted(() => {
 .page-header h3 {
   margin: 8px 0 0 0;
 }
+.csi-ok { color: #67c23a; font-weight: 600; }
+.csi-partial { color: #e6a23c; font-weight: 600; }
+.csi-warn { color: #f56c6c; font-size: 12px; margin-left: 6px; }
 </style>

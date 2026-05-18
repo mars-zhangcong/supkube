@@ -56,6 +56,12 @@ func Run() error {
 		api.PUT("/storage-locations/:name", v1.UpdateStorageLocation)
 		api.DELETE("/storage-locations/:name", v1.DeleteStorageLocation)
 		api.POST("/storage-locations/:name/verify", v1.VerifyStorageLocation)
+
+		// Volume snapshot locations (CSI / cloud-native snapshots)
+		api.GET("/volume-snapshot-locations", v1.ListVolumeSnapshotLocations)
+		api.POST("/volume-snapshot-locations", v1.CreateVolumeSnapshotLocation)
+		api.GET("/volume-snapshot-locations/:name", v1.GetVolumeSnapshotLocation)
+		api.DELETE("/volume-snapshot-locations/:name", v1.DeleteVolumeSnapshotLocation)
 	}
 
 	return r.Run(":8080")

@@ -11,8 +11,9 @@
 | v0.5.0 | ✅ 已发布 | Phase 1 PRD 7 个页面骨架完成；端到端备份恢复链路通畅 |
 | v0.5.1 | ✅ 已完成 2026-05-15 | P0/P1 共 6 项修复；见 [docs/SPRINT-v0.5.1-RETRO.md](docs/SPRINT-v0.5.1-RETRO.md) |
 | **v0.5.2**（Kasten polish + CSI infra）| ✅ **已完成 2026-05-18** | Kasten 风格 sidebar/logo/Restore Points、Storage Locations kebab CRUD、SupVault provider、RFC1123 校验、Applications filter toolbar、CSI 快照基础设施落地。见 [docs/SPRINT-v0.5.2-RETRO.md](docs/SPRINT-v0.5.2-RETRO.md) + [docs/csi-snapshot-setup.md](docs/csi-snapshot-setup.md) |
-| v0.6（Phase 2 核心） | 🟡 B 阶段进行中 | VSL 管理页面、Volume Backup Mode 双选、CSI 进度展示 |
-| v0.7（UI 对标 Kasten） | 🟡 部分提前完成 | Filter toolbar / Multi-select / Kasten sidebar / kebab 已落地；Dashboard 图表、暗色主题、i18n 仍待做 |
+| v0.6（Phase 2 核心） | 🟢 v0.6.0-alpha 已上线 | VSL 管理页面、Volume Backup Mode 双选、CSI 进度展示（剩跨 ns 恢复、Resource Transform、日志查看） |
+| **v0.7（Kasten Actions Model）** | 🔲 **下一个 sprint** | **核心架构演进**：Restore Point 拆分 Snapshot/Export 两层，Policy 双 cron + 双 retention + Actions UI，Snapshot-only 风险防护，Import 入口（基于 BackupSync） |
+| v0.7.x（UI 视觉打磨） | 🟡 部分提前 | Filter toolbar / Multi-select / Kasten sidebar / kebab / 折叠 sidebar 已落地；Dashboard 图表、暗色主题、i18n 仍待做 |
 | v0.7.5（Backup Advisor MVP） | 🔲 待启动 | 智能备份分级建议（评分 + 推荐档位 + 一键采纳） |
 | v0.8（安全多租户） | 🔲 待启动 | OIDC、RBAC、审计日志 |
 | v0.9（高阶能力） | 🔲 待启动 | Kanister Blueprints、Hub-Spoke 多集群、Compliance Score + Advisor 完整版 |
@@ -140,18 +141,56 @@
 
 ---
 
-## v0.7 — UI/UX 对标 Kasten (2~3 周)
+## v0.7 — Kasten Actions Model 引入 (3~4 周)
 
-视觉层级与交互细节贴近 Kasten K10。
+> 重大架构演进：把 SupKube 的数据保护模型从"Velero 直翻"升级为"Kasten Actions 抽象"。
+> 决策背景：Snapshot（本地快速）与 Export（远端持久）是两个 RPO/RTO 层级，强耦合在一个 Velero Backup 里限制了 Kasten 5min RPO 这类核心场景。
+> **采用 Path C 混合策略**：v0.7 先做 UI 抽象层（路径 A），v0.8/v0.9 再做底层解耦（路径 B）—— 详见上方"关键架构决策（已定）"。
 
-### Dashboard 升级
+### v0.7-policy-1 · Actions 概念引入（核心）
+
+- [ ] **Restore Point 抽屉拆分两层状态**：📸 Snapshot (Local) + 📦 Export (Object Storage)，分别显示 status / location / size / retention / 数据指纹
+- [ ] **Restore Point Type 字段**：`Local Snapshot` / `Exported Backup` / `Imported Backup` 三选一（基于 Velero Backup spec 派生）
+- [ ] **数据指纹** = `SHA256(metadata.uid + creationTimestamp + spec.storageLocation)`，UI 短形式显示前 8 位（如 `a3f9b727`），完整形式可一键复制
+- [ ] **Policy 表单按 Actions 重构**：Snapshot Action（必选）+ Export Action（默认勾选）两块独立配置，分别配 retention
+- [ ] **Snapshot/Export retention 分别映射**：v0.7 底层仍是单 Velero Schedule，spec.ttl 取两者较大值（UI 双字段是为 v0.9 真分离做铺垫）
+
+### v0.7-policy-2 · Snapshot-only 风险防护（合规）
+
+- [ ] **Policy 表单默认勾 Export**，取消勾时**触发二次确认对话框**：
+      "Are you sure? Snapshot alone is not a backup. Data is lost if the underlying storage fails. Use only for development/staging environments."
+- [ ] **Policies 列表新增 Protection Level 列**：
+      - `L1 Snapshot Only` ⚠ 黄色 + hover 提示 "Not a durable backup"
+      - `L2 Backup` ✅ 绿色（snapshot + export）
+      - `L3 Immutable Backup` 🛡 蓝色（export to immutable BSL，v0.9 配合 BSL immutability 开关）
+- [ ] **Dashboard 加 Protection Compliance 卡片**：`N policies are snapshot-only ⚠`，点击跳到筛选后的 Policies 列表
+- [ ] **能力检测**：Create Policy 时若 target namespace 的 PVC 全在不支持 CSI 快照的 SC 上 + 用户又选了 Snapshot-only，立即报错并列出违规 PVC
+- [ ] **Settings 加全局开关 `Block snapshot-only policies`**（默认 off，企业 PoC 客户启用后阻止保存任何 snapshot-only policy）
+
+### v0.7-policy-3 · 双 cron Schedule（为 v0.9 RPO 5min 铺垫）
+
+- [ ] Policy 表单 UI 提供 **Snapshot Schedule** 和 **Export Schedule** 两个独立 cron 字段
+- [ ] v0.7 实现：底层仍创建单一 Velero Schedule，cron 取**较短间隔**；UI 上展示两者，user 看到的是"两个频率独立配"
+- [ ] 默认值：Snapshot Schedule `0 * * * *`（每小时），Export Schedule `0 0 * * *`（每天）
+- [ ] 默认 retention：**Snapshot=24h、Export=30d**（这次拍板）
+- [ ] 提示框：当两个 cron 设得太接近（< 30 min 差）时提示"Export is expensive; recommend at least 4x Snapshot interval"
+
+### v0.7-import · Import Restore Points 入口（路径 C 关键）
+
+- [ ] **Sidebar 新增菜单项 `Import`**
+- [ ] 列出 Storage Profile（BSL），点进去显示该 BSL 里发现的 Backup manifest
+- [ ] **同步状态**：基于 Velero `BackupSyncController`（v1.10+），显示 "Synced N min ago" 时间戳
+- [ ] **指纹去重**：同指纹的 backup 已在本地 Backup CR 中，标记为 "Already imported"
+- [ ] 多选 + "Import Selected" 触发本地 Backup CR 创建（实际是引用同一个 BSL 路径，Velero 自动 sync 已经做了大部分工作）
+
+### Dashboard 升级（保留原 v0.7 计划）
 
 - [ ] 备份成功率 7/30 天趋势折线图（ECharts）
 - [ ] 存储容量使用饼图（按 BSL）
-- [ ] 受保护应用 vs 未保护应用 占比
+- [ ] **Protection Compliance 卡片**（在 v0.7-policy-2 里）
 - [ ] 顶部状态条：Velero / BSL / Storage 三项健康度
 
-### 通用 UX
+### 通用 UX（推 v0.7.x 或拆到 v0.7.5）
 
 - [ ] 暗色主题切换（CSS Variables）
 - [ ] i18n 中文（zh-CN），所有 view 抽 i18n key
@@ -159,7 +198,7 @@
 - [ ] 面包屑导航
 - [ ] 表格列宽自定义 + 列显隐控制
 
-### 详情页面板化
+### 详情页面板化（保留原 v0.7 计划）
 
 - [ ] Backup 详情改为左 metadata、右 tabs（Overview / Resources / Logs / Results）
 - [ ] Restore 详情同上
@@ -317,6 +356,10 @@ PRD 非功能需求里"Phase 2 加 RBAC"的落地。**决策：认证统一走 O
 | Hooks 引擎 | v0.9 | **直接集成 Kanister** | Helm 加 Kanister 子 chart；可复用社区 Blueprint；接受与 Veeam 生态的耦合 |
 | 多集群架构 | v0.9 | **Hub-Spoke** | Hub 独立部署；Spoke 通过 kubeconfig 接入；v1.0 引入反向 agent |
 | 认证方案 | v0.8 | **统一 OIDC（无本地用户）** | 强依赖外部 IdP；Helm 内置 Dex 兜底但仅供初装；不实现登录页/密码管理 |
+| Actions 模型引入策略 | v0.7→v0.9 | **路径 C 混合分阶段**：v0.7 UI 抽象层先行（拆 Snapshot/Export 两层状态、Policy 双 cron+双 retention），v0.8 引入 SupkubeAction CRD 做审计，v0.9 自研 snapshot scheduler 真分离实现 5min RPO | 不一开始就重写 Velero；UI 心智模型从 v0.7 就对齐 Kasten |
+| Snapshot-only 政策 | v0.7 | **支持但严格定位为 L1（快速回滚），不叫 Backup**：默认勾 Export；取消时二次确认对话框；Policies 列表标 Protection Level；Settings 加全局开关 `Block snapshot-only` 给企业 PoC | Policy UI / Dashboard Compliance 卡片 / 能力检测 |
+| 默认 retention（v0.7 起） | v0.7 | **Snapshot=24h，Export=30d** | Policy 创建表单初始值；可调 |
+| 数据指纹算法 | v0.7 | **`SHA256(metadata.uid + creationTimestamp + spec.storageLocation)`** 前 8 位显示 | Restore Point 抽屉、Import 去重；不依赖应用语义版本，纯 Velero 派生 |
 
 ## 仍待评审项
 

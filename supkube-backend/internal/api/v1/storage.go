@@ -385,3 +385,105 @@ func DeleteStorageLocation(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "storage location deleted"})
 }
+
+// --- VolumeSnapshotLocations (v0.6) -------------------------------------
+//
+// VSL points Velero at how to take CSI/native volume snapshots. For
+// hostpath-csi the spec is minimal (just the provider name = csi); for
+// cloud providers it carries region, profile, etc. v0.6 MVP exposes
+// list/get/create/delete; UI builds a similar Kasten-style table.
+
+// ListVolumeSnapshotLocations returns all Velero VolumeSnapshotLocations.
+func ListVolumeSnapshotLocations(c *gin.Context) {
+	cl, err := k8s.GetRuntimeClient()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	list := &velerov1.VolumeSnapshotLocationList{}
+	if err := cl.List(context.Background(), list, client.InNamespace("velero")); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"items": list.Items, "total": len(list.Items)})
+}
+
+// GetVolumeSnapshotLocation returns a single VSL.
+func GetVolumeSnapshotLocation(c *gin.Context) {
+	name := c.Param("name")
+	cl, err := k8s.GetRuntimeClient()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	vsl := &velerov1.VolumeSnapshotLocation{}
+	if err := cl.Get(context.Background(), client.ObjectKey{Name: name, Namespace: "velero"}, vsl); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, vsl)
+}
+
+// CreateVolumeSnapshotLocation creates a Velero VolumeSnapshotLocation.
+// Provider naming follows Velero convention: "csi" for any CSI driver
+// (Velero v1.14+ resolves the actual driver via VolumeSnapshotClass);
+// cloud-native providers (aws/gcp/azure) take provider-specific config.
+func CreateVolumeSnapshotLocation(c *gin.Context) {
+	var req struct {
+		Name     string            `json:"name" binding:"required"`
+		Provider string            `json:"provider" binding:"required"`
+		Config   map[string]string `json:"config"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := validateK8sName(req.Name); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	cl, err := k8s.GetRuntimeClient()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	vsl := &velerov1.VolumeSnapshotLocation{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      req.Name,
+			Namespace: "velero",
+		},
+		Spec: velerov1.VolumeSnapshotLocationSpec{
+			Provider: req.Provider,
+			Config:   req.Config,
+		},
+	}
+	if err := cl.Create(context.Background(), vsl); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, vsl)
+}
+
+// DeleteVolumeSnapshotLocation deletes a Velero VolumeSnapshotLocation.
+// No cascade — VSLs have no associated secrets in our model. Velero
+// will return an error if the VSL is still referenced by any Backup.
+func DeleteVolumeSnapshotLocation(c *gin.Context) {
+	name := c.Param("name")
+	cl, err := k8s.GetRuntimeClient()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	vsl := &velerov1.VolumeSnapshotLocation{}
+	if err := cl.Get(context.Background(), client.ObjectKey{Name: name, Namespace: "velero"}, vsl); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	if err := cl.Delete(context.Background(), vsl); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "volume snapshot location deleted"})
+}

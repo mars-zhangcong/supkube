@@ -57,3 +57,9 @@ export const createStorageLocation = (data) => api.post('/storage-locations', da
 export const updateStorageLocation = (name, data) => api.put(`/storage-locations/${name}`, data)
 export const deleteStorageLocation = (name) => api.delete(`/storage-locations/${name}`)
 export const verifyStorageLocation = (name) => api.post(`/storage-locations/${name}/verify`)
+
+// Volume snapshot locations (CSI / cloud-native snapshots)
+export const getVolumeSnapshotLocations = () => api.get('/volume-snapshot-locations')
+export const getVolumeSnapshotLocation = (name) => api.get(`/volume-snapshot-locations/${name}`)
+export const createVolumeSnapshotLocation = (data) => api.post('/volume-snapshot-locations', data)
+export const deleteVolumeSnapshotLocation = (name) => api.delete(`/volume-snapshot-locations/${name}`)

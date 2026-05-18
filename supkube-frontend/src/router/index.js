@@ -10,6 +10,7 @@ const routes = [
   { path: '/restores', name: 'Restores', component: () => import('../views/Restores.vue') },
   { path: '/policies', name: 'Policies', component: () => import('../views/Policies.vue') },
   { path: '/storage', name: 'StorageLocations', component: () => import('../views/StorageLocations.vue') },
+  { path: '/snapshot-locations', name: 'VolumeSnapshotLocations', component: () => import('../views/VolumeSnapshotLocations.vue') },
   { path: '/settings', name: 'Settings', component: () => import('../views/Settings.vue') },
 ]
 

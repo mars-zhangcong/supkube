@@ -173,6 +173,17 @@
         <el-form-item label="Include Volumes">
           <el-switch v-model="createForm.snapshotVolumes" />
         </el-form-item>
+        <el-form-item v-if="createForm.snapshotVolumes" label="Volume Backup Mode">
+          <el-radio-group v-model="createForm.volumeMode">
+            <el-radio-button value="filesystem">📁 Filesystem (Restic/Kopia)</el-radio-button>
+            <el-radio-button value="csi">📸 CSI Snapshot</el-radio-button>
+          </el-radio-group>
+          <span class="form-hint">
+            <strong>Filesystem</strong>: works with any StorageClass, slower but most compatible.
+            <strong>CSI</strong>: faster, requires the PVC's StorageClass to support CSI snapshots
+            (e.g. <code>csi-hostpath-sc</code>).
+          </span>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showCreateDialog = false">Cancel</el-button>
@@ -211,7 +222,10 @@ const createForm = ref({
   labelSelectorStr: '',
   ttl: '720h',
   storageLocation: 'default',
-  snapshotVolumes: true
+  snapshotVolumes: true,
+  // v0.6: 'filesystem' = Restic/Kopia fs backup (defaultVolumesToFsBackup=true)
+  //       'csi'        = CSI snapshot (snapshotVolumes=true + plain spec)
+  volumeMode: 'filesystem'
 })
 
 const formatTime = (ts) => {
@@ -306,6 +320,14 @@ const handleCreate = async () => {
   }
   creating.value = true
   try {
+    // Map UI volume mode to Velero spec:
+    //   - filesystem: defaultVolumesToFsBackup=true → Restic/Kopia uploader
+    //   - csi:        snapshotVolumes=true, no fs backup flag → CSI snapshotter
+    // If the user turned off "Include Volumes" entirely, both are false.
+    const includeVols = createForm.value.snapshotVolumes
+    const isCSI = includeVols && createForm.value.volumeMode === 'csi'
+    const isFS = includeVols && createForm.value.volumeMode === 'filesystem'
+
     const payload = {
       name: createForm.value.name,
       includedNamespaces: createForm.value.includedNamespaces.length > 0 ? createForm.value.includedNamespaces : undefined,
@@ -313,14 +335,15 @@ const handleCreate = async () => {
       labelSelector: parseLabelSelector(createForm.value.labelSelectorStr),
       ttl: createForm.value.ttl || '720h',
       storageLocation: createForm.value.storageLocation || 'default',
-      snapshotVolumes: createForm.value.snapshotVolumes
+      snapshotVolumes: isCSI,
+      defaultVolumesToFsBackup: isFS
     }
     await createBackup(payload)
-    ElMessage.success(`Restore point "${createForm.value.name}" created. Monitoring progress...`)
+    ElMessage.success(`Restore point "${createForm.value.name}" created (${isCSI ? 'CSI Snapshot' : isFS ? 'Filesystem' : 'no volumes'}). Monitoring progress...`)
     showCreateDialog.value = false
     createForm.value = {
       name: '', includedNamespaces: [], excludedNamespaces: [], labelSelectorStr: '',
-      ttl: '720h', storageLocation: 'default', snapshotVolumes: true
+      ttl: '720h', storageLocation: 'default', snapshotVolumes: true, volumeMode: 'filesystem'
     }
     await fetchBackups()
     startPolling()

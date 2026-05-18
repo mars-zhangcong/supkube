@@ -17,7 +17,7 @@ import (
 func GetStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "ok",
-		"version": "0.5.2",
+		"version": "0.6.0-alpha",
 	})
 }
 
@@ -56,19 +56,33 @@ func ListBackups(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"items": backupList.Items, "total": len(backupList.Items)})
 }
 
-// CreateBackup creates a new Velero backup
+// CreateBackup creates a new Velero backup.
+// v0.6 dual-mode volume backup:
+//   - SnapshotVolumes=true        → CSI snapshot path (Velero v1.14+ core)
+//   - DefaultVolumesToFsBackup=true → Restic/Kopia filesystem backup path
+// UI sends exactly one of these as true; either OR neither (skip volumes) is
+// valid. Both true is rejected as ambiguous.
 func CreateBackup(c *gin.Context) {
 	var req struct {
-		Name               string            `json:"name" binding:"required"`
-		IncludedNamespaces []string          `json:"includedNamespaces"`
-		TTL                string            `json:"ttl"`
-		LabelSelector      map[string]string `json:"labelSelector"`
-		StorageLocation    string            `json:"storageLocation"`
+		Name                     string            `json:"name" binding:"required"`
+		IncludedNamespaces       []string          `json:"includedNamespaces"`
+		ExcludedNamespaces       []string          `json:"excludedNamespaces"`
+		TTL                      string            `json:"ttl"`
+		LabelSelector            map[string]string `json:"labelSelector"`
+		StorageLocation          string            `json:"storageLocation"`
+		SnapshotVolumes          *bool             `json:"snapshotVolumes"`
+		DefaultVolumesToFsBackup *bool             `json:"defaultVolumesToFsBackup"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	if req.SnapshotVolumes != nil && *req.SnapshotVolumes &&
+		req.DefaultVolumesToFsBackup != nil && *req.DefaultVolumesToFsBackup {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ambiguous volume mode: pick exactly one of snapshotVolumes (CSI) or defaultVolumesToFsBackup (filesystem)"})
+		return
+	}
+
 	cl, err := k8s.GetRuntimeClient()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -80,10 +94,12 @@ func CreateBackup(c *gin.Context) {
 			Namespace: "velero",
 		},
 		Spec: velerov1.BackupSpec{
-			IncludedNamespaces: req.IncludedNamespaces,
+			IncludedNamespaces:       req.IncludedNamespaces,
+			ExcludedNamespaces:       req.ExcludedNamespaces,
+			SnapshotVolumes:          req.SnapshotVolumes,
+			DefaultVolumesToFsBackup: req.DefaultVolumesToFsBackup,
 		},
 	}
-	// Apply TTL if provided
 	if req.TTL != "" {
 		duration, parseErr := time.ParseDuration(req.TTL)
 		if parseErr != nil {
@@ -92,13 +108,9 @@ func CreateBackup(c *gin.Context) {
 		}
 		backup.Spec.TTL = metav1.Duration{Duration: duration}
 	}
-	// Apply label selector if provided
 	if len(req.LabelSelector) > 0 {
-		backup.Spec.LabelSelector = &metav1.LabelSelector{
-			MatchLabels: req.LabelSelector,
-		}
+		backup.Spec.LabelSelector = &metav1.LabelSelector{MatchLabels: req.LabelSelector}
 	}
-	// Apply storage location if provided
 	if req.StorageLocation != "" {
 		backup.Spec.StorageLocation = req.StorageLocation
 	}
