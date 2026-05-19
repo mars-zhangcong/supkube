@@ -3,7 +3,7 @@ replicaCount: 1
 backend:
   image:
     repository: supkube/backend
-    tag: "0.7.1-alpha"
+    tag: "0.7.2-alpha"
     pullPolicy: IfNotPresent
   port: 8080
   resources:
@@ -17,7 +17,7 @@ backend:
 frontend:
   image:
     repository: supkube/frontend
-    tag: "0.7.1-alpha"
+    tag: "0.7.2-alpha"
     pullPolicy: IfNotPresent
   port: 80
   resources:

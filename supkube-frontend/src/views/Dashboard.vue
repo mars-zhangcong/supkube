@@ -51,6 +51,23 @@
       </el-col>
     </el-row>
 
+    <!-- Imported Restore Points (v0.7.2) — surfaces cross-cluster backups
+         that landed in this cluster via Velero BackupSync. Hidden when zero. -->
+    <el-card v-if="stats.importedBackups > 0" class="imported-card" style="margin-top: 16px">
+      <div class="imported-row">
+        <span class="imported-icon">🌐</span>
+        <div class="imported-text">
+          <strong>{{ stats.importedBackups }}</strong>
+          {{ stats.importedBackups === 1 ? 'restore point was' : 'restore points were' }}
+          imported from <strong>{{ stats.importedSources }}</strong>
+          other {{ stats.importedSources === 1 ? 'cluster' : 'clusters' }} via shared Storage Profiles.
+        </div>
+        <el-button size="small" @click="$router.push({ path: '/backups', query: { source: 'Imported' } })">
+          View
+        </el-button>
+      </div>
+    </el-card>
+
     <!-- Protection Compliance (v0.7-policy-2) -->
     <el-card v-if="stats.snapshotOnlyPolicies > 0" class="compliance-card" style="margin-top: 16px">
       <div class="compliance-row">
@@ -153,8 +170,43 @@ import { normalizePhase, phaseTagType } from '../utils/phase'
 const stats = ref({
   nodes: 0, namespaces: 0, protectedApps: 0,
   backups: 0, successful: 0, failed: 0,
-  totalPolicies: 0, snapshotOnlyPolicies: 0
+  totalPolicies: 0, snapshotOnlyPolicies: 0,
+  // v0.7.2: cross-cluster import surfacing
+  importedBackups: 0, importedSources: 0
 })
+
+// Mirror of Backups.vue logic — fingerprint from Velero source-cluster
+// annotations, "this cluster" = most-common fingerprint among visible
+// backups, anything else = Imported.
+function backupClusterFingerprint(b) {
+  const ann = b?.metadata?.annotations || {}
+  return [
+    ann['velero.io/source-cluster-k8s-gitversion'] || '',
+    ann['velero.io/source-cluster-k8s-major-version'] || '',
+    ann['velero.io/source-cluster-k8s-minor-version'] || ''
+  ].join('|')
+}
+function countImported(backups) {
+  const counts = new Map()
+  for (const b of backups) {
+    const fp = backupClusterFingerprint(b)
+    if (fp && fp !== '||') counts.set(fp, (counts.get(fp) || 0) + 1)
+  }
+  let localFp = ''
+  let bestCount = 0
+  for (const [fp, c] of counts) {
+    if (c > bestCount) { localFp = fp; bestCount = c }
+  }
+  let imported = 0
+  const sources = new Set()
+  for (const b of backups) {
+    const fp = backupClusterFingerprint(b)
+    if (!fp || fp === '||' || fp === localFp) continue
+    imported++
+    sources.add(fp)
+  }
+  return { imported, sources: sources.size }
+}
 const recentBackups = ref([])
 const recentRestores = ref([])
 const loading = ref(false)
@@ -178,13 +230,21 @@ const fetchData = async () => {
     stats.value.failed = data.backupSummary?.failed ?? 0
     recentBackups.value = (data.recentBackups || []).slice(0, 5)
 
-    // Still fetch restores, applications, and schedules separately (not in summary)
-    const [restoresRes, appsRes, schedulesRes] = await Promise.all([
+    // Still fetch restores, applications, schedules, and (v0.7.2) the full
+    // backup list so we can compute imported-source counts. Summary endpoint
+    // only returns the last 10 recent backups, which is not enough.
+    const [restoresRes, appsRes, schedulesRes, backupsRes] = await Promise.all([
       getRestores(),
       getApplications().catch(() => null),
-      getSchedules().catch(() => null)
+      getSchedules().catch(() => null),
+      getBackups().catch(() => null)
     ])
     recentRestores.value = (restoresRes.data.items || []).slice(0, 5)
+    if (backupsRes) {
+      const { imported, sources } = countImported(backupsRes.data?.items || [])
+      stats.value.importedBackups = imported
+      stats.value.importedSources = sources
+    }
     if (appsRes) {
       const apps = appsRes.data.items || []
       stats.value.protectedApps = apps.filter(a => a.protected).length
@@ -211,6 +271,9 @@ const fetchData = async () => {
       stats.value.backups = items.length
       stats.value.successful = items.filter(b => b.status?.phase === 'Completed').length
       stats.value.failed = items.filter(b => b.status?.phase === 'Failed').length
+      const imp = countImported(items)
+      stats.value.importedBackups = imp.imported
+      stats.value.importedSources = imp.sources
 
       const restoreItems = restoresRes.data.items || []
       recentRestores.value = restoreItems.slice(0, 5)
@@ -259,6 +322,24 @@ onUnmounted(() => {
 .compliance-card.compliance-ok {
   border-left-color: #67c23a;
   background: #f0f9eb;
+}
+.imported-card {
+  border-left: 4px solid #409eff;
+  background: #ecf5ff;
+}
+.imported-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.imported-icon {
+  font-size: 22px;
+}
+.imported-text {
+  flex: 1;
+  font-size: 13px;
+  color: #2e5e8a;
+  line-height: 1.6;
 }
 .compliance-row {
   display: flex;

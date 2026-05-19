@@ -96,6 +96,32 @@
           </el-descriptions>
         </div>
 
+        <!-- v0.7.2 Sync status — Velero auto-syncs every backupSyncPeriod (default 60s) -->
+        <div class="detail-block">
+          <div class="detail-block-title">SYNC</div>
+          <el-descriptions :column="1" border size="small">
+            <el-descriptions-item label="Last Synced">
+              <span v-if="selectedRow.status?.lastSyncedTime">
+                {{ formatTime(selectedRow.status.lastSyncedTime) }}
+                <span class="sync-relative">· {{ relativeTime(selectedRow.status.lastSyncedTime) }} ago</span>
+              </span>
+              <span v-else class="muted">Never (waiting for first sync)</span>
+            </el-descriptions-item>
+            <el-descriptions-item label="Sync Schedule">
+              <span class="muted">Auto · every 60s (Velero default)</span>
+            </el-descriptions-item>
+            <el-descriptions-item label="Backups Found">
+              {{ syncedBackupCount }} restore point{{ syncedBackupCount === 1 ? '' : 's' }} from this profile
+            </el-descriptions-item>
+          </el-descriptions>
+          <p class="sync-hint">
+            💡 Velero polls this object-storage profile every 60s. Restore Points
+            written by another cluster's Velero into the same bucket will appear
+            here automatically — look for "Imported" in the Source column on the
+            <a class="sync-link" @click="goToRestorePoints">Restore Points</a> page.
+          </p>
+        </div>
+
         <div class="detail-block">
           <div class="detail-block-title">SPEC</div>
           <el-descriptions :column="1" border size="small">
@@ -218,6 +244,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { Plus } from '@element-plus/icons-vue'
 import {
   getStorageLocations,
@@ -225,11 +252,14 @@ import {
   createStorageLocation,
   updateStorageLocation,
   deleteStorageLocation,
-  verifyStorageLocation
+  verifyStorageLocation,
+  getBackups
 } from '../api/velero'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
+const router = useRouter()
 const locations = ref([])
+const backupsForSync = ref([])
 const loading = ref(false)
 const creating = ref(false)
 const verifying = ref(false)
@@ -264,6 +294,33 @@ const createForm = ref({
 const formatTime = (ts) => {
   if (!ts) return '-'
   return new Date(ts).toLocaleString()
+}
+
+// Human-readable "X minutes ago" / "X hours ago" relative to now, used for
+// the BSL sync status. Velero's default sync period is 60s, so the line goes
+// stale quickly — keep the formatter tight (no seconds for >2 min).
+const relativeTime = (ts) => {
+  if (!ts) return ''
+  const sec = Math.floor((Date.now() - new Date(ts).getTime()) / 1000)
+  if (sec < 60) return `${sec}s`
+  if (sec < 3600) return `${Math.floor(sec / 60)}m`
+  if (sec < 86400) return `${Math.floor(sec / 3600)}h`
+  return `${Math.floor(sec / 86400)}d`
+}
+
+// Count how many backups (= Velero Backup CRs) are stored against the
+// currently-viewed BSL. Used in the Sync block to show "N restore points from
+// this profile" — gives the user a concrete confidence signal that sync is
+// working (and surfaces drift if the count looks wrong).
+const syncedBackupCount = computed(() => {
+  const name = selectedRow.value?.metadata?.name
+  if (!name) return 0
+  return backupsForSync.value.filter(b => (b.spec?.storageLocation || 'default') === name).length
+})
+
+const goToRestorePoints = () => {
+  detailsVisible.value = false
+  router.push('/backups')
 }
 
 // K8s DNS-1123 subdomain rule — both the BSL metadata.name and the derived
@@ -384,6 +441,14 @@ const openDetails = async (row) => {
     selectedRow.value = res.data
   } catch (e) {
     selectedRow.value = row
+  }
+  // Best-effort: fetch backups so the Sync block can show "N restore points
+  // from this profile". Failure is fine — count just becomes 0.
+  try {
+    const bres = await getBackups()
+    backupsForSync.value = bres.data?.items || []
+  } catch (_) {
+    backupsForSync.value = []
   }
   detailsVisible.value = true
 }
@@ -545,6 +610,28 @@ onMounted(() => {
   text-transform: uppercase;
   margin-bottom: 10px;
 }
+.sync-relative {
+  color: #909399;
+  font-size: 12px;
+  margin-left: 4px;
+}
+.sync-hint {
+  margin: 10px 0 0 0;
+  padding: 10px 12px;
+  font-size: 12px;
+  background: #ecf5ff;
+  border-radius: 4px;
+  color: #2e5e8a;
+  line-height: 1.6;
+}
+.sync-link {
+  color: #409eff;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.sync-link:hover { color: #66b1ff; }
+.muted { color: #909399; }
+
 .detail-actions {
   display: flex;
   gap: 8px;

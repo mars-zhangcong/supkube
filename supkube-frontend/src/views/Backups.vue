@@ -25,6 +25,11 @@
         <el-option label="Snapshot (manual)" value="Snapshot" />
         <el-option label="Scheduled" value="Scheduled" />
       </el-select>
+      <el-select v-model="sourceFilter" class="filter-type">
+        <el-option label="All Sources" value="all" />
+        <el-option label="🏠 Local" value="Local" />
+        <el-option label="🌐 Imported" value="Imported" />
+      </el-select>
       <el-input v-model="nameFilter" placeholder="Filter by namespace or name" clearable class="filter-name">
         <template #prefix><el-icon><Search /></el-icon></template>
       </el-input>
@@ -205,13 +210,14 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { Plus, Search, Box, Monitor } from '@element-plus/icons-vue'
 import { getBackups, createBackup, deleteBackup, getNamespaces } from '../api/velero'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { normalizePhase, phaseTagType } from '../utils/phase'
 
 const router = useRouter()
+const route = useRoute()
 const backups = ref([])
 const namespaces = ref([])
 const loading = ref(false)
@@ -220,6 +226,7 @@ const showCreateDialog = ref(false)
 
 // Filter / selection state
 const typeFilter = ref('all')
+const sourceFilter = ref('all') // v0.7.2: 'all' / 'Local' / 'Imported'
 const nameFilter = ref('')
 const selectedRows = ref([])
 
@@ -298,6 +305,7 @@ const filteredBackups = computed(() => {
   const name = nameFilter.value.trim().toLowerCase()
   return backups.value.filter((row) => {
     if (typeFilter.value !== 'all' && backupType(row) !== typeFilter.value) return false
+    if (sourceFilter.value !== 'all' && sourceOf(row) !== sourceFilter.value) return false
     if (name) {
       const haystack = [
         row.metadata?.name,
@@ -503,6 +511,11 @@ const goToPolicy = (row) => {
 }
 
 onMounted(() => {
+  // Deep-link from Dashboard's Imported card / BSL details Source-filter chip:
+  // /backups?source=Imported preselects the source filter.
+  if (route.query.source === 'Imported' || route.query.source === 'Local') {
+    sourceFilter.value = route.query.source
+  }
   fetchBackups()
   fetchNamespaces()
 })
