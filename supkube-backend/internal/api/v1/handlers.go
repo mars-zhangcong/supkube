@@ -17,7 +17,7 @@ import (
 func GetStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "ok",
-		"version": "0.7.0-alpha",
+		"version": "0.7.1-alpha",
 	})
 }
 

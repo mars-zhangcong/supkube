@@ -12,7 +12,8 @@
 | v0.5.1 | ✅ 已完成 2026-05-15 | P0/P1 共 6 项修复；见 [docs/SPRINT-v0.5.1-RETRO.md](docs/SPRINT-v0.5.1-RETRO.md) |
 | **v0.5.2**（Kasten polish + CSI infra）| ✅ **已完成 2026-05-18** | Kasten 风格 sidebar/logo/Restore Points、Storage Locations kebab CRUD、SupVault provider、RFC1123 校验、Applications filter toolbar、CSI 快照基础设施落地。见 [docs/SPRINT-v0.5.2-RETRO.md](docs/SPRINT-v0.5.2-RETRO.md) + [docs/csi-snapshot-setup.md](docs/csi-snapshot-setup.md) |
 | v0.6（Phase 2 核心） | 🟢 v0.6.0-alpha 已上线 | VSL 管理页面、Volume Backup Mode 双选、CSI 进度展示（剩跨 ns 恢复、Resource Transform、日志查看） |
-| **v0.7（Kasten Actions Model）** | 🔲 **下一个 sprint** | **核心架构演进**：Restore Point 拆分 Snapshot/Export 两层，Policy 双 cron + 双 retention + Actions UI，Snapshot-only 风险防护，Import 入口（基于 BackupSync） |
+| **v0.7.0-alpha**（Kasten Actions Model）| 🟢 **已上线 2026-05-19** | Restore Point 拆分 Snapshot/Export 两层 + fingerprint，Policy 双 cron + 双 retention + Actions UI，Protection Level 列，Dashboard Compliance 卡片，全局 Block snapshot-only 开关。Commit `36f4766` |
+| v0.7.1（Import + Capability）| 🟡 **进行中** | 能力检测（CSI 模式 vs ns SC 不兼容拦截）、Restore Points Source 列、Storage Sync 控件 |
 | v0.7.x（UI 视觉打磨） | 🟡 部分提前 | Filter toolbar / Multi-select / Kasten sidebar / kebab / 折叠 sidebar 已落地；Dashboard 图表、暗色主题、i18n 仍待做 |
 | v0.7.5（Backup Advisor MVP） | 🔲 待启动 | 智能备份分级建议（评分 + 推荐档位 + 一键采纳） |
 | v0.8（安全多租户） | 🔲 待启动 | OIDC、RBAC、审计日志 |

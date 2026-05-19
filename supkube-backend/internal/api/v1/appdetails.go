@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/supkube/supkube-backend/internal/k8s"
 )
@@ -204,4 +206,138 @@ func GetApplicationDetails(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, detail)
+}
+
+// PVCCapability lists the storage classes used by a namespace's PVCs and
+// whether each one supports CSI snapshots. Frontend uses this to gate
+// Policy creation: if user picks "CSI" volume mode but the target ns has
+// PVCs on a non-CSI-snapshot-capable SC, we surface a clear error instead
+// of letting Velero fail at backup time.
+type PVCCapability struct {
+	PVC          string `json:"pvc"`
+	StorageClass string `json:"storageClass"`
+	Provisioner  string `json:"provisioner"`
+	CSISnapshot  bool   `json:"csiSnapshot"`
+	Reason       string `json:"reason,omitempty"`
+}
+
+type NamespaceStorageCapability struct {
+	Namespace        string          `json:"namespace"`
+	PVCs             []PVCCapability `json:"pvcs"`
+	AllCSICapable    bool            `json:"allCSICapable"`
+	IncompatibleCount int            `json:"incompatibleCount"`
+}
+
+// GetNamespaceStorageCapability returns the CSI-snapshot capability per PVC
+// in the namespace. A SC is "CSI snapshot capable" iff:
+//   1. Its provisioner is in the CSIDriver list (i.e. it's a CSI driver), AND
+//   2. There exists a VolumeSnapshotClass whose .driver matches the provisioner
+//
+// Non-CSI provisioners (like docker.io/hostpath) always fail the check. SCs
+// with no VSC available also fail (driver exists but snapshot not configured).
+func GetNamespaceStorageCapability(c *gin.Context) {
+	ns := c.Param("namespace")
+	cap := NamespaceStorageCapability{Namespace: ns, AllCSICapable: true}
+
+	k8sClient, err := k8s.GetClient()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	rtClient, err := k8s.GetRuntimeClient()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Build CSI-driver set: which provisioners are real CSI drivers.
+	csiDriverSet := map[string]bool{}
+	csiList, err := k8sClient.StorageV1().CSIDrivers().List(context.Background(), metav1.ListOptions{})
+	if err == nil {
+		for _, d := range csiList.Items {
+			csiDriverSet[d.Name] = true
+		}
+	}
+
+	// Build set of drivers that have at least one VolumeSnapshotClass.
+	// VSC is a CRD; use unstructured to avoid hard dep at compile time.
+	snapDriverSet := map[string]bool{}
+	vscGVR := schema.GroupVersionResource{
+		Group: "snapshot.storage.k8s.io", Version: "v1", Resource: "volumesnapshotclasses",
+	}
+	dyn, dynErr := k8s.GetDynamicClient()
+	if dynErr == nil {
+		list, lerr := dyn.Resource(vscGVR).List(context.Background(), metav1.ListOptions{})
+		if lerr == nil {
+			for _, item := range list.Items {
+				if driver, found, _ := unstructuredGet(item.Object, "driver"); found {
+					if s, ok := driver.(string); ok {
+						snapDriverSet[s] = true
+					}
+				}
+			}
+		} else if !apierrors.IsNotFound(lerr) {
+			// CRDs not installed = no CSI snapshot anywhere; not an error.
+		}
+	}
+
+	// Cache StorageClass -> provisioner so we only fetch each SC once.
+	scCache := map[string]string{}
+
+	pvcs, err := k8sClient.CoreV1().PersistentVolumeClaims(ns).List(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	for _, pvc := range pvcs.Items {
+		sc := ""
+		if pvc.Spec.StorageClassName != nil {
+			sc = *pvc.Spec.StorageClassName
+		}
+		row := PVCCapability{PVC: pvc.Name, StorageClass: sc}
+
+		if sc == "" {
+			row.Reason = "PVC has no storageClassName"
+			cap.PVCs = append(cap.PVCs, row)
+			cap.AllCSICapable = false
+			cap.IncompatibleCount++
+			continue
+		}
+
+		provisioner, cached := scCache[sc]
+		if !cached {
+			scObj, gerr := k8sClient.StorageV1().StorageClasses().Get(context.Background(), sc, metav1.GetOptions{})
+			if gerr == nil {
+				provisioner = scObj.Provisioner
+			}
+			scCache[sc] = provisioner
+		}
+		row.Provisioner = provisioner
+
+		// Use rtClient placeholder to silence import in case future use; keep API similar to other handlers
+		_ = rtClient
+
+		if !csiDriverSet[provisioner] {
+			row.Reason = fmt.Sprintf("Provisioner %q is not a CSI driver", provisioner)
+		} else if !snapDriverSet[provisioner] {
+			row.Reason = fmt.Sprintf("No VolumeSnapshotClass configured for driver %q", provisioner)
+		} else {
+			row.CSISnapshot = true
+		}
+		if !row.CSISnapshot {
+			cap.AllCSICapable = false
+			cap.IncompatibleCount++
+		}
+		cap.PVCs = append(cap.PVCs, row)
+	}
+
+	c.JSON(http.StatusOK, cap)
+}
+
+// unstructuredGet is a tiny helper to read a nested string field from an
+// unstructured map. Returns (value, found, error). Kept inline here to
+// avoid pulling in the full unstructured library helpers.
+func unstructuredGet(m map[string]interface{}, key string) (interface{}, bool, error) {
+	v, ok := m[key]
+	return v, ok, nil
 }

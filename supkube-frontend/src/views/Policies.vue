@@ -125,6 +125,35 @@
             </el-radio-group>
             <span class="form-hint">CSI requires the namespace's PVCs to use a snapshot-capable StorageClass.</span>
           </el-form-item>
+
+          <!-- Capability detection result (only shown for CSI mode + selected ns) -->
+          <el-form-item v-if="createForm.snapshot.volumeMode === 'csi' && createForm.includedNamespaces.length > 0" label=" ">
+            <div v-loading="capabilityLoading" class="capability-result">
+              <div v-if="capabilityError" class="capability-error">
+                ⚠ Failed to check storage capability: {{ capabilityError }}
+              </div>
+              <template v-else-if="capabilityResults.length > 0">
+                <div v-for="r in capabilityResults" :key="r.namespace" class="capability-row">
+                  <div class="capability-ns">
+                    <span class="capability-ns-name">{{ r.namespace }}</span>
+                    <el-tag v-if="r.incompatibleCount === 0" type="success" size="small">CSI ready</el-tag>
+                    <el-tag v-else type="danger" size="small">
+                      {{ r.incompatibleCount }} incompatible PVC{{ r.incompatibleCount > 1 ? 's' : '' }}
+                    </el-tag>
+                  </div>
+                  <ul v-if="r.incompatibleCount > 0" class="capability-pvc-list">
+                    <li v-for="p in r.pvcs.filter(x => !x.csiSnapshot)" :key="p.pvc">
+                      <code>{{ p.pvc }}</code> on <code>{{ p.storageClass || '—' }}</code>
+                      <span class="capability-reason">— {{ p.reason }}</span>
+                    </li>
+                  </ul>
+                </div>
+                <div v-if="csiBlocked()" class="capability-blocker">
+                  ⛔ Policy creation blocked: switch to <strong>Filesystem</strong> mode, or migrate the listed PVCs to a CSI-snapshot-capable StorageClass.
+                </div>
+              </template>
+            </div>
+          </el-form-item>
         </div>
 
         <!-- ============ ACTIONS BLOCK 2: EXPORT ============ -->
@@ -177,7 +206,12 @@
       </el-form>
       <template #footer>
         <el-button @click="showCreateDialog = false">Cancel</el-button>
-        <el-button type="primary" @click="handleCreate" :loading="creating">
+        <el-button
+          type="primary"
+          @click="handleCreate"
+          :loading="creating"
+          :disabled="csiBlocked()"
+        >
           Create
         </el-button>
       </template>
@@ -186,9 +220,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
-import { getSchedules, createSchedule, patchSchedule, deleteSchedule, getNamespaces } from '../api/velero'
+import { getSchedules, createSchedule, patchSchedule, deleteSchedule, getNamespaces, getNamespaceStorageCapability } from '../api/velero'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const schedules = ref([])
@@ -220,6 +254,48 @@ const defaultForm = () => ({
   }
 })
 const createForm = ref(defaultForm())
+
+// Capability detection — when user picks CSI mode + selected namespaces, check
+// each namespace's PVCs are on CSI-snapshot-capable StorageClasses. We block
+// "Create" if any incompatibility found; UI surfaces the offending PVCs.
+const capabilityResults = ref([]) // [{ namespace, incompatibleCount, pvcs: [...] }]
+const capabilityLoading = ref(false)
+const capabilityError = ref('')
+
+const incompatiblePVCs = (capabilityResults.value)
+const csiBlocked = () => {
+  if (createForm.value.snapshot.volumeMode !== 'csi') return false
+  return capabilityResults.value.some(r => r.incompatibleCount > 0)
+}
+
+const refreshCapability = async () => {
+  capabilityError.value = ''
+  const nsList = createForm.value.includedNamespaces
+  if (createForm.value.snapshot.volumeMode !== 'csi' || nsList.length === 0) {
+    capabilityResults.value = []
+    return
+  }
+  capabilityLoading.value = true
+  try {
+    const results = []
+    for (const ns of nsList) {
+      const res = await getNamespaceStorageCapability(ns)
+      results.push(res.data)
+    }
+    capabilityResults.value = results
+  } catch (e) {
+    capabilityError.value = e.response?.data?.error || e.message
+    capabilityResults.value = []
+  } finally {
+    capabilityLoading.value = false
+  }
+}
+
+watch(
+  () => [createForm.value.includedNamespaces.slice(), createForm.value.snapshot.volumeMode],
+  () => { refreshCapability() },
+  { deep: false }
+)
 
 const formatTime = (ts) => {
   if (!ts) return '-'
@@ -503,6 +579,53 @@ onMounted(() => {
   color: #909399;
   line-height: 1.4;
   margin-top: 4px;
+}
+
+/* Capability detection result (v0.7.1) */
+.capability-result { font-size: 13px; }
+.capability-error {
+  padding: 8px 12px;
+  background: #fef0f0;
+  color: #5b2929;
+  border-radius: 4px;
+}
+.capability-row {
+  padding: 8px 12px;
+  background: #f5f7fa;
+  border-radius: 6px;
+  margin-bottom: 6px;
+}
+.capability-ns {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.capability-ns-name {
+  font-weight: 600;
+  color: #303133;
+}
+.capability-pvc-list {
+  margin: 6px 0 0 0;
+  padding-left: 20px;
+  font-size: 12px;
+  color: #606266;
+  line-height: 1.7;
+}
+.capability-pvc-list code {
+  background: #ecf0f5;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 11px;
+}
+.capability-reason { color: #f56c6c; font-style: italic; }
+.capability-blocker {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: #fef0f0;
+  border: 1px solid #fbc4c4;
+  border-radius: 4px;
+  color: #5b2929;
+  font-size: 13px;
 }
 
 /* Protection Level badges (v0.7-policy-2) */

@@ -21,6 +21,11 @@ rules:
   - apiGroups: ["snapshot.storage.k8s.io"]
     resources: ["volumesnapshots", "volumesnapshotcontents", "volumesnapshotclasses"]
     verbs: ["get", "list", "watch"]
+  # Read access to StorageClasses + CSIDrivers so Policy capability detection
+  # can determine which namespaces have PVCs on CSI-snapshot-capable SCs.
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses", "csidrivers"]
+    verbs: ["get", "list", "watch"]
   - apiGroups: [""]
     resources: ["namespaces", "pods", "services", "persistentvolumeclaims", "configmaps", "nodes"]
     verbs: ["get", "list"]

@@ -1,6 +1,7 @@
 package k8s
 
 import (
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -48,4 +49,16 @@ func GetRuntimeClient() (client.Client, error) {
 	_ = velerov1.AddToScheme(scheme)
 
 	return client.New(config, client.Options{Scheme: scheme})
+}
+
+// GetDynamicClient returns a dynamic client for accessing CRDs whose types
+// we don't link at compile time — e.g. snapshot.storage.k8s.io/VolumeSnapshotClass
+// (we don't want to add the external-snapshotter Go module dependency just to
+// read one field of one CRD).
+func GetDynamicClient() (dynamic.Interface, error) {
+	config, err := getConfig()
+	if err != nil {
+		return nil, err
+	}
+	return dynamic.NewForConfig(config)
 }

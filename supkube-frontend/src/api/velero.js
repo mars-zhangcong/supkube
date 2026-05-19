@@ -28,6 +28,7 @@ export const getDashboardSummary = () => api.get('/dashboard/summary')
 export const getNamespaces = () => api.get('/namespaces')
 export const getApplications = () => api.get('/applications')
 export const getApplicationDetail = (namespace) => api.get(`/applications/${namespace}/details`)
+export const getNamespaceStorageCapability = (namespace) => api.get(`/applications/${namespace}/storage-capability`)
 
 // Backups
 export const getBackups = () => api.get('/backups')

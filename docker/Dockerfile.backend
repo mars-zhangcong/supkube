@@ -10,8 +10,9 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 # Build
+ARG CACHEBUST=20260519
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /supkube-backend .
+RUN echo "cachebust=$CACHEBUST" && CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /supkube-backend .
 
 # Runtime stage
 FROM alpine:3.19

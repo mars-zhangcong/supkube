@@ -70,6 +70,16 @@
           </template>
         </el-table-column>
 
+        <el-table-column label="Source" width="160">
+          <template #default="{ row }">
+            <el-tooltip :content="sourceTooltip(row)" placement="top" :show-after="200">
+              <span class="source-chip" :class="`source-${sourceOf(row).toLowerCase()}`">
+                {{ sourceOf(row) === 'Local' ? '🏠' : '🌐' }} {{ sourceOf(row) }}
+              </span>
+            </el-tooltip>
+          </template>
+        </el-table-column>
+
         <el-table-column label="Policy" min-width="180">
           <template #default="{ row }">
             <span v-if="policyOf(row)" class="policy-link" @click="goToPolicy(row)">
@@ -241,6 +251,40 @@ const backupType = (row) => {
 }
 const policyOf = (row) => row?.metadata?.labels?.['velero.io/schedule-name'] || ''
 
+// Source detection: Velero annotates every Backup with
+// velero.io/source-cluster-k8s-gitversion at create time. When a different
+// cluster's Velero syncs a Backup from a shared BSL into this cluster, the
+// annotation still reflects the ORIGIN cluster — we compare it against the
+// version recorded for backups created in this cluster (cached on first load).
+const currentClusterFingerprint = ref('')
+
+function backupClusterFingerprint(row) {
+  const ann = row?.metadata?.annotations || {}
+  // Available since Velero v1.10. Combination of fields is more reliable
+  // than any single one when clusters share the same K8s version.
+  return [
+    ann['velero.io/source-cluster-k8s-gitversion'] || '',
+    ann['velero.io/source-cluster-k8s-major-version'] || '',
+    ann['velero.io/source-cluster-k8s-minor-version'] || ''
+  ].join('|')
+}
+
+const sourceOf = (row) => {
+  const fp = backupClusterFingerprint(row)
+  if (!fp || fp === '||') return 'Local' // no annotations → assume local
+  if (!currentClusterFingerprint.value) return 'Local' // baseline not set yet
+  return fp === currentClusterFingerprint.value ? 'Local' : 'Imported'
+}
+
+const sourceTooltip = (row) => {
+  const ann = row?.metadata?.annotations || {}
+  const ver = ann['velero.io/source-cluster-k8s-gitversion'] || 'unknown'
+  if (sourceOf(row) === 'Local') {
+    return `Created in this cluster (K8s ${ver})`
+  }
+  return `Synced from another cluster (origin K8s ${ver}). Imported via shared Storage Profile.`
+}
+
 // Restore Point row primarily represents a namespace's protected state at a
 // point in time. Show the most informative namespace label; * = all.
 const formatNamespace = (row) => {
@@ -272,11 +316,30 @@ const sortByCreated = (a, b) => {
   return at - bt
 }
 
+// Establish "this cluster's" Velero source fingerprint by taking the most
+// common fingerprint from manual (non-imported, non-scheduled-from-elsewhere)
+// backups. Fallback: most frequent fingerprint overall. Backups annotated
+// with that fingerprint are Local, the rest are Imported.
+function setLocalFingerprint(items) {
+  const counts = new Map()
+  for (const b of items) {
+    const fp = backupClusterFingerprint(b)
+    if (fp && fp !== '||') counts.set(fp, (counts.get(fp) || 0) + 1)
+  }
+  let best = ''
+  let bestCount = 0
+  for (const [fp, count] of counts) {
+    if (count > bestCount) { best = fp; bestCount = count }
+  }
+  currentClusterFingerprint.value = best
+}
+
 const fetchBackups = async () => {
   loading.value = true
   try {
     const res = await getBackups()
     backups.value = res.data.items || []
+    setLocalFingerprint(backups.value)
   } catch (e) {
     ElMessage.error('Failed to load restore points')
     console.error(e)
@@ -553,6 +616,17 @@ onUnmounted(() => {
 }
 .type-snapshot { color: #409eff; }
 .type-scheduled { color: #67c23a; }
+.source-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+.source-local { color: #606266; background: #f5f7fa; }
+.source-imported { color: #c45656; background: #fdf3f4; }
 .policy-link {
   color: #409eff;
   cursor: pointer;
