@@ -1,19 +1,15 @@
 <template>
   <div class="vsl-page">
     <div class="page-header">
-      <h3>Snapshot Locations</h3>
-      <p class="page-desc">
-        Volume Snapshot Locations tell Velero how to take volume snapshots — CSI for in-cluster CSI drivers, or cloud-native (AWS EBS / GCP PD / Azure Disk) for managed storage.
-      </p>
+      <h3>{{ t('vsl.title') }}</h3>
+      <p class="page-desc">{{ t('vsl.desc') }}</p>
     </div>
 
     <div class="filter-toolbar">
       <span class="filter-spacer"></span>
-      <span class="filter-summary">
-        Viewing <strong>{{ locations.length }}</strong> snapshot location{{ locations.length === 1 ? '' : 's' }}
-      </span>
+      <span class="filter-summary">{{ locations.length }}</span>
       <el-button type="primary" @click="showCreateDialog = true">
-        <el-icon><Plus /></el-icon> Create Snapshot Location
+        <el-icon><Plus /></el-icon> {{ t('vsl.create') }}
       </el-button>
     </div>
 
@@ -116,6 +112,9 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 import { Plus } from '@element-plus/icons-vue'
 import {
   getVolumeSnapshotLocations,

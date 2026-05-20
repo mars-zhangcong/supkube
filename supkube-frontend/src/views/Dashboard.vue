@@ -5,7 +5,7 @@
         <el-card>
           <div class="stat">
             <div class="stat-value">{{ stats.nodes }}</div>
-            <div class="stat-label">Nodes</div>
+            <div class="stat-label">{{ t('dashboard.nodes') }}</div>
           </div>
         </el-card>
       </el-col>
@@ -13,7 +13,7 @@
         <el-card>
           <div class="stat">
             <div class="stat-value">{{ stats.namespaces }}</div>
-            <div class="stat-label">Namespaces</div>
+            <div class="stat-label">{{ t('dashboard.namespaces') }}</div>
           </div>
         </el-card>
       </el-col>
@@ -21,7 +21,7 @@
         <el-card>
           <div class="stat">
             <div class="stat-value success">{{ stats.protectedApps }}</div>
-            <div class="stat-label">Protected</div>
+            <div class="stat-label">{{ t('dashboard.protected') }}</div>
           </div>
         </el-card>
       </el-col>
@@ -29,7 +29,7 @@
         <el-card>
           <div class="stat">
             <div class="stat-value">{{ stats.backups }}</div>
-            <div class="stat-label">Total Backups</div>
+            <div class="stat-label">{{ t('dashboard.totalBackups') }}</div>
           </div>
         </el-card>
       </el-col>
@@ -37,7 +37,7 @@
         <el-card>
           <div class="stat">
             <div class="stat-value success">{{ stats.successful }}</div>
-            <div class="stat-label">Successful</div>
+            <div class="stat-label">{{ t('dashboard.successful') }}</div>
           </div>
         </el-card>
       </el-col>
@@ -45,7 +45,7 @@
         <el-card>
           <div class="stat">
             <div class="stat-value danger">{{ stats.failed }}</div>
-            <div class="stat-label">Failed</div>
+            <div class="stat-label">{{ t('dashboard.failed') }}</div>
           </div>
         </el-card>
       </el-col>
@@ -56,14 +56,9 @@
     <el-card v-if="stats.importedBackups > 0" class="imported-card" style="margin-top: 16px">
       <div class="imported-row">
         <span class="imported-icon">🌐</span>
-        <div class="imported-text">
-          <strong>{{ stats.importedBackups }}</strong>
-          {{ stats.importedBackups === 1 ? 'restore point was' : 'restore points were' }}
-          imported from <strong>{{ stats.importedSources }}</strong>
-          other {{ stats.importedSources === 1 ? 'cluster' : 'clusters' }} via shared Storage Profiles.
-        </div>
+        <div class="imported-text" v-html="importedBodyHtml"></div>
         <el-button size="small" @click="$router.push({ path: '/backups', query: { source: 'Imported' } })">
-          View
+          {{ t('common.view') }}
         </el-button>
       </div>
     </el-card>
@@ -72,24 +67,16 @@
     <el-card v-if="stats.snapshotOnlyPolicies > 0" class="compliance-card" style="margin-top: 16px">
       <div class="compliance-row">
         <span class="compliance-icon">⚠</span>
-        <div class="compliance-text">
-          <strong>{{ stats.snapshotOnlyPolicies }}</strong>
-          {{ stats.snapshotOnlyPolicies === 1 ? 'policy is' : 'policies are' }}
-          configured as <strong>snapshot-only</strong> — these produce restore points that are
-          <strong>not durable backups</strong>. Data is lost if the underlying storage fails.
-        </div>
+        <div class="compliance-text" v-html="complianceWarnHtml"></div>
         <el-button size="small" @click="$router.push({ path: '/policies', query: { filter: 'snapshot-only' } })">
-          Review
+          {{ t('dashboard.review') }}
         </el-button>
       </div>
     </el-card>
     <el-card v-else-if="stats.totalPolicies > 0" class="compliance-card compliance-ok" style="margin-top: 16px">
       <div class="compliance-row">
         <span class="compliance-icon-ok">✓</span>
-        <div class="compliance-text">
-          All <strong>{{ stats.totalPolicies }}</strong> {{ stats.totalPolicies === 1 ? 'policy' : 'policies' }}
-          produce durable backups (Snapshot + Export).
-        </div>
+        <div class="compliance-text" v-html="complianceOkHtml"></div>
       </div>
     </el-card>
 
@@ -112,22 +99,22 @@
         <el-card class="recent-card">
           <template #header>
             <div class="card-header">
-              <span>Recent Backups</span>
+              <span>{{ t('dashboard.recentBackups') }}</span>
               <el-button type="primary" size="small" @click="$router.push('/backups')">
-                View All
+                {{ t('dashboard.viewAll') }}
               </el-button>
             </div>
           </template>
           <el-table :data="recentBackups" style="width: 100%" v-loading="loading" size="small">
-            <el-table-column prop="metadata.name" label="Name" min-width="180" show-overflow-tooltip />
-            <el-table-column label="Status" width="120">
+            <el-table-column prop="metadata.name" :label="t('common.name')" min-width="180" show-overflow-tooltip />
+            <el-table-column :label="t('common.status')" width="120">
               <template #default="{ row }">
                 <el-tag :type="phaseTagType(row.phase ?? row.status?.phase)" size="small">
-                  {{ normalizePhase(row.phase ?? row.status?.phase) }}
+                  {{ t(`phase.${normalizePhase(row.phase ?? row.status?.phase)}`) }}
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="Created" min-width="140">
+            <el-table-column :label="t('common.created')" min-width="140">
               <template #default="{ row }">
                 {{ formatTime(row.createdAt || row.metadata?.creationTimestamp) }}
               </template>
@@ -140,23 +127,23 @@
     <el-card style="margin-top: 16px">
       <template #header>
         <div class="card-header">
-          <span>Recent Restores</span>
+          <span>{{ t('dashboard.recentRestores') }}</span>
           <el-button type="primary" size="small" @click="$router.push('/restores')">
-            View All
+            {{ t('dashboard.viewAll') }}
           </el-button>
         </div>
       </template>
       <el-table :data="recentRestores" style="width: 100%" v-loading="loading">
-        <el-table-column prop="metadata.name" label="Name" />
-        <el-table-column prop="spec.backupName" label="From Backup" />
-        <el-table-column label="Status">
+        <el-table-column prop="metadata.name" :label="t('common.name')" />
+        <el-table-column prop="spec.backupName" :label="t('restores.fromBackup')" />
+        <el-table-column :label="t('common.status')">
           <template #default="{ row }">
             <el-tag :type="phaseTagType(row.status?.phase)">
-              {{ normalizePhase(row.status?.phase) }}
+              {{ t(`phase.${normalizePhase(row.status?.phase)}`) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="Created">
+        <el-table-column :label="t('common.created')">
           <template #default="{ row }">
             {{ formatTime(row.metadata?.creationTimestamp) }}
           </template>
@@ -167,12 +154,31 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { getDashboardSummary, getBackups, getRestores, getNamespaces, getApplications, getSchedules } from '../api/velero'
 import { normalizePhase, phaseTagType } from '../utils/phase'
 import BackupSuccessTrend from '../components/BackupSuccessTrend.vue'
 import StorageUsage from '../components/StorageUsage.vue'
 import ProtectionCoverage from '../components/ProtectionCoverage.vue'
+
+const { t } = useI18n()
+
+// HTML strings for cards with embedded <strong> emphasis. We use v-html so
+// the localizer can keep the bold styling in either language without the
+// view template doing manual concatenation.
+const importedBodyHtml = computed(() => {
+  const c = stats.value.importedBackups
+  const s = stats.value.importedSources
+  const key = c === 1 ? 'dashboard.importedBody_one' : 'dashboard.importedBody'
+  return t(key, { count: `<strong>${c}</strong>`, sources: `<strong>${s}</strong>` })
+})
+const complianceWarnHtml = computed(() =>
+  t('dashboard.complianceWarn', { count: `<strong>${stats.value.snapshotOnlyPolicies}</strong>` })
+)
+const complianceOkHtml = computed(() =>
+  t('dashboard.complianceOk', { count: `<strong>${stats.value.totalPolicies}</strong>` })
+)
 
 const stats = ref({
   nodes: 0, namespaces: 0, protectedApps: 0,

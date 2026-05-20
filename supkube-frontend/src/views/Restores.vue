@@ -1,10 +1,10 @@
 <template>
   <div class="restores-page">
     <div class="page-header">
-      <h3>Restores</h3>
+      <h3>{{ t('restores.title') }}</h3>
       <el-button type="primary" @click="showCreateDialog = true">
         <el-icon><RefreshRight /></el-icon>
-        Create Restore
+        {{ t('restores.create') }}
       </el-button>
     </div>
 
@@ -160,6 +160,9 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 import { useRoute } from 'vue-router'
 import { RefreshRight, Close } from '@element-plus/icons-vue'
 import { getRestores, createRestore, getBackups, getNamespaces, getBackupResources, deleteRestore, getRestoreResults } from '../api/velero'

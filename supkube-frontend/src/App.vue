@@ -23,43 +23,60 @@
         >
           <el-menu-item index="/dashboard">
             <el-icon><Monitor /></el-icon>
-            <template #title>Dashboard</template>
+            <template #title>{{ t('nav.dashboard') }}</template>
           </el-menu-item>
           <el-menu-item index="/applications">
             <el-icon><Grid /></el-icon>
-            <template #title>Applications</template>
+            <template #title>{{ t('nav.applications') }}</template>
           </el-menu-item>
           <el-menu-item index="/backups">
             <el-icon><FolderOpened /></el-icon>
-            <template #title>Restore Points</template>
+            <template #title>{{ t('nav.restorePoints') }}</template>
           </el-menu-item>
           <el-menu-item index="/restores">
             <el-icon><RefreshRight /></el-icon>
-            <template #title>Restores</template>
+            <template #title>{{ t('nav.restores') }}</template>
           </el-menu-item>
           <el-menu-item index="/policies">
             <el-icon><Clock /></el-icon>
-            <template #title>Policies</template>
+            <template #title>{{ t('nav.policies') }}</template>
           </el-menu-item>
           <el-menu-item index="/storage">
             <el-icon><Coin /></el-icon>
-            <template #title>Storage</template>
+            <template #title>{{ t('nav.storage') }}</template>
           </el-menu-item>
           <el-menu-item index="/snapshot-locations">
             <el-icon><Camera /></el-icon>
-            <template #title>Snapshot Locations</template>
+            <template #title>{{ t('nav.snapshotLocations') }}</template>
           </el-menu-item>
           <el-menu-item index="/settings">
             <el-icon><Setting /></el-icon>
-            <template #title>Settings</template>
+            <template #title>{{ t('nav.settings') }}</template>
           </el-menu-item>
         </el-menu>
       </el-aside>
       <el-container>
         <el-header>
-          <h2>SupKube — Kubernetes Data Protection</h2>
-          <span class="version-badge">v0.7.3-alpha</span>
+          <h2>{{ t('app.title') }}</h2>
+          <span class="version-badge">v0.7.4-alpha</span>
           <span class="header-spacer"></span>
+          <el-dropdown trigger="click" @command="onLocaleChange" class="locale-dropdown">
+            <button class="locale-toggle" type="button" :title="t('settings.language')">
+              {{ currentLocaleShort }}
+            </button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item
+                  v-for="loc in SUPPORTED_LOCALES"
+                  :key="loc.code"
+                  :command="loc.code"
+                  :class="{ 'is-active': loc.code === locale }"
+                >
+                  {{ loc.label }}
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
           <button
             class="theme-toggle"
             type="button"
@@ -78,8 +95,17 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { SUPPORTED_LOCALES, setLocale } from './i18n'
 import { Monitor, Grid, FolderOpened, RefreshRight, Clock, Coin, Setting, Camera, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
+
+const { t, locale } = useI18n()
+const currentLocaleShort = computed(() => {
+  const found = SUPPORTED_LOCALES.find(l => l.code === locale.value)
+  return found ? found.short : 'EN'
+})
+const onLocaleChange = (code) => setLocale(code)
 
 // Persist collapsed state across reloads (localStorage). Element Plus's
 // el-menu :collapse mode auto-hides item text and shows a tooltip with the
@@ -196,12 +222,14 @@ html.dark .version-badge {
   background: #1d3a5f !important;
   color: #79bbff !important;
 }
-html.dark .theme-toggle {
+html.dark .theme-toggle,
+html.dark .locale-toggle {
   background: #2b2e31 !important;
   border-color: #3c4044 !important;
   color: #cfd3dc !important;
 }
-html.dark .theme-toggle:hover {
+html.dark .theme-toggle:hover,
+html.dark .locale-toggle:hover {
   background: #3c4044 !important;
   color: #79bbff !important;
 }
@@ -357,7 +385,8 @@ html.dark .chart-card {
   letter-spacing: 0.02em;
 }
 .header-spacer { flex: 1; }
-.theme-toggle {
+.theme-toggle,
+.locale-toggle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -367,13 +396,21 @@ html.dark .chart-card {
   background: #ffffff;
   border-radius: 8px;
   cursor: pointer;
-  font-size: 16px;
+  font-size: 14px;
+  font-weight: 600;
   color: #606266;
   transition: all 0.15s;
 }
-.theme-toggle:hover {
+.theme-toggle { font-size: 16px; }
+.theme-toggle:hover,
+.locale-toggle:hover {
   background: #f5f7fa;
   color: #409eff;
+}
+.locale-dropdown { margin-right: 8px; }
+:deep(.el-dropdown-menu__item.is-active) {
+  color: #409eff;
+  font-weight: 600;
 }
 .el-main {
   padding: 20px;

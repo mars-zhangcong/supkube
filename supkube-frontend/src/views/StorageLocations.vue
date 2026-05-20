@@ -1,10 +1,10 @@
 <template>
   <div class="storage-page">
     <div class="page-header">
-      <h3>Storage Locations</h3>
+      <h3>{{ t('storage.title') }}</h3>
       <el-button type="primary" @click="showCreateDialog = true">
         <el-icon><Plus /></el-icon>
-        Add Storage Location
+        {{ t('storage.create') }}
       </el-button>
     </div>
 
@@ -244,8 +244,11 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { Plus } from '@element-plus/icons-vue'
+
+const { t } = useI18n()
 import {
   getStorageLocations,
   getStorageLocation,

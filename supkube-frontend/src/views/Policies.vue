@@ -1,10 +1,10 @@
 <template>
   <div class="policies-page">
     <div class="page-header">
-      <h3>Backup Policies (Schedules)</h3>
+      <h3>{{ t('policies.title') }}</h3>
       <el-button type="primary" @click="showCreateDialog = true">
         <el-icon><Plus /></el-icon>
-        Create Policy
+        {{ t('policies.create') }}
       </el-button>
     </div>
 
@@ -55,7 +55,7 @@
               :type="row.spec?.paused ? 'success' : 'warning'"
               @click="togglePause(row)"
             >
-              {{ row.spec?.paused ? 'Resume' : 'Pause' }}
+              {{ row.spec?.paused ? t('policies.resume') : t('policies.pause') }}
             </el-button>
             <el-button size="small" type="danger" @click="handleDelete(row)">
               Delete
@@ -221,6 +221,9 @@
 
 <script setup>
 import { ref, onMounted, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 import { Plus } from '@element-plus/icons-vue'
 import { getSchedules, createSchedule, patchSchedule, deleteSchedule, getNamespaces, getNamespaceStorageCapability } from '../api/velero'
 import { ElMessage, ElMessageBox } from 'element-plus'

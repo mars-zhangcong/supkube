@@ -1,19 +1,19 @@
 <template>
   <div class="restore-points-page">
     <div class="page-header">
-      <h3>Restore Points</h3>
-      <p class="page-desc">View and manage all Restore Points created in this cluster</p>
+      <h3>{{ t('restorePoints.title') }}</h3>
+      <p class="page-desc">{{ t('restorePoints.desc') }}</p>
     </div>
 
     <!-- Application type pills (Kasten parity; only Namespace enabled for now) -->
     <div class="apptype-section">
-      <div class="apptype-label">Application type</div>
+      <div class="apptype-label">{{ t('restorePoints.applicationType') }}</div>
       <div class="apptype-pills">
         <button class="apptype-pill is-active" type="button">
-          <el-icon><Box /></el-icon> Namespace
+          <el-icon><Box /></el-icon> {{ t('restorePoints.namespace') }}
         </button>
         <button class="apptype-pill is-disabled" type="button" disabled title="Coming in v0.7+">
-          <el-icon><Monitor /></el-icon> Virtual Machine
+          <el-icon><Monitor /></el-icon> {{ t('restorePoints.virtualMachine') }}
         </button>
       </div>
     </div>
@@ -21,31 +21,29 @@
     <!-- Filter / search / bulk toolbar -->
     <div class="filter-toolbar">
       <el-select v-model="typeFilter" class="filter-type">
-        <el-option label="All Types" value="all" />
-        <el-option label="Snapshot (manual)" value="Snapshot" />
-        <el-option label="Scheduled" value="Scheduled" />
+        <el-option :label="t('restorePoints.allTypes')" value="all" />
+        <el-option :label="t('restorePoints.snapshotManual')" value="Snapshot" />
+        <el-option :label="t('restorePoints.scheduled')" value="Scheduled" />
       </el-select>
       <el-select v-model="sourceFilter" class="filter-type">
-        <el-option label="All Sources" value="all" />
-        <el-option label="🏠 Local" value="Local" />
-        <el-option label="🌐 Imported" value="Imported" />
+        <el-option :label="t('restorePoints.allSources')" value="all" />
+        <el-option :label="`🏠 ${t('restorePoints.local')}`" value="Local" />
+        <el-option :label="`🌐 ${t('restorePoints.imported')}`" value="Imported" />
       </el-select>
-      <el-input v-model="nameFilter" placeholder="Filter by namespace or name" clearable class="filter-name">
+      <el-input v-model="nameFilter" :placeholder="t('restorePoints.filterPlaceholder')" clearable class="filter-name">
         <template #prefix><el-icon><Search /></el-icon></template>
       </el-input>
       <span class="filter-spacer"></span>
-      <span class="filter-summary">
-        Viewing <strong>{{ filteredBackups.length }}</strong> out of {{ backups.length }} Restore Points
-      </span>
+      <span class="filter-summary" v-html="viewingHtml"></span>
       <el-button
         :disabled="selectedRows.length === 0"
         :type="selectedRows.length === 0 ? '' : 'danger'"
         @click="handleDeleteSelected"
       >
-        Delete Selected ({{ selectedRows.length }})
+        {{ t('common.deleteSelected') }} ({{ selectedRows.length }})
       </el-button>
       <el-button type="primary" @click="showCreateDialog = true">
-        <el-icon><Plus /></el-icon> Create Restore Point
+        <el-icon><Plus /></el-icon> {{ t('restorePoints.create') }}
       </el-button>
     </div>
 
@@ -67,7 +65,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="Type" width="150">
+        <el-table-column :label="t('common.type')" width="150">
           <template #default="{ row }">
             <span class="type-chip" :class="`type-${backupType(row).toLowerCase()}`">
               {{ backupType(row) === 'Snapshot' ? '📸' : '⏰' }} {{ backupType(row) }}
@@ -85,7 +83,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="Policy" min-width="180">
+        <el-table-column :label="t('restorePoints.policy')" min-width="180">
           <template #default="{ row }">
             <span v-if="policyOf(row)" class="policy-link" @click="goToPolicy(row)">
               {{ policyOf(row) }}
@@ -94,7 +92,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="Profile" min-width="140">
+        <el-table-column :label="t('restorePoints.profile')" min-width="140">
           <template #default="{ row }">
             <span v-if="row.spec?.storageLocation" class="profile-cell">
               🗄 {{ row.spec.storageLocation }}
@@ -103,7 +101,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="Status" width="170">
+        <el-table-column :label="t('common.status')" width="170">
           <template #default="{ row }">
             <el-tag :type="phaseTagType(row.status?.phase)" size="small">
               {{ normalizePhase(row.status?.phase) }}
@@ -114,13 +112,13 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="Created At" min-width="180" sortable :sort-method="sortByCreated">
+        <el-table-column :label="t('restorePoints.createdAt')" min-width="180" sortable :sort-method="sortByCreated">
           <template #default="{ row }">
             {{ formatTime(row.metadata?.creationTimestamp) }}
           </template>
         </el-table-column>
 
-        <el-table-column label="Expires At" min-width="160">
+        <el-table-column :label="t('restorePoints.expiresAt')" min-width="160">
           <template #default="{ row }">
             <span v-if="row.status?.expiration">{{ formatTime(row.status.expiration) }}</span>
             <span v-else class="muted">—</span>
@@ -135,10 +133,10 @@
               </el-button>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item command="view">View</el-dropdown-item>
-                  <el-dropdown-item command="restore">Restore</el-dropdown-item>
-                  <el-dropdown-item command="validate">Validate</el-dropdown-item>
-                  <el-dropdown-item command="delete" divided>Delete</el-dropdown-item>
+                  <el-dropdown-item command="view">{{ t('common.view') }}</el-dropdown-item>
+                  <el-dropdown-item command="restore">{{ t('common.restore') }}</el-dropdown-item>
+                  <el-dropdown-item command="validate">{{ t('common.validate') }}</el-dropdown-item>
+                  <el-dropdown-item command="delete" divided>{{ t('common.delete') }}</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
@@ -148,7 +146,7 @@
     </el-card>
 
     <!-- Create Restore Point Dialog -->
-    <el-dialog v-model="showCreateDialog" title="Create Restore Point" width="500px">
+    <el-dialog v-model="showCreateDialog" :title="t('restorePoints.create')" width="500px">
       <el-form :model="createForm" label-width="180px">
         <el-form-item label="Name" required>
           <el-input v-model="createForm.name" placeholder="my-restore-point" />
@@ -210,7 +208,18 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRouter, useRoute } from 'vue-router'
+
+const { t } = useI18n()
+// "Viewing N out of M Restore Points" with bold counts. Goes through v-html
+// so the inserted HTML survives translation.
+const viewingHtml = computed(() =>
+  t('restorePoints.viewing', {
+    filtered: `<strong>${filteredBackups.value.length}</strong>`,
+    total: backups.value.length
+  })
+)
 import { Plus, Search, Box, Monitor } from '@element-plus/icons-vue'
 import { getBackups, createBackup, deleteBackup, getNamespaces } from '../api/velero'
 import { ElMessage, ElMessageBox } from 'element-plus'

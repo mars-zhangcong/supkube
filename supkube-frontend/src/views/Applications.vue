@@ -1,23 +1,23 @@
 <template>
   <div class="applications-page">
     <div class="page-header">
-      <h3>Applications</h3>
-      <p class="page-desc">View details or perform actions on applications.</p>
+      <h3>{{ t('applications.title') }}</h3>
+      <p class="page-desc">{{ t('applications.desc') }}</p>
     </div>
 
     <!-- Kasten-style filter toolbar: status quick-filter + free-text name search + selection summary -->
     <div class="filter-toolbar">
       <el-select v-model="statusFilter" class="filter-status" placement="bottom-start">
-        <el-option label="All" value="all" />
-        <el-option label="Compliant" value="Compliant" />
-        <el-option label="Unmanaged" value="Unmanaged" />
-        <el-option label="Non-Compliant" value="NonCompliant" />
-        <el-option label="In Progress" value="InProgress" />
-        <el-option label="Empty" value="Empty" />
+        <el-option :label="t('applications.statusFilterAll')" value="all" />
+        <el-option :label="t('compliance.Compliant')" value="Compliant" />
+        <el-option :label="t('compliance.Unmanaged')" value="Unmanaged" />
+        <el-option :label="t('compliance.NonCompliant')" value="NonCompliant" />
+        <el-option :label="t('compliance.InProgress')" value="InProgress" />
+        <el-option :label="t('compliance.Empty')" value="Empty" />
       </el-select>
       <el-input
         v-model="nameFilter"
-        placeholder="Filter by Name"
+        :placeholder="t('common.filterByName')"
         clearable
         class="filter-name"
       >
@@ -36,12 +36,12 @@
         @selection-change="handleSelectionChange"
       >
         <el-table-column type="selection" width="48" />
-        <el-table-column prop="namespace" label="Name" sortable min-width="200">
+        <el-table-column prop="namespace" :label="t('common.name')" sortable min-width="200">
           <template #default="{ row }">
             <span class="app-name">{{ row.namespace }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="Status" width="180">
+        <el-table-column :label="t('common.status')" width="180">
           <template #default="{ row }">
             <span class="status-badge" :class="`status-${complianceClass(row)}`">
               <span class="status-icon">{{ complianceIcon(row) }}</span>
@@ -49,12 +49,12 @@
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="Workloads" width="120">
+        <el-table-column :label="t('applications.workloads')" width="120">
           <template #default="{ row }">
             <span class="workload-count">⚙ {{ row.workloads }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="Labels" min-width="280">
+        <el-table-column :label="t('applications.labels')" min-width="280">
           <template #default="{ row }">
             <div class="row-labels">
               <el-tooltip
@@ -78,13 +78,13 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="Last Backup" min-width="220">
+        <el-table-column :label="t('applications.lastBackup')" min-width="220">
           <template #default="{ row }">
             <span v-if="row.lastBackupName" class="last-backup">
               {{ row.lastBackupName }}
               <span class="backup-time">{{ formatTime(row.lastBackupTime) }}</span>
             </span>
-            <span v-else class="no-restore">No restore point</span>
+            <span v-else class="no-restore">{{ t('applications.noRestorePoint') }}</span>
           </template>
         </el-table-column>
         <el-table-column label="" width="60" align="right">
@@ -95,11 +95,11 @@
               </el-button>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item command="snapshot">Snapshot</el-dropdown-item>
-                  <el-dropdown-item command="restore">Restore</el-dropdown-item>
-                  <el-dropdown-item command="backup">Backup</el-dropdown-item>
-                  <el-dropdown-item command="details">Details</el-dropdown-item>
-                  <el-dropdown-item command="policy">Create a Policy</el-dropdown-item>
+                  <el-dropdown-item command="snapshot">{{ t('applications.snapshot') }}</el-dropdown-item>
+                  <el-dropdown-item command="restore">{{ t('common.restore') }}</el-dropdown-item>
+                  <el-dropdown-item command="backup">{{ t('applications.backup') }}</el-dropdown-item>
+                  <el-dropdown-item command="details">{{ t('common.details') }}</el-dropdown-item>
+                  <el-dropdown-item command="policy">{{ t('applications.createPolicy') }}</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
@@ -305,6 +305,9 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 import { useRouter } from 'vue-router'
 import { Search } from '@element-plus/icons-vue'
 import { getApplications, getApplicationDetail } from '../api/velero'
@@ -421,13 +424,9 @@ const complianceIcon = (row) => {
 }
 const complianceLabel = (row) => {
   const c = complianceOf(row)
-  return {
-    Compliant: 'Compliant',
-    Unmanaged: 'Unmanaged',
-    NonCompliant: 'Non-Compliant',
-    InProgress: 'Backup In Progress',
-    Empty: 'Empty'
-  }[c] || c
+  // i18n key `compliance.<state>` is defined in locales/en.js + zh-CN.js;
+  // missing keys fall through to the literal key thanks to fallbackLocale.
+  return t(`compliance.${c}`)
 }
 
 const fetchApplications = async () => {
