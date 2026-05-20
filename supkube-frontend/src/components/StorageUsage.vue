@@ -13,16 +13,19 @@
 import { computed } from 'vue'
 import VChart from 'vue-echarts'
 import '../utils/echarts'
-import { COLORS } from '../utils/echarts'
+import { useTheme } from '../composables/useTheme'
+
+const { chartColors, isDark } = useTheme()
 
 const props = defineProps({
   backups: { type: Array, default: () => [] }
 })
 
-const PROFILE_PALETTE = [
-  COLORS.primary, COLORS.success, COLORS.warning, COLORS.danger,
-  '#73c0de', '#fac858', '#ee6666', '#9a60b4', '#3ba272', '#5470c6'
-]
+const PROFILE_PALETTE = computed(() => {
+  const c = chartColors.value
+  return [c.primary, c.success, c.warning, c.danger,
+          '#73c0de', '#fac858', '#ee6666', '#9a60b4', '#3ba272', '#5470c6']
+})
 
 const groups = computed(() => {
   const counts = new Map()
@@ -37,35 +40,38 @@ const groups = computed(() => {
 
 const totalCount = computed(() => groups.value.reduce((acc, g) => acc + g.value, 0))
 
-const option = computed(() => ({
-  tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
-  legend: {
-    bottom: 0,
-    left: 'center',
-    icon: 'circle',
-    textStyle: { color: COLORS.textSecondary, fontSize: 12 }
-  },
-  color: PROFILE_PALETTE,
-  series: [{
-    type: 'pie',
-    radius: ['44%', '64%'],
-    center: ['50%', '44%'],
-    avoidLabelOverlap: true,
-    label: {
-      show: true,
-      formatter: '{b}\n{c}',
-      fontSize: 12,
-      color: COLORS.textPrimary,
-      lineHeight: 16
+const option = computed(() => {
+  const c = chartColors.value
+  return {
+    tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+    legend: {
+      bottom: 0,
+      left: 'center',
+      icon: 'circle',
+      textStyle: { color: c.textSecondary, fontSize: 12 }
     },
-    labelLine: { length: 10, length2: 8 },
-    itemStyle: {
-      borderColor: '#ffffff',
-      borderWidth: 2
-    },
-    data: groups.value
-  }]
-}))
+    color: PROFILE_PALETTE.value,
+    series: [{
+      type: 'pie',
+      radius: ['44%', '64%'],
+      center: ['50%', '44%'],
+      avoidLabelOverlap: true,
+      label: {
+        show: true,
+        formatter: '{b}\n{c}',
+        fontSize: 12,
+        color: c.textPrimary,
+        lineHeight: 16
+      },
+      labelLine: { length: 10, length2: 8 },
+      itemStyle: {
+        borderColor: isDark.value ? '#25282b' : '#ffffff',
+        borderWidth: 2
+      },
+      data: groups.value
+    }]
+  }
+})
 </script>
 
 <style scoped>

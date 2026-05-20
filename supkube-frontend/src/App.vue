@@ -62,7 +62,7 @@
       <el-container>
         <el-header>
           <h2>{{ t('app.title') }}</h2>
-          <span class="version-badge">v0.7.5-alpha</span>
+          <span class="version-badge">v0.7.6-alpha</span>
           <span class="header-spacer"></span>
           <el-dropdown trigger="click" @command="onLocaleChange" class="locale-dropdown">
             <button class="locale-toggle" type="button" :title="t('settings.language')">
@@ -247,8 +247,104 @@ html.dark .type-chip {
 }
 html.dark .chart-card {
   background-color: #25282b !important;
-  border-color: #2b2e31 !important;
+  border-color: #3c4044 !important;
 }
+
+/* v0.7.6 — broader dark-mode coverage for surfaces and text styles that
+   v0.7.3 missed. Symptoms before this pass: stat labels invisible, chart
+   titles invisible, Compliance / Imported card backgrounds clashing.
+   Strategy: only override SupKube-custom styles. Element Plus's own
+   dark css-vars handle el-card / el-table / el-tag / el-button. */
+
+/* All headings — the global rule `h1..h6 { color: var(--color-text-primary) }`
+   pins them to #303133 which is invisible on dark surfaces. Hit every level
+   uniformly with the dark text color. */
+html.dark h1,
+html.dark h2,
+html.dark h3,
+html.dark h4,
+html.dark h5,
+html.dark h6 {
+  color: #e5eaf3 !important;
+}
+
+/* Stat cards on Dashboard */
+html.dark .stat-label { color: #a3a6ad !important; }
+html.dark .stat-value { color: #e5eaf3; }
+html.dark .stat-value.success { color: #85ce61; }
+html.dark .stat-value.danger { color: #f78989; }
+html.dark .stat-value.warning { color: #eebe77; }
+
+/* Imported / Compliance cards — re-tint the light-yellow / light-green
+   backgrounds to dark-mode equivalents */
+html.dark .imported-card {
+  background-color: #1d3a5f !important;
+  border-left-color: #79bbff !important;
+}
+html.dark .imported-text { color: #cfd3dc !important; }
+html.dark .imported-text strong { color: #e5eaf3 !important; }
+
+html.dark .compliance-card {
+  background-color: #4a3b1e !important;
+  border-left-color: #eebe77 !important;
+}
+html.dark .compliance-card.compliance-ok {
+  background-color: #1f3f1a !important;
+  border-left-color: #85ce61 !important;
+}
+html.dark .compliance-text { color: #cfd3dc !important; }
+html.dark .compliance-text strong { color: #e5eaf3 !important; }
+
+/* Chart card titles and helper text */
+html.dark .chart-title { color: #e5eaf3 !important; }
+html.dark .chart-subtitle { color: #a3a6ad !important; }
+html.dark .chart-empty { color: #606266 !important; }
+
+/* Recent backups / restores / advisor / generic page descriptions */
+html.dark .page-desc { color: #a3a6ad !important; }
+html.dark .muted { color: #606266 !important; }
+
+/* Filter toolbar text on Restore Points / Applications */
+html.dark .filter-summary { color: #cfd3dc !important; }
+html.dark .filter-selected { color: #cfd3dc !important; }
+
+/* Tier summary cards on Backup Advisor */
+html.dark .tier-card { background-color: #25282b !important; border-color: #3c4044 !important; }
+html.dark .tier-card .tier-label { color: #a3a6ad !important; }
+html.dark .tier-card .tier-count { color: #e5eaf3; }
+html.dark .tier-card.tier-high .tier-count { color: #f78989; }
+html.dark .tier-card.tier-medium .tier-count { color: #eebe77; }
+html.dark .tier-card.tier-low .tier-count { color: #79bbff; }
+html.dark .tier-card.tier-skip .tier-count { color: #a3a6ad; }
+
+/* Restore Points: namespace cell + RP name secondary */
+html.dark .ns-name { color: #e5eaf3 !important; }
+html.dark .rp-name { color: #909399 !important; }
+
+/* Apptype pills on Restore Points header */
+html.dark .apptype-label { color: #cfd3dc !important; }
+html.dark .apptype-pill {
+  background: #2b2e31 !important;
+  border-color: #3c4044 !important;
+  color: #cfd3dc !important;
+}
+html.dark .apptype-pill.is-active {
+  background: #79bbff !important;
+  border-color: #79bbff !important;
+  color: #1d1e1f !important;
+}
+
+/* Row-label tags + source/type chips — pickup card bg from theme */
+html.dark .row-label-tag {
+  background: #2b2e31 !important;
+  border-color: #3c4044 !important;
+  color: #cfd3dc !important;
+}
+html.dark .source-local { background: #2b2e31 !important; color: #cfd3dc !important; }
+html.dark .source-imported { background: #4a1d1f !important; color: #f78989 !important; }
+
+/* Settings appearance card form labels */
+html.dark .form-hint { color: #a3a6ad !important; }
 </style>
 
 <style scoped>

@@ -13,7 +13,9 @@
 import { computed } from 'vue'
 import VChart from 'vue-echarts'
 import '../utils/echarts'
-import { COLORS } from '../utils/echarts'
+import { useTheme } from '../composables/useTheme'
+
+const { chartColors } = useTheme()
 
 const props = defineProps({
   applications: { type: Array, default: () => [] }
@@ -36,13 +38,14 @@ const totalApps = computed(() =>
 )
 
 const option = computed(() => {
+  const c = chartColors.value
   const m = stateMap.value
   const categories = [
-    { name: 'Compliant', value: m.Compliant, color: COLORS.success },
-    { name: 'Non-Compliant', value: m.NonCompliant, color: COLORS.danger },
-    { name: 'In Progress', value: m.InProgress, color: COLORS.primary },
-    { name: 'Unmanaged', value: m.Unmanaged, color: COLORS.warning },
-    { name: 'Empty', value: m.Empty, color: COLORS.muted }
+    { name: 'Compliant', value: m.Compliant, color: c.success },
+    { name: 'Non-Compliant', value: m.NonCompliant, color: c.danger },
+    { name: 'In Progress', value: m.InProgress, color: c.primary },
+    { name: 'Unmanaged', value: m.Unmanaged, color: c.warning },
+    { name: 'Empty', value: m.Empty, color: c.muted }
   ]
   return {
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
@@ -51,20 +54,20 @@ const option = computed(() => {
       type: 'value',
       minInterval: 1,
       axisLine: { show: false },
-      splitLine: { lineStyle: { color: COLORS.axisLine, type: 'dashed' } },
-      axisLabel: { color: COLORS.textSecondary, fontSize: 11 }
+      splitLine: { lineStyle: { color: c.axisLine, type: 'dashed' } },
+      axisLabel: { color: c.textSecondary, fontSize: 11 }
     },
     yAxis: {
       type: 'category',
-      data: categories.map(c => c.name),
-      axisLine: { lineStyle: { color: COLORS.axisLine } },
-      axisLabel: { color: COLORS.textPrimary, fontSize: 12 }
+      data: categories.map(cat => cat.name),
+      axisLine: { lineStyle: { color: c.axisLine } },
+      axisLabel: { color: c.textPrimary, fontSize: 12 }
     },
     series: [{
       type: 'bar',
       barWidth: 16,
-      data: categories.map(c => ({ value: c.value, itemStyle: { color: c.color, borderRadius: [0, 4, 4, 0] } })),
-      label: { show: true, position: 'right', color: COLORS.textPrimary, fontSize: 12 }
+      data: categories.map(cat => ({ value: cat.value, itemStyle: { color: cat.color, borderRadius: [0, 4, 4, 0] } })),
+      label: { show: true, position: 'right', color: c.textPrimary, fontSize: 12 }
     }]
   }
 })

@@ -19,7 +19,9 @@
 import { ref, computed } from 'vue'
 import VChart from 'vue-echarts'
 import '../utils/echarts'
-import { COLORS } from '../utils/echarts'
+import { useTheme } from '../composables/useTheme'
+
+const { chartColors } = useTheme()
 
 const props = defineProps({
   backups: { type: Array, default: () => [] }
@@ -68,56 +70,56 @@ const hasData = computed(() => {
   return completed.some(v => v > 0) || failed.some(v => v > 0)
 })
 
-const option = computed(() => ({
-  tooltip: {
-    trigger: 'axis',
-    axisPointer: { type: 'shadow' }
-  },
-  legend: {
-    data: ['Completed', 'Failed'],
-    right: 0,
-    top: 0,
-    textStyle: { color: COLORS.textSecondary, fontSize: 12 }
-  },
-  grid: { left: 36, right: 8, top: 32, bottom: 24 },
-  xAxis: {
-    type: 'category',
-    data: buckets.value.labels,
-    axisLine: { lineStyle: { color: COLORS.axisLine } },
-    axisLabel: { color: COLORS.textSecondary, fontSize: 11 }
-  },
-  yAxis: {
-    type: 'value',
-    minInterval: 1,
-    axisLine: { show: false },
-    splitLine: { lineStyle: { color: COLORS.axisLine, type: 'dashed' } },
-    axisLabel: { color: COLORS.textSecondary, fontSize: 11 }
-  },
-  series: [
-    {
-      name: 'Completed',
-      type: 'line',
-      smooth: true,
-      symbol: 'circle',
-      symbolSize: 6,
-      lineStyle: { width: 2, color: COLORS.success },
-      itemStyle: { color: COLORS.success },
-      areaStyle: { color: 'rgba(103, 194, 58, 0.12)' },
-      data: buckets.value.completed
+const option = computed(() => {
+  const c = chartColors.value
+  return {
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    legend: {
+      data: ['Completed', 'Failed'],
+      right: 0,
+      top: 0,
+      textStyle: { color: c.textSecondary, fontSize: 12 }
     },
-    {
-      name: 'Failed',
-      type: 'line',
-      smooth: true,
-      symbol: 'circle',
-      symbolSize: 6,
-      lineStyle: { width: 2, color: COLORS.danger },
-      itemStyle: { color: COLORS.danger },
-      areaStyle: { color: 'rgba(245, 108, 108, 0.10)' },
-      data: buckets.value.failed
-    }
-  ]
-}))
+    grid: { left: 36, right: 8, top: 32, bottom: 24 },
+    xAxis: {
+      type: 'category',
+      data: buckets.value.labels,
+      axisLine: { lineStyle: { color: c.axisLine } },
+      axisLabel: { color: c.textSecondary, fontSize: 11 }
+    },
+    yAxis: {
+      type: 'value',
+      minInterval: 1,
+      axisLine: { show: false },
+      splitLine: { lineStyle: { color: c.axisLine, type: 'dashed' } },
+      axisLabel: { color: c.textSecondary, fontSize: 11 }
+    },
+    series: [
+      {
+        name: 'Completed',
+        type: 'line',
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 6,
+        lineStyle: { width: 2, color: c.success },
+        itemStyle: { color: c.success },
+        areaStyle: { color: 'rgba(103, 194, 58, 0.18)' },
+        data: buckets.value.completed
+      },
+      {
+        name: 'Failed',
+        type: 'line',
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 6,
+        lineStyle: { width: 2, color: c.danger },
+        itemStyle: { color: c.danger },
+        areaStyle: { color: 'rgba(245, 108, 108, 0.18)' },
+        data: buckets.value.failed
+      }
+    ]
+  }
+})
 </script>
 
 <style scoped>
