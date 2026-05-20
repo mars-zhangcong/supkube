@@ -47,9 +47,12 @@
             </span>
           </template>
         </el-table-column>
-        <el-table-column :label="t('advisor.recommendedSchedule')" min-width="180">
+        <el-table-column :label="t('advisor.recommendedSchedule')" min-width="200">
           <template #default="{ row }">
-            <code v-if="row.recommendedSchedule">{{ row.recommendedSchedule }}</code>
+            <div v-if="row.recommendedSchedule" class="schedule-cell">
+              <div class="schedule-human">{{ formatSchedule(row.recommendedSchedule) }}</div>
+              <code class="schedule-cron">{{ row.recommendedSchedule }}</code>
+            </div>
             <span v-else class="muted">—</span>
           </template>
         </el-table-column>
@@ -60,7 +63,7 @@
                 <span :class="f.delta >= 0 ? 'factor-plus' : 'factor-minus'">
                   {{ f.delta >= 0 ? '+' : '' }}{{ f.delta }}
                 </span>
-                {{ f.reason }}
+                {{ translateFactor(f) }}
               </li>
               <li v-if="row.factors.length > 3" class="muted">
                 {{ t('advisor.moreFactors', { count: row.factors.length - 3 }) }}
@@ -124,6 +127,37 @@ const tierIcon = (tier) => ({
   Low: '🔵',
   Skip: '⚪'
 }[tier] || '')
+
+// Translate a backend AdvisorFactor through i18n. The backend sends:
+//   { reason: "Has 2 PVC(s) - ...",  reasonKey: "advisor.factors.hasPVC",
+//     params: {count: 2}, delta: 40 }
+// Frontend renders t(reasonKey, params); falls back to raw English reason
+// if the key is missing (older backends / unknown rule).
+const translateFactor = (factor) => {
+  if (factor.reasonKey) {
+    return t(factor.reasonKey, factor.params || {})
+  }
+  return factor.reason || ''
+}
+
+// Convert a Velero/cron schedule into a localized human phrase. We only
+// recognize the presets the Advisor itself emits + a few common patterns.
+// Anything else falls through to advisor.schedule.custom which keeps the
+// raw cron visible so the user isn't lied to.
+const SCHEDULE_PRESETS = {
+  '0 * * * *': 'hourly',
+  '0 */6 * * *': 'every6h',
+  '0 */12 * * *': 'every12h',
+  '0 0 * * *': 'daily',
+  '0 0 * * 0': 'weekly',
+  '0 0 1 * *': 'monthly'
+}
+const formatSchedule = (cron) => {
+  if (!cron) return t('advisor.schedule.none')
+  const preset = SCHEDULE_PRESETS[cron.trim()]
+  if (preset) return t(`advisor.schedule.${preset}`)
+  return t('advisor.schedule.custom', { cron })
+}
 
 const fetchAdvisor = async () => {
   loading.value = true
@@ -210,6 +244,16 @@ onMounted(fetchAdvisor)
 .tier-chip.tier-medium { color: #b88230; }
 .tier-chip.tier-low { color: #337ecc; }
 .tier-chip.tier-skip { color: #909399; }
+
+.schedule-cell { display: flex; flex-direction: column; gap: 2px; }
+.schedule-human { font-size: 13px; color: #303133; font-weight: 500; }
+.schedule-cron {
+  font-family: 'SF Mono', Menlo, monospace;
+  font-size: 11px;
+  color: #909399;
+  background: transparent;
+  padding: 0;
+}
 
 .factor-list {
   margin: 0;

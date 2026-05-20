@@ -206,8 +206,14 @@ func ListApplications(c *gin.Context) {
 //   < 10   -> Skip Recommended
 
 type AdvisorFactor struct {
+	// Reason is the human-readable English fallback. Kept for backwards
+	// compatibility with API consumers that don't know about reasonKey.
 	Reason string `json:"reason"`
-	Delta  int    `json:"delta"` // signed contribution; negative = penalty
+	// ReasonKey is the i18n key the UI translates (advisor.factors.*).
+	// Params is the value-substitution map for that key.
+	ReasonKey string                 `json:"reasonKey,omitempty"`
+	Params    map[string]interface{} `json:"params,omitempty"`
+	Delta     int                    `json:"delta"`
 }
 
 type AdvisorRecommendation struct {
@@ -313,15 +319,19 @@ func scoreNamespaceForAdvisor(k8sClient kubernetes.Interface, ns string, nsLabel
 		rec.HasPVC = true
 		rec.Score += 40
 		rec.Factors = append(rec.Factors, AdvisorFactor{
-			Reason: fmt.Sprintf("Has %d PersistentVolumeClaim(s) — stateful data lives here", len(pvcs.Items)),
-			Delta:  40,
+			Reason:    fmt.Sprintf("Has %d PersistentVolumeClaim(s) — stateful data lives here", len(pvcs.Items)),
+			ReasonKey: "advisor.factors.hasPVC",
+			Params:    map[string]interface{}{"count": len(pvcs.Items)},
+			Delta:     40,
 		})
 	}
 	if statefulsets != nil && len(statefulsets.Items) > 0 {
 		rec.Score += 20
 		rec.Factors = append(rec.Factors, AdvisorFactor{
-			Reason: fmt.Sprintf("Has %d StatefulSet(s) — typically database or queue", len(statefulsets.Items)),
-			Delta:  20,
+			Reason:    fmt.Sprintf("Has %d StatefulSet(s) — typically database or queue", len(statefulsets.Items)),
+			ReasonKey: "advisor.factors.hasStatefulSet",
+			Params:    map[string]interface{}{"count": len(statefulsets.Items)},
+			Delta:     20,
 		})
 	}
 	if tier := nsLabels["supkube.io/tier"]; tier != "" {
@@ -338,31 +348,36 @@ func scoreNamespaceForAdvisor(k8sClient kubernetes.Interface, ns string, nsLabel
 		if bonus != 0 {
 			rec.Score += bonus
 			rec.Factors = append(rec.Factors, AdvisorFactor{
-				Reason: fmt.Sprintf("User-marked tier %q", tier),
-				Delta:  bonus,
+				Reason:    fmt.Sprintf("User-marked tier %q", tier),
+				ReasonKey: "advisor.factors.userTier",
+				Params:    map[string]interface{}{"tier": tier},
+				Delta:     bonus,
 			})
 		}
 	}
 	if ns == "default" && wl > 0 {
 		rec.Score += 10
 		rec.Factors = append(rec.Factors, AdvisorFactor{
-			Reason: "Workloads in default namespace are often ad-hoc — protect at least lightly",
-			Delta:  10,
+			Reason:    "Workloads in default namespace are often ad-hoc — protect at least lightly",
+			ReasonKey: "advisor.factors.defaultNs",
+			Delta:     10,
 		})
 	}
 	// Penalty: stateless and not exposed by any Service -> easy to rebuild.
 	if !rec.HasPVC && wl > 0 && services != nil && len(services.Items) == 0 {
 		rec.Score -= 30
 		rec.Factors = append(rec.Factors, AdvisorFactor{
-			Reason: "Stateless workload with no Service — rebuildable from manifests",
-			Delta:  -30,
+			Reason:    "Stateless workload with no Service — rebuildable from manifests",
+			ReasonKey: "advisor.factors.statelessNoService",
+			Delta:     -30,
 		})
 	}
 	if wl == 0 && !rec.HasPVC {
 		rec.Score -= 20
 		rec.Factors = append(rec.Factors, AdvisorFactor{
-			Reason: "Namespace currently empty",
-			Delta:  -20,
+			Reason:    "Namespace currently empty",
+			ReasonKey: "advisor.factors.emptyNs",
+			Delta:     -20,
 		})
 	}
 

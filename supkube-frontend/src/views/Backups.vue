@@ -52,6 +52,7 @@
         :data="filteredBackups"
         style="width: 100%"
         v-loading="loading"
+        :default-sort="{ prop: 'metadata.creationTimestamp', order: 'descending' }"
         @selection-change="handleSelectionChange"
       >
         <el-table-column type="selection" width="48" />
@@ -112,7 +113,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column :label="t('restorePoints.createdAt')" min-width="180" sortable :sort-method="sortByCreated">
+        <el-table-column :label="t('restorePoints.createdAt')" min-width="180" prop="metadata.creationTimestamp" sortable :sort-method="sortByCreated">
           <template #default="{ row }">
             {{ formatTime(row.metadata?.creationTimestamp) }}
           </template>
@@ -355,7 +356,18 @@ const fetchBackups = async () => {
   loading.value = true
   try {
     const res = await getBackups()
-    backups.value = res.data.items || []
+    const items = res.data.items || []
+    // Newest first by default — matches user expectation that the most
+    // recent restore point is what you usually want to look at. Stable
+    // sort by creationTimestamp desc; falls back to backup name as tie
+    // breaker so identical timestamps are still deterministic.
+    items.sort((a, b) => {
+      const at = new Date(a.metadata?.creationTimestamp || 0).getTime()
+      const bt = new Date(b.metadata?.creationTimestamp || 0).getTime()
+      if (at !== bt) return bt - at
+      return (b.metadata?.name || '').localeCompare(a.metadata?.name || '')
+    })
+    backups.value = items
     setLocalFingerprint(backups.value)
   } catch (e) {
     ElMessage.error('Failed to load restore points')

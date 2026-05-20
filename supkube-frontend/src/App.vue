@@ -62,7 +62,7 @@
       <el-container>
         <el-header>
           <h2>{{ t('app.title') }}</h2>
-          <span class="version-badge">v0.7.6-alpha</span>
+          <span class="version-badge">v0.7.7-alpha</span>
           <span class="header-spacer"></span>
           <el-dropdown trigger="click" @command="onLocaleChange" class="locale-dropdown">
             <button class="locale-toggle" type="button" :title="t('settings.language')">
@@ -345,6 +345,10 @@ html.dark .source-imported { background: #4a1d1f !important; color: #f78989 !imp
 
 /* Settings appearance card form labels */
 html.dark .form-hint { color: #a3a6ad !important; }
+
+/* Advisor schedule cell text */
+html.dark .schedule-human { color: #e5eaf3 !important; }
+html.dark .schedule-cron { color: #909399 !important; }
 </style>
 
 <style scoped>

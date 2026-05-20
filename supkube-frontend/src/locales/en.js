@@ -198,6 +198,24 @@ export default {
       Medium: 'Medium',
       Low: 'Low',
       Skip: 'Skip Recommended'
+    },
+    factors: {
+      hasPVC: 'Has {count} PersistentVolumeClaim(s) — stateful data lives here',
+      hasStatefulSet: 'Has {count} StatefulSet(s) — typically a database or queue',
+      userTier: 'User-marked tier "{tier}"',
+      defaultNs: 'Workloads in the default namespace are often ad-hoc — protect at least lightly',
+      statelessNoService: 'Stateless workload with no Service — easy to rebuild from manifests',
+      emptyNs: 'Namespace currently empty'
+    },
+    schedule: {
+      hourly: 'Every hour',
+      every6h: 'Every 6 hours',
+      every12h: 'Every 12 hours',
+      daily: 'Daily at midnight',
+      weekly: 'Weekly (Sunday midnight)',
+      monthly: 'Monthly (1st)',
+      custom: 'Custom: {cron}',
+      none: 'No backup'
     }
   }
 }

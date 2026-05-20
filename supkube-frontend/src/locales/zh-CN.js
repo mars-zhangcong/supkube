@@ -196,6 +196,24 @@ export default {
       Medium: '中优先级',
       Low: '低优先级',
       Skip: '建议跳过'
+    },
+    factors: {
+      hasPVC: '存在 {count} 个 PVC — 有持久化数据需要保护',
+      hasStatefulSet: '存在 {count} 个 StatefulSet — 通常是数据库或消息队列',
+      userTier: '用户已标记业务等级"{tier}"',
+      defaultNs: 'default 命名空间下的工作负载多为临时性 — 至少做轻量保护',
+      statelessNoService: '无状态且未对外提供 Service — 可从清单重建，不必备份',
+      emptyNs: '命名空间当前为空'
+    },
+    schedule: {
+      hourly: '每小时一次',
+      every6h: '每 6 小时一次',
+      every12h: '每 12 小时一次',
+      daily: '每天 0 点 1 次',
+      weekly: '每周 1 次（周日 0 点）',
+      monthly: '每月 1 次（每月 1 日）',
+      custom: '自定义：{cron}',
+      none: '不备份'
     }
   }
 }
