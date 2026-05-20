@@ -11,6 +11,7 @@ const routes = [
   { path: '/policies', name: 'Policies', component: () => import('../views/Policies.vue') },
   { path: '/storage', name: 'StorageLocations', component: () => import('../views/StorageLocations.vue') },
   { path: '/snapshot-locations', name: 'VolumeSnapshotLocations', component: () => import('../views/VolumeSnapshotLocations.vue') },
+  { path: '/advisor', name: 'BackupAdvisor', component: () => import('../views/BackupAdvisor.vue') },
   { path: '/settings', name: 'Settings', component: () => import('../views/Settings.vue') },
 ]
 

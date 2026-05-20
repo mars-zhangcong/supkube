@@ -14,6 +14,7 @@ export default {
     policies: 'Policies',
     storage: 'Storage',
     snapshotLocations: 'Snapshot Locations',
+    advisor: 'Backup Advisor',
     settings: 'Settings'
   },
   common: {
@@ -179,5 +180,24 @@ export default {
     theme: 'Theme',
     light: 'Light',
     dark: 'Dark'
+  },
+  advisor: {
+    title: 'Backup Advisor',
+    desc: 'Per-namespace recommendations: how aggressively each application should be backed up, based on workload type, persistent storage, and user-marked tier. Apply means open a prefilled Policy form — never auto-applied.',
+    score: 'Score',
+    tier: 'Tier',
+    recommendedSchedule: 'Recommended Schedule',
+    factors: 'Factors',
+    moreFactors: '+{count} more factor(s)',
+    apply: 'Apply Recommendation',
+    skipAction: 'Not recommended',
+    skipNoticeTitle: '{count} namespace(s) marked Skip Recommended',
+    skipNoticeBody: 'These namespaces look stateless or empty. Skipping is fine for dev/staging, but verify before relying on it in production — Skip Recommended is a hint, not a guarantee.',
+    tiers: {
+      High: 'High Priority',
+      Medium: 'Medium',
+      Low: 'Low',
+      Skip: 'Skip Recommended'
+    }
   }
 }

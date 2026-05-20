@@ -1,6 +1,30 @@
 <template>
   <div class="settings-page">
-    <h3>Settings</h3>
+    <h3>{{ t('settings.title') }}</h3>
+
+    <!-- v0.7.5: explicit Appearance card (mirrors the header quick toggles
+         so users have a discoverable settings location, and to set up the
+         pattern for richer per-user preferences in v0.8+). -->
+    <el-card class="appearance-card" style="margin-bottom: 20px">
+      <template #header>{{ t('settings.title') }} · {{ t('settings.language') }} / {{ t('settings.theme') }}</template>
+      <el-form label-width="160px" label-position="left">
+        <el-form-item :label="t('settings.language')">
+          <el-radio-group v-model="locale" @change="onLocaleChange">
+            <el-radio-button
+              v-for="loc in SUPPORTED_LOCALES"
+              :key="loc.code"
+              :value="loc.code"
+            >{{ loc.label }}</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item :label="t('settings.theme')">
+          <el-radio-group v-model="theme" @change="onThemeChange">
+            <el-radio-button value="light">☀ {{ t('settings.light') }}</el-radio-button>
+            <el-radio-button value="dark">☾ {{ t('settings.dark') }}</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+      </el-form>
+    </el-card>
 
     <el-row :gutter="20">
       <el-col :span="12">
@@ -81,8 +105,22 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { SUPPORTED_LOCALES, setLocale } from '../i18n'
 import { getStatus, getDashboardSummary } from '../api/velero'
 import { ElMessage } from 'element-plus'
+
+const { t, locale } = useI18n()
+const onLocaleChange = (code) => setLocale(code)
+
+// Theme picker mirrors the header ☾/☀ toggle. Reading the DOM class is the
+// single source of truth (it was set in main.js during boot).
+const THEME_KEY = 'supkube.theme'
+const theme = ref(document.documentElement.classList.contains('dark') ? 'dark' : 'light')
+const onThemeChange = (val) => {
+  document.documentElement.classList.toggle('dark', val === 'dark')
+  try { localStorage.setItem(THEME_KEY, val) } catch (_) { /* ignore */ }
+}
 
 const loading = ref(false)
 const veleroStatus = ref({ connected: false, version: '', namespace: '', plugins: [] })

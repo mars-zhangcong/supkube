@@ -30,6 +30,10 @@ func Run() error {
 		api.GET("/applications/:namespace/details", v1.GetApplicationDetails)
 		api.GET("/applications/:namespace/storage-capability", v1.GetNamespaceStorageCapability)
 
+		// Backup Advisor (v0.7.5) — recommendations only, no automatic action
+		api.GET("/backup-advisor", v1.GetBackupAdvisor)
+		api.GET("/backup-advisor/:namespace", v1.GetBackupAdvisorForNamespace)
+
 		// Backups
 		api.GET("/backups", v1.ListBackups)
 		api.POST("/backups", v1.CreateBackup)

@@ -49,6 +49,10 @@
             <el-icon><Camera /></el-icon>
             <template #title>{{ t('nav.snapshotLocations') }}</template>
           </el-menu-item>
+          <el-menu-item index="/advisor">
+            <el-icon><MagicStick /></el-icon>
+            <template #title>{{ t('nav.advisor') }}</template>
+          </el-menu-item>
           <el-menu-item index="/settings">
             <el-icon><Setting /></el-icon>
             <template #title>{{ t('nav.settings') }}</template>
@@ -58,7 +62,7 @@
       <el-container>
         <el-header>
           <h2>{{ t('app.title') }}</h2>
-          <span class="version-badge">v0.7.4-alpha</span>
+          <span class="version-badge">v0.7.5-alpha</span>
           <span class="header-spacer"></span>
           <el-dropdown trigger="click" @command="onLocaleChange" class="locale-dropdown">
             <button class="locale-toggle" type="button" :title="t('settings.language')">
@@ -98,7 +102,7 @@
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { SUPPORTED_LOCALES, setLocale } from './i18n'
-import { Monitor, Grid, FolderOpened, RefreshRight, Clock, Coin, Setting, Camera, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
+import { Monitor, Grid, FolderOpened, RefreshRight, Clock, Coin, Setting, Camera, MagicStick, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
 
 const { t, locale } = useI18n()
 const currentLocaleShort = computed(() => {

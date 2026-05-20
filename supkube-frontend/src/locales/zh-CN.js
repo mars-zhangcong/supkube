@@ -12,6 +12,7 @@ export default {
     policies: '策略',
     storage: '存储位置',
     snapshotLocations: '快照位置',
+    advisor: '备份顾问',
     settings: '设置'
   },
   common: {
@@ -177,5 +178,24 @@ export default {
     theme: '主题',
     light: '浅色',
     dark: '深色'
+  },
+  advisor: {
+    title: '备份顾问',
+    desc: '按命名空间提供建议：基于工作负载类型、持久化存储和用户标记的层级，判断每个应用应以多高频率备份。"采纳建议"会打开预填好的策略表单——绝不会自动执行。',
+    score: '评分',
+    tier: '档位',
+    recommendedSchedule: '推荐调度',
+    factors: '影响因素',
+    moreFactors: '另有 {count} 项因素',
+    apply: '采纳建议',
+    skipAction: '不建议',
+    skipNoticeTitle: '{count} 个命名空间被建议跳过',
+    skipNoticeBody: '这些命名空间看起来是无状态或空的。在开发/预发环境跳过没问题，但生产环境上线前请人工核对——"建议跳过"只是提示，不是保证。',
+    tiers: {
+      High: '高优先级',
+      Medium: '中优先级',
+      Low: '低优先级',
+      Skip: '建议跳过'
+    }
   }
 }

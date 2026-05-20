@@ -30,6 +30,10 @@ export const getApplications = () => api.get('/applications')
 export const getApplicationDetail = (namespace) => api.get(`/applications/${namespace}/details`)
 export const getNamespaceStorageCapability = (namespace) => api.get(`/applications/${namespace}/storage-capability`)
 
+// Backup Advisor (v0.7.5)
+export const getBackupAdvisor = () => api.get('/backup-advisor')
+export const getBackupAdvisorForNamespace = (namespace) => api.get(`/backup-advisor/${namespace}`)
+
 // Backups
 export const getBackups = () => api.get('/backups')
 export const getBackup = (name) => api.get(`/backups/${name}`)
