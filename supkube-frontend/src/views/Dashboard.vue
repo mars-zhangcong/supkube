@@ -93,47 +93,51 @@
       </div>
     </el-card>
 
-    <el-card style="margin-top: 20px">
-      <template #header>
-        <div class="card-header">
-          <span>Recent Backups</span>
-          <el-button type="primary" size="small" @click="$router.push('/backups')">
-            View All
-          </el-button>
-        </div>
-      </template>
-      <el-table :data="recentBackups" style="width: 100%" v-loading="loading">
-        <el-table-column label="Name">
-          <template #default="{ row }">
-            {{ row.name || row.metadata?.name || '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column label="Namespace">
-          <template #default="{ row }">
-            {{ row.namespace || row.metadata?.namespace || '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column label="Status">
-          <template #default="{ row }">
-            <el-tag :type="phaseTagType(row.phase ?? row.status?.phase)">
-              {{ normalizePhase(row.phase ?? row.status?.phase) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="Created">
-          <template #default="{ row }">
-            {{ formatTime(row.createdAt || row.metadata?.creationTimestamp) }}
-          </template>
-        </el-table-column>
-        <el-table-column label="Expires">
-          <template #default="{ row }">
-            {{ formatTime(row.expiration || row.status?.expiration) }}
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
+    <!-- v0.7.3 charts row: trend (12 cols) + protection coverage (12 cols) -->
+    <el-row :gutter="16" style="margin-top: 16px">
+      <el-col :span="16">
+        <BackupSuccessTrend :backups="allBackups" />
+      </el-col>
+      <el-col :span="8">
+        <ProtectionCoverage :applications="allApplications" />
+      </el-col>
+    </el-row>
 
-    <el-card style="margin-top: 20px">
+    <el-row :gutter="16" style="margin-top: 16px">
+      <el-col :span="12">
+        <StorageUsage :backups="allBackups" />
+      </el-col>
+      <el-col :span="12">
+        <!-- Recent Backups moved here to balance layout (was a full-width card) -->
+        <el-card class="recent-card">
+          <template #header>
+            <div class="card-header">
+              <span>Recent Backups</span>
+              <el-button type="primary" size="small" @click="$router.push('/backups')">
+                View All
+              </el-button>
+            </div>
+          </template>
+          <el-table :data="recentBackups" style="width: 100%" v-loading="loading" size="small">
+            <el-table-column prop="metadata.name" label="Name" min-width="180" show-overflow-tooltip />
+            <el-table-column label="Status" width="120">
+              <template #default="{ row }">
+                <el-tag :type="phaseTagType(row.phase ?? row.status?.phase)" size="small">
+                  {{ normalizePhase(row.phase ?? row.status?.phase) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="Created" min-width="140">
+              <template #default="{ row }">
+                {{ formatTime(row.createdAt || row.metadata?.creationTimestamp) }}
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-card>
+      </el-col>
+    </el-row>
+
+    <el-card style="margin-top: 16px">
       <template #header>
         <div class="card-header">
           <span>Recent Restores</span>
@@ -166,6 +170,9 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { getDashboardSummary, getBackups, getRestores, getNamespaces, getApplications, getSchedules } from '../api/velero'
 import { normalizePhase, phaseTagType } from '../utils/phase'
+import BackupSuccessTrend from '../components/BackupSuccessTrend.vue'
+import StorageUsage from '../components/StorageUsage.vue'
+import ProtectionCoverage from '../components/ProtectionCoverage.vue'
 
 const stats = ref({
   nodes: 0, namespaces: 0, protectedApps: 0,
@@ -209,6 +216,9 @@ function countImported(backups) {
 }
 const recentBackups = ref([])
 const recentRestores = ref([])
+// v0.7.3: charts consume the full lists, not just the "recent 5" slice
+const allBackups = ref([])
+const allApplications = ref([])
 const loading = ref(false)
 let refreshTimer = null
 
@@ -241,12 +251,15 @@ const fetchData = async () => {
     ])
     recentRestores.value = (restoresRes.data.items || []).slice(0, 5)
     if (backupsRes) {
-      const { imported, sources } = countImported(backupsRes.data?.items || [])
+      const items = backupsRes.data?.items || []
+      allBackups.value = items
+      const { imported, sources } = countImported(items)
       stats.value.importedBackups = imported
       stats.value.importedSources = sources
     }
     if (appsRes) {
       const apps = appsRes.data.items || []
+      allApplications.value = apps
       stats.value.protectedApps = apps.filter(a => a.protected).length
     }
     if (schedulesRes) {
@@ -267,6 +280,7 @@ const fetchData = async () => {
       ])
 
       const items = backupsRes.data.items || []
+      allBackups.value = items
       recentBackups.value = items.slice(0, 5)
       stats.value.backups = items.length
       stats.value.successful = items.filter(b => b.status?.phase === 'Completed').length

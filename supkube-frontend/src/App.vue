@@ -58,7 +58,16 @@
       <el-container>
         <el-header>
           <h2>SupKube — Kubernetes Data Protection</h2>
-          <span class="version-badge">v0.7.2-alpha</span>
+          <span class="version-badge">v0.7.3-alpha</span>
+          <span class="header-spacer"></span>
+          <button
+            class="theme-toggle"
+            type="button"
+            :title="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
+            @click="toggleTheme"
+          >
+            {{ isDark ? '☀' : '☾' }}
+          </button>
         </el-header>
         <el-main>
           <router-view />
@@ -81,6 +90,16 @@ const collapsed = ref(localStorage.getItem(STORAGE_KEY) === 'true')
 watch(collapsed, (v) => {
   try { localStorage.setItem(STORAGE_KEY, String(v)) } catch (_) { /* SSR/private mode */ }
 })
+
+// v0.7.3 dark mode toggle. Initial value pulled from <html> class set by
+// main.js boot (which read localStorage before mount, avoiding flash).
+const THEME_KEY = 'supkube.theme'
+const isDark = ref(document.documentElement.classList.contains('dark'))
+const toggleTheme = () => {
+  isDark.value = !isDark.value
+  document.documentElement.classList.toggle('dark', isDark.value)
+  try { localStorage.setItem(THEME_KEY, isDark.value ? 'dark' : 'light') } catch (_) { /* ignore */ }
+}
 </script>
 
 <style>
@@ -135,6 +154,68 @@ h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-family);
   font-weight: 600;
   color: var(--color-text-primary);
+}
+
+/* ============================================================
+   v0.7.3 Dark mode — applied when <html class="dark"> is set.
+   Element Plus 自带 dark css-vars 处理大部分组件；我们这里只覆盖
+   SupKube 自定义的硬编码颜色（sidebar/header/main bg、自绘 card 等）。
+   ============================================================ */
+html.dark body {
+  background-color: #1d1e1f;
+  color: #cfd3dc;
+}
+html.dark .el-aside {
+  background-color: #1a1c1e !important;
+  border-right-color: #2b2e31 !important;
+}
+html.dark .sidebar-brand {
+  border-bottom-color: #2b2e31 !important;
+}
+html.dark .sidebar-brand-text { color: #e5eaf3 !important; }
+html.dark .sidebar-toggle {
+  background: #1a1c1e !important;
+  border-color: #3c4044 !important;
+  color: #a3a6ad !important;
+}
+html.dark .sidebar-toggle:hover {
+  background: #25282b !important;
+  color: #e5eaf3 !important;
+}
+html.dark .el-aside .el-menu-item { color: #a3a6ad !important; }
+html.dark .el-aside .el-menu-item .el-icon { color: #909399 !important; }
+html.dark .el-aside .el-menu-item:hover { background-color: #25282b !important; color: #e5eaf3 !important; }
+html.dark .el-aside .el-menu-item.is-active { background-color: #2f3236 !important; color: #e5eaf3 !important; }
+html.dark .el-header {
+  background-color: #1a1c1e !important;
+  border-bottom-color: #2b2e31 !important;
+  color: #cfd3dc;
+}
+html.dark .el-main { background-color: #232527 !important; }
+html.dark .version-badge {
+  background: #1d3a5f !important;
+  color: #79bbff !important;
+}
+html.dark .theme-toggle {
+  background: #2b2e31 !important;
+  border-color: #3c4044 !important;
+  color: #cfd3dc !important;
+}
+html.dark .theme-toggle:hover {
+  background: #3c4044 !important;
+  color: #79bbff !important;
+}
+/* SupKube custom card surfaces — sync hint, imported card, action blocks etc. */
+html.dark .chart-card,
+html.dark .ns-cell,
+html.dark .row-label-tag,
+html.dark .source-chip,
+html.dark .type-chip {
+  background-color: transparent !important;
+}
+html.dark .chart-card {
+  background-color: #25282b !important;
+  border-color: #2b2e31 !important;
 }
 </style>
 
@@ -274,6 +355,25 @@ h1, h2, h3, h4, h5, h6 {
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.02em;
+}
+.header-spacer { flex: 1; }
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #dcdfe6;
+  background: #ffffff;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 16px;
+  color: #606266;
+  transition: all 0.15s;
+}
+.theme-toggle:hover {
+  background: #f5f7fa;
+  color: #409eff;
 }
 .el-main {
   padding: 20px;

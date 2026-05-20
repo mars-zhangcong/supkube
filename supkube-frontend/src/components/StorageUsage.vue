@@ -1,0 +1,102 @@
+<template>
+  <div class="chart-card">
+    <div class="chart-header">
+      <span class="chart-title">Restore Points per Storage Profile</span>
+      <span class="chart-subtitle">{{ totalCount }} total</span>
+    </div>
+    <v-chart v-if="totalCount > 0" class="chart-body" :option="option" autoresize />
+    <div v-else class="chart-empty">No backups yet.</div>
+  </div>
+</template>
+
+<script setup>
+import { computed } from 'vue'
+import VChart from 'vue-echarts'
+import '../utils/echarts'
+import { COLORS } from '../utils/echarts'
+
+const props = defineProps({
+  backups: { type: Array, default: () => [] }
+})
+
+const PROFILE_PALETTE = [
+  COLORS.primary, COLORS.success, COLORS.warning, COLORS.danger,
+  '#73c0de', '#fac858', '#ee6666', '#9a60b4', '#3ba272', '#5470c6'
+]
+
+const groups = computed(() => {
+  const counts = new Map()
+  for (const b of props.backups) {
+    const profile = b?.spec?.storageLocation || 'default'
+    counts.set(profile, (counts.get(profile) || 0) + 1)
+  }
+  return Array.from(counts.entries())
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value)
+})
+
+const totalCount = computed(() => groups.value.reduce((acc, g) => acc + g.value, 0))
+
+const option = computed(() => ({
+  tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+  legend: {
+    bottom: 0,
+    left: 'center',
+    icon: 'circle',
+    textStyle: { color: COLORS.textSecondary, fontSize: 12 }
+  },
+  color: PROFILE_PALETTE,
+  series: [{
+    type: 'pie',
+    radius: ['44%', '64%'],
+    center: ['50%', '44%'],
+    avoidLabelOverlap: true,
+    label: {
+      show: true,
+      formatter: '{b}\n{c}',
+      fontSize: 12,
+      color: COLORS.textPrimary,
+      lineHeight: 16
+    },
+    labelLine: { length: 10, length2: 8 },
+    itemStyle: {
+      borderColor: '#ffffff',
+      borderWidth: 2
+    },
+    data: groups.value
+  }]
+}))
+</script>
+
+<style scoped>
+.chart-card {
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 16px 20px 8px;
+  border: 1px solid #ebeef5;
+}
+.chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.chart-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+}
+.chart-subtitle {
+  font-size: 12px;
+  color: #909399;
+}
+.chart-body { height: 260px; width: 100%; }
+.chart-empty {
+  height: 260px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #c0c4cc;
+  font-size: 13px;
+}
+</style>
