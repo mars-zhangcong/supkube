@@ -1,238 +1,575 @@
 <template>
   <div class="policies-page">
     <div class="page-header">
-      <h3>{{ t('policies.title') }}</h3>
+      <div class="page-header-text">
+        <h3>{{ t('policies.title') }}</h3>
+        <p class="page-desc">{{ t('policies.desc') }}</p>
+      </div>
       <el-button type="primary" @click="showCreateDialog = true">
         <el-icon><Plus /></el-icon>
         {{ t('policies.create') }}
       </el-button>
     </div>
 
+    <!-- Kasten-style filter toolbar -->
+    <div class="filter-toolbar">
+      <el-select v-model="actionFilter" class="filter-action">
+        <el-option :label="t('policies.allActions')" value="all" />
+        <el-option :label="t('policies.actionSnapshot')" value="Snapshot" />
+        <el-option :label="t('policies.actionSnapshotExport')" value="Snapshot+Export" />
+      </el-select>
+      <el-select v-model="freqFilter" class="filter-freq">
+        <el-option :label="t('policies.allFrequencies')" value="all" />
+        <el-option :label="t('advisor.schedule.hourly')" value="hourly" />
+        <el-option :label="t('advisor.schedule.daily')" value="daily" />
+        <el-option :label="t('advisor.schedule.weekly')" value="weekly" />
+      </el-select>
+      <el-input v-model="nameFilter" :placeholder="t('common.filterByName')" clearable class="filter-name">
+        <template #prefix><el-icon><Search /></el-icon></template>
+      </el-input>
+      <span class="filter-spacer"></span>
+      <span class="filter-summary">
+        {{ t('policies.viewing', { filtered: filteredSchedules.length, total: schedules.length }) }}
+      </span>
+    </div>
+
     <el-card>
-      <el-table :data="schedules" style="width: 100%" v-loading="loading">
-        <el-table-column prop="metadata.name" label="Name" sortable />
-        <el-table-column label="Namespaces">
+      <el-table :data="filteredSchedules" style="width: 100%" v-loading="loading">
+        <el-table-column prop="metadata.name" :label="t('common.name').toUpperCase()" sortable min-width="160">
           <template #default="{ row }">
-            {{ (row.spec?.template?.includedNamespaces || ['*']).join(', ') }}
+            <span class="policy-name">{{ row.metadata?.name }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="Schedule">
+
+        <el-table-column :label="t('policies.validation').toUpperCase()" width="130">
           <template #default="{ row }">
-            <code>{{ row.spec?.schedule || '-' }}</code>
+            <span class="validation-cell" :class="`validation-${validationOf(row).key}`">
+              {{ validationOf(row).icon }} {{ validationOf(row).label }}
+            </span>
           </template>
         </el-table-column>
-        <el-table-column label="Status" width="120">
+
+        <el-table-column :label="t('policies.resources').toUpperCase()" min-width="180">
           <template #default="{ row }">
-            <el-tag :type="row.spec?.paused ? 'warning' : 'success'" size="small">
-              {{ row.spec?.paused ? 'Paused' : 'Active' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="Protection Level" width="200">
-          <template #default="{ row }">
-            <el-tooltip :content="protectionLevel(row).tooltip" placement="top" :show-after="300">
-              <span class="protection-badge" :class="`protection-${protectionLevel(row).key}`">
-                <span class="protection-icon">{{ protectionLevel(row).icon }}</span>
-                {{ protectionLevel(row).label }}
-              </span>
+            <el-tooltip
+              v-for="ns in resourceNamespaces(row)"
+              :key="ns"
+              :content="t('policies.namespaceTooltip', { name: ns })"
+              placement="top"
+              :show-after="200"
+            >
+              <el-tag
+                size="small"
+                effect="plain"
+                round
+                class="ns-chip"
+              >🗂 {{ ns }}</el-tag>
             </el-tooltip>
           </template>
         </el-table-column>
-        <el-table-column label="Last Backup">
+
+        <el-table-column :label="t('policies.action').toUpperCase()" width="190">
           <template #default="{ row }">
-            {{ formatTime(row.status?.lastBackup) }}
+            <span class="action-text">{{ actionTextOf(row) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="TTL">
+
+        <el-table-column :label="t('policies.frequency').toUpperCase()" width="160">
           <template #default="{ row }">
-            {{ formatTTL(row.spec?.template?.ttl) }}
+            <div class="freq-cell">
+              <div class="freq-human">{{ frequencyLabelOf(row) }}</div>
+              <code class="freq-cron">{{ row.spec?.schedule }}</code>
+            </div>
           </template>
         </el-table-column>
-        <el-table-column label="Actions" width="250">
+
+        <el-table-column :label="t('policies.lastRunTime').toUpperCase()" width="180">
           <template #default="{ row }">
-            <el-button
-              size="small"
-              :type="row.spec?.paused ? 'success' : 'warning'"
-              @click="togglePause(row)"
-            >
-              {{ row.spec?.paused ? t('policies.resume') : t('policies.pause') }}
-            </el-button>
-            <el-button size="small" type="danger" @click="handleDelete(row)">
-              Delete
-            </el-button>
+            <span v-if="row.status?.lastBackup">{{ formatTime(row.status.lastBackup) }}</span>
+            <span v-else class="muted">—</span>
+          </template>
+        </el-table-column>
+
+        <el-table-column :label="t('policies.lastRunStatus').toUpperCase()" width="140">
+          <template #default="{ row }">
+            <el-tag v-if="row.spec?.paused" type="warning" size="small">{{ t('policies.paused') }}</el-tag>
+            <el-tag v-else-if="row.status?.lastBackup" type="success" size="small">{{ t('policies.scheduled') }}</el-tag>
+            <span v-else class="muted">—</span>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="" width="60" align="right">
+          <template #default="{ row }">
+            <el-dropdown trigger="click" @command="cmd => handleCommand(cmd, row)">
+              <el-button class="more-btn" text>
+                <span class="dots">⋮</span>
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="view">{{ t('common.view') }}</el-dropdown-item>
+                  <el-dropdown-item command="revalidate">{{ t('policies.revalidate') }}</el-dropdown-item>
+                  <el-dropdown-item command="edit">{{ t('common.edit') }}</el-dropdown-item>
+                  <el-dropdown-item command="editYaml">{{ t('policies.editYaml') }}</el-dropdown-item>
+                  <el-dropdown-item command="runOnce" divided>{{ t('policies.runOnce') }}</el-dropdown-item>
+                  <el-dropdown-item command="pause">{{ row.spec?.paused ? t('policies.resume') : t('policies.pause') }}</el-dropdown-item>
+                  <el-dropdown-item command="delete" divided>{{ t('common.delete') }}</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </template>
         </el-table-column>
       </el-table>
     </el-card>
 
+    <!-- View drawer: read-only display of policy spec + status + raw CR -->
+    <el-drawer
+      v-model="viewDrawerVisible"
+      :title="t('policies.viewTitle', { name: viewRow?.metadata?.name })"
+      direction="rtl"
+      size="640px"
+      :destroy-on-close="true"
+    >
+      <div v-if="viewRow" class="view-body">
+        <el-descriptions :column="1" border size="small" class="view-section">
+          <el-descriptions-item :label="t('common.name')">
+            <code>{{ viewRow.metadata.name }}</code>
+          </el-descriptions-item>
+          <el-descriptions-item :label="t('policies.action')">
+            {{ actionTextOf(viewRow) }}
+          </el-descriptions-item>
+          <el-descriptions-item :label="t('policies.frequency')">
+            {{ frequencyLabelOf(viewRow) }} (<code>{{ viewRow.spec?.schedule }}</code>)
+          </el-descriptions-item>
+          <el-descriptions-item :label="t('common.namespace')">
+            {{ (viewRow.spec?.template?.includedNamespaces || ['*']).join(', ') }}
+          </el-descriptions-item>
+          <el-descriptions-item :label="t('policies.exportRetention')">
+            {{ formatTTL(viewRow.spec?.template?.ttl) }}
+          </el-descriptions-item>
+          <el-descriptions-item :label="t('policies.storageProfile')">
+            <code>{{ viewRow.spec?.template?.storageLocation || 'default' }}</code>
+          </el-descriptions-item>
+          <el-descriptions-item :label="t('common.status')">
+            <el-tag :type="viewRow.spec?.paused ? 'warning' : 'success'" size="small">
+              {{ viewRow.spec?.paused ? t('policies.paused') : t('policies.active') }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item v-if="viewRow.status?.lastBackup" :label="t('policies.lastRunTime')">
+            {{ formatTime(viewRow.status.lastBackup) }}
+          </el-descriptions-item>
+        </el-descriptions>
+      </div>
+    </el-drawer>
+
+    <!-- Edit YAML drawer: full CR as YAML, read-only for now -->
+    <el-drawer
+      v-model="yamlDrawerVisible"
+      :title="t('policies.editYaml')"
+      direction="rtl"
+      size="720px"
+      :destroy-on-close="true"
+    >
+      <div v-if="yamlRow" class="view-body">
+        <pre class="yaml-block">{{ asYaml(yamlRow) }}</pre>
+        <p class="form-hint" style="margin-top: 12px">
+          {{ t('policies.yamlReadonlyHint') }}
+        </p>
+      </div>
+    </el-drawer>
+
     <!-- Create Policy Dialog (v0.7 Actions model) -->
-    <el-dialog v-model="showCreateDialog" title="Create Backup Policy" width="680px" top="6vh">
-      <el-form :model="createForm" label-width="180px">
-        <el-form-item label="Policy Name" required>
+    <el-drawer
+      v-model="showCreateDialog"
+      :title="t('policies.newPolicy')"
+      direction="rtl"
+      size="560px"
+      :destroy-on-close="false"
+      class="new-policy-drawer"
+    >
+      <el-form :model="createForm" label-position="top" class="kasten-form">
+        <el-form-item required>
+          <template #label>
+            <div class="kasten-label-block">
+              <strong>{{ t('common.name') }}</strong>
+              <span class="kasten-label-help">{{ t('policies.nameHelp') }}</span>
+            </div>
+          </template>
           <el-input v-model="createForm.name" placeholder="daily-backup" />
         </el-form-item>
-        <el-form-item label="Included Namespaces">
+
+        <el-form-item>
+          <template #label><strong>{{ t('policies.comments') }}</strong></template>
+          <el-input
+            v-model="createForm.comments"
+            type="textarea"
+            :rows="2"
+            :placeholder="t('policies.commentsPlaceholder')"
+          />
+        </el-form-item>
+
+        <!-- Action button-group: L1 Snapshot vs L2 Snapshot+Export -->
+        <el-form-item>
+          <template #label>
+            <div class="kasten-label-block">
+              <strong>{{ t('policies.action') }}</strong>
+              <span class="kasten-label-help">{{ t('policies.actionHelp') }}</span>
+            </div>
+          </template>
+          <div class="kasten-pill-group">
+            <button
+              type="button"
+              class="kasten-pill"
+              :class="{ 'is-active': !createForm.export.enabled }"
+              @click="selectAction('snapshot')"
+            >L1 {{ t('policies.actionSnapshot').replace(/^L1\s*/, '') }}</button>
+            <button
+              type="button"
+              class="kasten-pill"
+              :class="{ 'is-active': createForm.export.enabled }"
+              @click="selectAction('snapshot-export')"
+            >L2 {{ t('policies.actionSnapshotExport').replace(/^L2\s*/, '') }}</button>
+          </div>
+          <p v-if="!createForm.export.enabled" class="action-disabled-warning" style="margin-top: 10px">
+            ⚠ {{ t('policies.snapshotOnlyWarn') }}
+          </p>
+        </el-form-item>
+
+        <!-- Backup Frequency: 6 preset buttons (Kasten parity) -->
+        <el-form-item>
+          <template #label><strong>{{ t('policies.backupFrequency') }}</strong></template>
+          <div class="kasten-pill-grid">
+            <button
+              v-for="f in frequencyChoices"
+              :key="f.key"
+              type="button"
+              class="kasten-pill"
+              :class="{ 'is-active': createForm.frequency === f.key }"
+              @click="selectFrequency(f.key)"
+            >{{ f.label }}</button>
+          </div>
+          <el-input
+            v-if="createForm.frequency === 'custom'"
+            v-model="createForm.snapshot.schedule"
+            placeholder="0 * * * *  (cron)"
+            style="margin-top: 8px"
+          />
+        </el-form-item>
+
+        <!-- Snapshot Retention (always shown) -->
+        <el-form-item>
+          <template #label><strong>{{ t('policies.snapshotRetention') }}</strong></template>
+          <el-select v-model="createForm.snapshot.retention" style="width: 100%">
+            <el-option label="6 hours" value="6h" />
+            <el-option label="12 hours" value="12h" />
+            <el-option :label="`24 hours (${t('common.create').toLowerCase() === 'create' ? 'default' : '默认'})`" value="24h" />
+            <el-option label="3 days" value="72h" />
+            <el-option label="7 days" value="168h" />
+          </el-select>
+        </el-form-item>
+
+        <!-- Export-only fields (L2 mode) -->
+        <template v-if="createForm.export.enabled">
+          <el-form-item>
+            <template #label><strong>{{ t('policies.exportRetention') }}</strong></template>
+            <el-select v-model="createForm.export.retention" style="width: 100%">
+              <el-option label="7 days" value="168h" />
+              <el-option label="14 days" value="336h" />
+              <el-option :label="`30 days (${t('common.create').toLowerCase() === 'create' ? 'default' : '默认'})`" value="720h" />
+              <el-option label="60 days" value="1440h" />
+              <el-option label="90 days" value="2160h" />
+            </el-select>
+          </el-form-item>
+          <el-form-item>
+            <template #label><strong>{{ t('policies.storageProfile') }}</strong></template>
+            <el-input v-model="createForm.export.storageLocation" placeholder="default" />
+          </el-form-item>
+        </template>
+
+        <!-- Volume Mode -->
+        <el-form-item>
+          <template #label>
+            <div class="kasten-label-block">
+              <strong>{{ t('policies.volumeMode') }}</strong>
+              <span class="kasten-label-help">{{ t('policies.volumeModeHelp') }}</span>
+            </div>
+          </template>
+          <div class="kasten-pill-group">
+            <button
+              type="button"
+              class="kasten-pill"
+              :class="{ 'is-active': createForm.snapshot.volumeMode === 'filesystem' }"
+              @click="createForm.snapshot.volumeMode = 'filesystem'"
+            >📁 Filesystem</button>
+            <button
+              type="button"
+              class="kasten-pill"
+              :class="{ 'is-active': createForm.snapshot.volumeMode === 'csi' }"
+              @click="createForm.snapshot.volumeMode = 'csi'"
+            >📸 CSI</button>
+          </div>
+        </el-form-item>
+
+        <!-- Resources (Included Namespaces) -->
+        <el-form-item>
+          <template #label>
+            <div class="kasten-label-block">
+              <strong>{{ t('policies.resources') }}</strong>
+              <span class="kasten-label-help">{{ t('policies.resourcesHelp') }}</span>
+            </div>
+          </template>
           <el-select
             v-model="createForm.includedNamespaces"
             multiple
             filterable
             allow-create
-            placeholder="All namespaces (default)"
+            :placeholder="t('policies.namespacesPlaceholder')"
             style="width: 100%"
           >
             <el-option v-for="ns in namespaces" :key="ns" :label="ns" :value="ns" />
           </el-select>
         </el-form-item>
 
-        <!-- ============ ACTIONS BLOCK 1: SNAPSHOT ============ -->
-        <div class="action-block snapshot-block">
-          <div class="action-block-header">
-            <span class="action-block-icon">📸</span>
-            <span class="action-block-title">Snapshot</span>
-            <span class="action-block-subtitle">Local · L1</span>
-            <el-checkbox v-model="createForm.snapshot.enabled" disabled style="margin-left: auto">
-              Always on
-            </el-checkbox>
-          </div>
-          <el-form-item label="Snapshot Schedule" required>
-            <el-select v-model="createForm.snapshot.schedulePreset" @change="onSnapshotPresetChange" style="width: 56%; margin-right: 8px">
-              <el-option label="Every hour" value="0 * * * *" />
-              <el-option label="Every 6 hours" value="0 */6 * * *" />
-              <el-option label="Every 12 hours" value="0 */12 * * *" />
-              <el-option label="Every day at midnight" value="0 0 * * *" />
-              <el-option label="Custom" value="custom" />
-            </el-select>
-            <el-input
-              v-if="createForm.snapshot.schedulePreset === 'custom'"
-              v-model="createForm.snapshot.schedule"
-              placeholder="0 * * * *"
-              style="width: 40%"
-            />
-          </el-form-item>
-          <el-form-item label="Snapshot Retention">
-            <el-select v-model="createForm.snapshot.retention" style="width: 100%">
-              <el-option label="6 hours" value="6h" />
-              <el-option label="12 hours" value="12h" />
-              <el-option label="24 hours (default)" value="24h" />
-              <el-option label="3 days" value="72h" />
-              <el-option label="7 days" value="168h" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="Volume Mode">
-            <el-radio-group v-model="createForm.snapshot.volumeMode">
-              <el-radio-button value="filesystem">📁 Filesystem</el-radio-button>
-              <el-radio-button value="csi">📸 CSI</el-radio-button>
-            </el-radio-group>
-            <span class="form-hint">CSI requires the namespace's PVCs to use a snapshot-capable StorageClass.</span>
-          </el-form-item>
-
-          <!-- Capability detection result (only shown for CSI mode + selected ns) -->
-          <el-form-item v-if="createForm.snapshot.volumeMode === 'csi' && createForm.includedNamespaces.length > 0" label=" ">
-            <div v-loading="capabilityLoading" class="capability-result">
-              <div v-if="capabilityError" class="capability-error">
-                ⚠ Failed to check storage capability: {{ capabilityError }}
-              </div>
-              <template v-else-if="capabilityResults.length > 0">
-                <div v-for="r in capabilityResults" :key="r.namespace" class="capability-row">
-                  <div class="capability-ns">
-                    <span class="capability-ns-name">{{ r.namespace }}</span>
-                    <el-tag v-if="r.incompatibleCount === 0" type="success" size="small">CSI ready</el-tag>
-                    <el-tag v-else type="danger" size="small">
-                      {{ r.incompatibleCount }} incompatible PVC{{ r.incompatibleCount > 1 ? 's' : '' }}
-                    </el-tag>
-                  </div>
-                  <ul v-if="r.incompatibleCount > 0" class="capability-pvc-list">
-                    <li v-for="p in r.pvcs.filter(x => !x.csiSnapshot)" :key="p.pvc">
-                      <code>{{ p.pvc }}</code> on <code>{{ p.storageClass || '—' }}</code>
-                      <span class="capability-reason">— {{ p.reason }}</span>
-                    </li>
-                  </ul>
-                </div>
-                <div v-if="csiBlocked()" class="capability-blocker">
-                  ⛔ Policy creation blocked: switch to <strong>Filesystem</strong> mode, or migrate the listed PVCs to a CSI-snapshot-capable StorageClass.
-                </div>
-              </template>
+        <!-- Capability detection result (only shown for CSI mode + selected ns) -->
+        <el-form-item v-if="createForm.snapshot.volumeMode === 'csi' && createForm.includedNamespaces.length > 0">
+          <template #label><strong>{{ t('policies.csiCheck') }}</strong></template>
+          <div v-loading="capabilityLoading" class="capability-result">
+            <div v-if="capabilityError" class="capability-error">
+              ⚠ {{ capabilityError }}
             </div>
-          </el-form-item>
-        </div>
-
-        <!-- ============ ACTIONS BLOCK 2: EXPORT ============ -->
-        <div class="action-block export-block" :class="{ 'is-disabled': !createForm.export.enabled }">
-          <div class="action-block-header">
-            <span class="action-block-icon">📦</span>
-            <span class="action-block-title">Export to Object Storage</span>
-            <span class="action-block-subtitle">L2 · Durable Backup</span>
-            <el-checkbox v-model="createForm.export.enabled" @change="onExportToggle" style="margin-left: auto">
-              Enable
-            </el-checkbox>
+            <template v-else-if="capabilityResults.length > 0">
+              <div v-for="r in capabilityResults" :key="r.namespace" class="capability-row">
+                <div class="capability-ns">
+                  <span class="capability-ns-name">{{ r.namespace }}</span>
+                  <el-tag v-if="r.incompatibleCount === 0" type="success" size="small">CSI ready</el-tag>
+                  <el-tag v-else type="danger" size="small">
+                    {{ r.incompatibleCount }} incompatible
+                  </el-tag>
+                </div>
+                <ul v-if="r.incompatibleCount > 0" class="capability-pvc-list">
+                  <li v-for="p in r.pvcs.filter(x => !x.csiSnapshot)" :key="p.pvc">
+                    <code>{{ p.pvc }}</code> on <code>{{ p.storageClass || '—' }}</code>
+                    <span class="capability-reason">— {{ p.reason }}</span>
+                  </li>
+                </ul>
+              </div>
+              <div v-if="csiBlocked()" class="capability-blocker">
+                ⛔ {{ t('policies.csiBlocker') }}
+              </div>
+            </template>
           </div>
-          <template v-if="createForm.export.enabled">
-            <el-form-item label="Export Schedule">
-              <el-select v-model="createForm.export.schedulePreset" @change="onExportPresetChange" style="width: 56%; margin-right: 8px">
-                <el-option label="Every day at midnight (default)" value="0 0 * * *" />
-                <el-option label="Every 6 hours" value="0 */6 * * *" />
-                <el-option label="Every 12 hours" value="0 */12 * * *" />
-                <el-option label="Every week (Sunday)" value="0 0 * * 0" />
-                <el-option label="Same as Snapshot" value="same" />
-                <el-option label="Custom" value="custom" />
-              </el-select>
-              <el-input
-                v-if="createForm.export.schedulePreset === 'custom'"
-                v-model="createForm.export.schedule"
-                placeholder="0 0 * * *"
-                style="width: 40%"
-              />
-            </el-form-item>
-            <el-form-item label="Export Retention">
-              <el-select v-model="createForm.export.retention" style="width: 100%">
-                <el-option label="7 days" value="168h" />
-                <el-option label="14 days" value="336h" />
-                <el-option label="30 days (default)" value="720h" />
-                <el-option label="60 days" value="1440h" />
-                <el-option label="90 days" value="2160h" />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="Storage Profile">
-              <el-input v-model="createForm.export.storageLocation" placeholder="default" />
-            </el-form-item>
-          </template>
-          <p v-else class="action-disabled-warning">
-            ⚠ Without Export, this policy produces <strong>snapshot-only restore points</strong> — these are
-            <strong>not durable backups</strong>. Data will be lost if the underlying storage fails.
-            <br />
-            Use snapshot-only mode for dev/staging environments or fast rollback scenarios only.
-          </p>
-        </div>
+        </el-form-item>
       </el-form>
+
       <template #footer>
-        <el-button @click="showCreateDialog = false">Cancel</el-button>
-        <el-button
-          type="primary"
-          @click="handleCreate"
-          :loading="creating"
-          :disabled="csiBlocked()"
-        >
-          Create
-        </el-button>
+        <div class="drawer-footer">
+          <el-button @click="showCreateDialog = false">{{ t('common.cancel') }}</el-button>
+          <el-button
+            type="primary"
+            @click="handleCreate"
+            :loading="creating"
+            :disabled="csiBlocked()"
+          >
+            {{ t('common.create') }}
+          </el-button>
+        </div>
       </template>
-    </el-dialog>
+    </el-drawer>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-
-const { t } = useI18n()
-import { Plus } from '@element-plus/icons-vue'
-import { getSchedules, createSchedule, patchSchedule, deleteSchedule, getNamespaces, getNamespaceStorageCapability } from '../api/velero'
+import { Plus, Search } from '@element-plus/icons-vue'
+import {
+  getSchedules, getSchedule, createSchedule, patchSchedule, deleteSchedule,
+  runScheduleOnce, getNamespaces, getNamespaceStorageCapability
+} from '../api/velero'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
+const { t } = useI18n()
+
 const schedules = ref([])
+
+// Kasten-style filter toolbar state
+const actionFilter = ref('all')
+const freqFilter = ref('all')
+const nameFilter = ref('')
+const viewDrawerVisible = ref(false)
+const yamlDrawerVisible = ref(false)
+const viewRow = ref(null)
+const yamlRow = ref(null)
+
+// Derive what action the Velero Schedule performs (Snapshot vs Snapshot+Export)
+// from annotations set by Create dialog (v0.7 Actions model).
+const actionTextOf = (row) => {
+  const ann = row?.metadata?.annotations || {}
+  if (ann['supkube.io/export-enabled'] === 'false') return t('policies.actionSnapshot')
+  return t('policies.actionSnapshotExport')
+}
+
+// Map cron expression to friendly bucket. Same presets as Advisor.
+const FREQ_PRESETS = {
+  '0 * * * *': 'hourly',
+  '0 */6 * * *': 'every6h',
+  '0 */12 * * *': 'every12h',
+  '0 0 * * *': 'daily',
+  '0 0 * * 0': 'weekly',
+  '0 0 1 * *': 'monthly'
+}
+const frequencyKeyOf = (row) => FREQ_PRESETS[(row?.spec?.schedule || '').trim()] || 'custom'
+const frequencyLabelOf = (row) => {
+  const k = frequencyKeyOf(row)
+  if (k === 'custom') return t('advisor.schedule.custom', { cron: row?.spec?.schedule || '' })
+  return t(`advisor.schedule.${k}`)
+}
+
+// Validation is heuristic — Velero has no single "valid" field. We check
+// the schedule has a cron and at least one selector in the template.
+const validationOf = (row) => {
+  const hasCron = !!row?.spec?.schedule
+  const t1 = row?.spec?.template
+  const hasTemplate = !!(t1?.includedNamespaces?.length || t1?.includedResources?.length || t1?.labelSelector)
+  if (hasCron && hasTemplate) return { key: 'valid', icon: '✓', label: t('policies.valid') }
+  return { key: 'invalid', icon: '⚠', label: t('policies.invalid') }
+}
+
+const resourceNamespaces = (row) => {
+  const ns = row?.spec?.template?.includedNamespaces || []
+  return ns.length === 0 ? ['*'] : ns
+}
+
+const filteredSchedules = computed(() => {
+  const name = nameFilter.value.trim().toLowerCase()
+  return schedules.value.filter((row) => {
+    if (actionFilter.value !== 'all') {
+      const isSnapOnly = row?.metadata?.annotations?.['supkube.io/export-enabled'] === 'false'
+      if (actionFilter.value === 'Snapshot' && !isSnapOnly) return false
+      if (actionFilter.value === 'Snapshot+Export' && isSnapOnly) return false
+    }
+    if (freqFilter.value !== 'all') {
+      const k = frequencyKeyOf(row)
+      if (freqFilter.value === 'hourly' && !['hourly', 'every6h', 'every12h'].includes(k)) return false
+      if (freqFilter.value === 'daily' && k !== 'daily') return false
+      if (freqFilter.value === 'weekly' && k !== 'weekly') return false
+    }
+    if (name && !(row.metadata?.name || '').toLowerCase().includes(name)) return false
+    return true
+  })
+})
+
+// Minimal YAML serializer for the View YAML drawer. Strips status churn,
+// keeps spec readable. Not for round-trip editing (drawer is read-only in
+// v0.7.8; v0.8 swaps in a Monaco editor).
+function toYaml(v, indent) {
+  const pad = '  '.repeat(indent)
+  if (v === null || v === undefined) return 'null'
+  if (typeof v === 'string') {
+    if (v.includes('\n') || v.includes(':') || v.includes('#')) return JSON.stringify(v)
+    return v
+  }
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v)
+  if (Array.isArray(v)) {
+    if (v.length === 0) return '[]'
+    return '\n' + v.map(item => `${pad}- ${toYaml(item, indent + 1).trimStart()}`).join('\n')
+  }
+  if (typeof v === 'object') {
+    const keys = Object.keys(v).filter(k => v[k] !== undefined && v[k] !== null)
+    if (keys.length === 0) return '{}'
+    return '\n' + keys.map(k => {
+      const child = toYaml(v[k], indent + 1)
+      if (child.startsWith('\n')) return `${pad}${k}:${child}`
+      return `${pad}${k}: ${child}`
+    }).join('\n')
+  }
+  return String(v)
+}
+const asYaml = (obj) => {
+  if (!obj) return ''
+  const clean = {
+    apiVersion: obj.apiVersion || 'velero.io/v1',
+    kind: obj.kind || 'Schedule',
+    metadata: {
+      name: obj.metadata?.name,
+      namespace: obj.metadata?.namespace,
+      labels: obj.metadata?.labels,
+      annotations: obj.metadata?.annotations
+    },
+    spec: obj.spec
+  }
+  return toYaml(clean, 0).trim()
+}
+
+const handleCommand = (cmd, row) => {
+  switch (cmd) {
+    case 'view': openView(row); break
+    case 'revalidate': handleRevalidate(row); break
+    case 'edit': handleEdit(row); break
+    case 'editYaml': openYaml(row); break
+    case 'runOnce': handleRunOnce(row); break
+    case 'pause': togglePause(row); break
+    case 'delete': handleDelete(row); break
+  }
+}
+
+const openView = async (row) => {
+  try {
+    const res = await getSchedule(row.metadata.name)
+    viewRow.value = res.data
+  } catch {
+    viewRow.value = row
+  }
+  viewDrawerVisible.value = true
+}
+
+const openYaml = async (row) => {
+  try {
+    const res = await getSchedule(row.metadata.name)
+    yamlRow.value = res.data
+  } catch {
+    yamlRow.value = row
+  }
+  yamlDrawerVisible.value = true
+}
+
+const handleRevalidate = (row) => {
+  const v = validationOf(row)
+  if (v.key === 'valid') {
+    ElMessage.success(t('policies.revalidateOk'))
+  } else {
+    ElMessage.warning(t('policies.revalidateFail'))
+  }
+}
+
+const handleEdit = (row) => {
+  // v0.7.8 placeholder — full Edit form lands in v0.8 alongside RBAC.
+  // Open the YAML drawer for now so the user can at least inspect the spec.
+  ElMessage.info(t('policies.editComingSoon'))
+  openYaml(row)
+}
+
+const handleRunOnce = async (row) => {
+  const name = row?.metadata?.name
+  if (!name) return
+  try {
+    await ElMessageBox.confirm(
+      t('policies.runOnceConfirmBody', { name }),
+      t('policies.runOnceConfirmTitle'),
+      { confirmButtonText: t('policies.runOnce'), cancelButtonText: t('common.cancel'), type: 'info' }
+    )
+  } catch { return }
+  try {
+    const res = await runScheduleOnce(name)
+    ElMessage.success(t('policies.runOnceStarted', { backup: res.data?.backupName || '' }))
+  } catch (e) {
+    ElMessage.error('Run Once failed: ' + (e.response?.data?.error || e.message))
+  }
+}
 const namespaces = ref([])
 const loading = ref(false)
 const creating = ref(false)
 const showCreateDialog = ref(false)
+// (schedules + filter state already declared above near the toolbar logic)
 
 // v0.7 Actions model: Snapshot (always on) + Export (default on, opt-out
 // triggers confirmation). Both have independent schedule + retention in the
@@ -240,11 +577,16 @@ const showCreateDialog = ref(false)
 // the longer ttl, with intent recorded in annotations for v0.9 to consume.
 const defaultForm = () => ({
   name: '',
+  comments: '',
+  // Top-level frequency choice (Kasten parity). Each preset maps to a
+  // snapshot.schedule cron via FREQUENCY_TO_CRON below. Default Daily =
+  // safe baseline for most workloads.
+  frequency: 'daily',
   includedNamespaces: [],
   snapshot: {
     enabled: true,
-    schedulePreset: '0 * * * *',
-    schedule: '0 * * * *',
+    schedulePreset: '0 0 * * *',
+    schedule: '0 0 * * *',
     retention: '24h',
     volumeMode: 'filesystem' // 'filesystem' | 'csi'
   },
@@ -257,6 +599,51 @@ const defaultForm = () => ({
   }
 })
 const createForm = ref(defaultForm())
+
+// Kasten-style frequency preset map. Each option drives BOTH the snapshot
+// and export schedule (export stays in lock-step by default — v0.9 will
+// expose an "Advanced: separate cadences" toggle).
+const FREQUENCY_TO_CRON = {
+  hourly: '0 * * * *',
+  every6h: '0 */6 * * *',
+  daily: '0 0 * * *',
+  weekly: '0 0 * * 0',
+  monthly: '0 0 1 * *',
+  custom: '0 * * * *'
+}
+const frequencyChoices = computed(() => [
+  { key: 'hourly', label: t('advisor.schedule.hourly') },
+  { key: 'every6h', label: t('advisor.schedule.every6h') },
+  { key: 'daily', label: t('advisor.schedule.daily') },
+  { key: 'weekly', label: t('advisor.schedule.weekly') },
+  { key: 'monthly', label: t('advisor.schedule.monthly') },
+  { key: 'custom', label: t('policies.frequencyCustom') }
+])
+
+const selectFrequency = (key) => {
+  createForm.value.frequency = key
+  const cron = FREQUENCY_TO_CRON[key]
+  if (cron) {
+    createForm.value.snapshot.schedule = cron
+    createForm.value.snapshot.schedulePreset = cron
+    createForm.value.export.schedule = cron
+    createForm.value.export.schedulePreset = cron
+  }
+}
+
+// Action button-group handler: snapshot-only vs snapshot+export. Mirrors
+// the original Export checkbox toggle behavior (including the guardrail
+// confirm dialog when the user disables Export).
+const selectAction = (mode) => {
+  if (mode === 'snapshot' && createForm.value.export.enabled) {
+    // Reuse the existing snapshot-only guardrail dialog.
+    onExportToggle(false)
+    return
+  }
+  if (mode === 'snapshot-export' && !createForm.value.export.enabled) {
+    createForm.value.export.enabled = true
+  }
+}
 
 // Capability detection — when user picks CSI mode + selected namespaces, check
 // each namespace's PVCs are on CSI-snapshot-capable StorageClasses. We block
@@ -522,8 +909,160 @@ onMounted(() => {
   align-items: center;
   margin-bottom: 16px;
 }
+.page-header { align-items: flex-start; }
+.page-header-text { flex: 1; }
 .page-header h3 {
+  margin: 0 0 4px 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+.page-desc {
   margin: 0;
+  color: #909399;
+  font-size: 13px;
+  max-width: 880px;
+  line-height: 1.5;
+}
+
+/* Kasten-style toolbar */
+.filter-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+}
+.filter-action, .filter-freq { width: 180px; }
+.filter-name { width: 260px; }
+.filter-spacer { flex: 1; }
+.filter-summary { font-size: 13px; color: #606266; }
+
+/* Table cells */
+.policy-name { font-weight: 600; color: #303133; }
+.validation-cell { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; }
+.validation-valid { color: #67c23a; }
+.validation-invalid { color: #e6a23c; }
+.ns-chip {
+  background: #ecf5ff !important;
+  border-color: #d9ecff !important;
+  color: #409eff !important;
+  font-size: 11px;
+  font-weight: 500;
+  margin-right: 4px;
+}
+.action-text { font-size: 13px; color: #303133; }
+.freq-cell { display: flex; flex-direction: column; gap: 2px; }
+.freq-human { font-size: 13px; color: #303133; font-weight: 500; }
+.freq-cron {
+  font-family: 'SF Mono', Menlo, monospace;
+  font-size: 11px;
+  color: #909399;
+  background: transparent;
+  padding: 0;
+}
+.muted { color: #c0c4cc; font-size: 13px; }
+
+/* Kebab */
+.more-btn { padding: 4px 8px; font-size: 18px; color: #606266; }
+.dots { font-size: 20px; line-height: 1; letter-spacing: 1px; }
+:deep(.el-table__row:hover) .more-btn { color: #409eff; }
+
+/* Drawers */
+.view-body { padding: 0 4px; }
+.view-section { margin-bottom: 16px; }
+/* Kasten-style New Policy drawer */
+:deep(.new-policy-drawer .el-drawer__header) {
+  margin-bottom: 0;
+  padding: 18px 24px;
+  border-bottom: 1px solid #ebeef5;
+}
+:deep(.new-policy-drawer .el-drawer__title) {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1f2329;
+  text-align: center;
+  width: 100%;
+}
+:deep(.new-policy-drawer .el-drawer__body) {
+  padding: 20px 24px;
+}
+.kasten-form .el-form-item {
+  margin-bottom: 22px;
+}
+.kasten-label-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.4;
+}
+.kasten-label-block strong {
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+}
+.kasten-label-help {
+  font-size: 12px;
+  color: #909399;
+  font-weight: 400;
+}
+.kasten-pill-group {
+  display: flex;
+  gap: 0;
+  width: 100%;
+}
+.kasten-pill-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.kasten-pill {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid #dcdfe6;
+  background: #ffffff;
+  font-size: 13px;
+  font-weight: 500;
+  color: #606266;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.kasten-pill-group .kasten-pill:first-child {
+  border-radius: 6px 0 0 6px;
+}
+.kasten-pill-group .kasten-pill:last-child {
+  border-radius: 0 6px 6px 0;
+  border-left-width: 0;
+}
+.kasten-pill-grid .kasten-pill {
+  border-radius: 6px;
+}
+.kasten-pill:hover:not(.is-active) {
+  border-color: #c0c4cc;
+  background: #f5f7fa;
+}
+.kasten-pill.is-active {
+  background: #4f46e5;
+  border-color: #4f46e5;
+  color: #ffffff;
+}
+.drawer-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 24px;
+  border-top: 1px solid #ebeef5;
+}
+
+.yaml-block {
+  background: #1a1a2e;
+  color: #a8d8a8;
+  padding: 16px;
+  border-radius: 6px;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre;
+  overflow-x: auto;
+  max-height: calc(100vh - 200px);
 }
 
 /* Action blocks in Create Policy dialog (v0.7 Actions model) */

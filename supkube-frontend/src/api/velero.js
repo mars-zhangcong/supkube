@@ -53,6 +53,8 @@ export const getRestoreResults = (name) => api.get(`/restores/${name}/results`)
 export const getSchedules = () => api.get('/schedules')
 export const createSchedule = (data) => api.post('/schedules', data)
 export const patchSchedule = (name, data) => api.patch(`/schedules/${name}`, data)
+export const runScheduleOnce = (name) => api.post(`/schedules/${name}/run-once`)
+export const getSchedule = (name) => api.get(`/schedules/${name}`)
 export const deleteSchedule = (name) => api.delete(`/schedules/${name}`)
 
 // Storage locations

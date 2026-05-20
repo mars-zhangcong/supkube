@@ -51,7 +51,9 @@ func Run() error {
 		// Schedules
 		api.GET("/schedules", v1.ListSchedules)
 		api.POST("/schedules", v1.CreateSchedule)
+		api.GET("/schedules/:name", v1.GetSchedule)
 		api.PATCH("/schedules/:name", v1.PatchSchedule)
+		api.POST("/schedules/:name/run-once", v1.RunScheduleOnce)
 		api.DELETE("/schedules/:name", v1.DeleteSchedule)
 
 		// Storage locations

@@ -2,8 +2,8 @@ apiVersion: v2
 name: supkube
 description: Kubernetes data protection UI powered by Velero
 type: application
-version: 0.3.7
-appVersion: "0.7.7-alpha"
+version: 0.3.8
+appVersion: "0.7.8-alpha"
 keywords:
   - kubernetes
   - velero
