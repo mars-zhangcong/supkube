@@ -118,7 +118,15 @@ export default {
     profile: '存储',
     createdAt: '创建时间',
     expiresAt: '过期时间',
-    manual: '（手动）'
+    manual: '（手动）',
+    deleteTitle: '删除还原点',
+    deleteConfirmBody: '删除还原点 <code>{name}</code>？Velero 将级联删除以下资源：',
+    deleteBullet1: '关联 Storage Profile（对象存储）中的备份 tarball 与元数据',
+    deleteBullet2: 'CSI VolumeSnapshot 与 VolumeSnapshotContent（仅 CSI 模式）',
+    deleteBullet3: 'Filesystem 模式下的 PodVolumeBackup（Restic/Kopia）',
+    deleteBullet4: 'Backup CR 自身',
+    deleteIrreversible: '该操作不可恢复，删除后数据无法找回。',
+    deleteStarted: '"{name}" 的级联删除已启动 — Velero 正在处理 DeleteBackupRequest。完成后该行将消失（通常 30 秒内）。'
   },
   restores: {
     title: '恢复',

@@ -2,6 +2,7 @@ package v1
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -17,7 +18,7 @@ import (
 func GetStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "ok",
-		"version": "0.7.8-alpha",
+		"version": "0.7.9-alpha",
 	})
 }
 
@@ -138,6 +139,20 @@ func GetBackup(c *gin.Context) {
 }
 
 // DeleteBackup deletes a backup
+// DeleteBackup performs a CASCADE delete: removes the backup tarball from
+// object storage, deletes any CSI VolumeSnapshot/VolumeSnapshotContent the
+// backup created, deletes PodVolumeBackups for the Restic/Kopia path, AND
+// then removes the Backup CR itself.
+//
+// Previous SupKube versions (pre v0.7.9) just called cl.Delete(Backup) which
+// only removed the K8s object — Velero's BackupSyncController would
+// silently re-sync it back from the still-present BSL data 60s later, AND
+// the underlying storage usage was never reclaimed. That was a real bug;
+// users thought they were freeing space when they weren't.
+//
+// The right way is `DeleteBackupRequest` CRD. Velero's controller picks
+// it up and performs the full cascade. We create one DBR per delete; the
+// controller handles dedup/in-progress detection.
 func DeleteBackup(c *gin.Context) {
 	name := c.Param("name")
 	cl, err := k8s.GetRuntimeClient()
@@ -145,16 +160,39 @@ func DeleteBackup(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	// Confirm the Backup exists first so the API returns 404 (not 500)
+	// when the user references something gone.
 	backup := &velerov1.Backup{}
 	if err := cl.Get(context.Background(), client.ObjectKey{Name: name, Namespace: "velero"}, backup); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
-	if err := cl.Delete(context.Background(), backup); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+
+	// DBR name: <backup>-<ts>. Velero auto-cleans DBRs after processing;
+	// the unique suffix lets us re-trigger a delete if a prior one stalled.
+	dbrName := fmt.Sprintf("%s-delete-%s", name, time.Now().UTC().Format("20060102150405"))
+	dbr := &velerov1.DeleteBackupRequest{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      dbrName,
+			Namespace: "velero",
+			Labels: map[string]string{
+				"velero.io/backup-name": name,
+				"supkube.io/managed-by": "supkube",
+			},
+		},
+		Spec: velerov1.DeleteBackupRequestSpec{
+			BackupName: name,
+		},
+	}
+	if err := cl.Create(context.Background(), dbr); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create DeleteBackupRequest: " + err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "backup deleted"})
+	c.JSON(http.StatusAccepted, gin.H{
+		"message":              "Delete in progress (cascade)",
+		"deleteBackupRequest":  dbrName,
+		"backupName":           name,
+	})
 }
 
 // ListRestores returns all Velero restores

@@ -459,15 +459,30 @@ const handleDelete = async (row) => {
   const name = row?.metadata?.name
   if (!name) return
   try {
-    await ElMessageBox.confirm(
-      `Delete restore point "${name}"? Backup data in object storage is also removed via Velero's standard delete flow.`,
-      'Delete Restore Point',
-      { confirmButtonText: 'Delete', cancelButtonText: 'Cancel', type: 'warning' }
-    )
+    await ElMessageBox({
+      title: t('restorePoints.deleteTitle'),
+      // dangerouslyUseHTMLString so we can render the per-asset bullet list.
+      message: t('restorePoints.deleteConfirmBody', { name }) +
+        `<ul style="margin: 8px 0 0 0; padding-left: 18px; font-size: 13px; line-height: 1.7;">
+          <li>${t('restorePoints.deleteBullet1')}</li>
+          <li>${t('restorePoints.deleteBullet2')}</li>
+          <li>${t('restorePoints.deleteBullet3')}</li>
+          <li>${t('restorePoints.deleteBullet4')}</li>
+         </ul>
+         <p style="margin: 10px 0 0 0; color: #c45656; font-size: 13px;">
+           ⚠ ${t('restorePoints.deleteIrreversible')}
+         </p>`,
+      dangerouslyUseHTMLString: true,
+      showCancelButton: true,
+      confirmButtonText: t('common.delete'),
+      cancelButtonText: t('common.cancel'),
+      type: 'warning',
+      confirmButtonClass: 'el-button--danger'
+    })
   } catch { return }
   try {
     await deleteBackup(name)
-    ElMessage.success(`Restore point "${name}" deleted`)
+    ElMessage.success(t('restorePoints.deleteStarted', { name }))
     await fetchBackups()
   } catch (e) {
     ElMessage.error('Failed to delete: ' + (e.response?.data?.error || e.message))

@@ -62,7 +62,7 @@
       <el-container>
         <el-header>
           <h2>{{ t('app.title') }}</h2>
-          <span class="version-badge">v0.7.8-alpha</span>
+          <span class="version-badge">v0.7.9-alpha</span>
           <span class="header-spacer"></span>
           <el-dropdown trigger="click" @command="onLocaleChange" class="locale-dropdown">
             <button class="locale-toggle" type="button" :title="t('settings.language')">

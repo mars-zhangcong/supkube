@@ -120,7 +120,15 @@ export default {
     profile: 'Profile',
     createdAt: 'Created At',
     expiresAt: 'Expires At',
-    manual: '(manual)'
+    manual: '(manual)',
+    deleteTitle: 'Delete Restore Point',
+    deleteConfirmBody: 'Delete restore point <code>{name}</code>? Velero will cascade-delete the following:',
+    deleteBullet1: 'Backup tarball + metadata in the linked Storage Profile (object storage)',
+    deleteBullet2: 'CSI VolumeSnapshot + VolumeSnapshotContent (if CSI mode)',
+    deleteBullet3: 'PodVolumeBackups for Filesystem mode (Restic/Kopia)',
+    deleteBullet4: 'The Backup CR itself',
+    deleteIrreversible: 'This action is irreversible. Data cannot be recovered after deletion.',
+    deleteStarted: 'Cascade delete of "{name}" started — Velero is processing the DeleteBackupRequest. The row will disappear once cleanup completes (usually within 30s).'
   },
   restores: {
     title: 'Restores',
