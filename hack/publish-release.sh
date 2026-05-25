@@ -334,6 +334,17 @@ upload_blob "supkube-$CHART_VERSION.tgz" "$CHART_TGZ" "public, max-age=31536000,
 upload_blob "index.yaml" "$DIST_DIR/index.yaml" \
   "no-cache, no-store, must-revalidate, max-age=0" "application/yaml"
 
+# preflight.sh: customer-facing curl-bash compatibility checker. Tracks the
+# script in hack/preflight.sh — publish-release.sh keeps the public copy
+# in sync on every release. No-cache so an updated script (e.g. new check
+# added) reaches existing customers immediately.
+PREFLIGHT_SRC="$REPO_ROOT/hack/preflight.sh"
+if [[ -f "$PREFLIGHT_SRC" ]]; then
+  echo "  Uploading preflight.sh (customer pre-install checker)…"
+  upload_blob "preflight.sh" "$PREFLIGHT_SRC" \
+    "no-cache, no-store, must-revalidate, max-age=0" "text/x-shellscript"
+fi
+
 # ─── 9/9. Verify + print summary ─────────────────────────────────────
 echo ""
 echo "▶ [9/9] Verifying public reachability…"
@@ -361,10 +372,14 @@ cat <<EOF
 
 Customer-facing install command (now actually works):
 
+  # Recommended: run preflight first (10 checks against the target cluster)
+  curl -fsSL ${CUSTOMER_FACING_URL}preflight.sh | bash
+
   helm repo add supkube $CUSTOMER_FACING_URL
   helm repo update
-  helm install supkube supkube/supkube --version $CHART_VERSION \\
+  helm install supkube supkube/supkube --version $CHART_VERSION --devel \\
     -n supkube --create-namespace \\
+    --set eula.accept=true \\
     --set velero.enabled=true
 
 Verify history:

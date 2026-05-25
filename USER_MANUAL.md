@@ -2298,6 +2298,166 @@ kubectl get cluster.supkube.io -n supkube -o yaml > clusters.yaml
 
 ---
 
+## 23. Helm 安装参考（v0.9.1+ Install Reference）
+
+> SupKube 的 Helm chart 暴露了一套覆盖**部署形态 / 认证 / 网络 / 制品来源 / 子组件开关**的 values。
+> 本节是单一来源，对照 Kasten K10 [advanced install options](https://docs.kasten.io/latest/install/advanced/) 的对应位置。
+
+### 23.1 最小可运行命令
+
+```bash
+helm repo add supkube https://charts.supkube.com/
+helm repo update
+helm install supkube supkube/supkube --devel \
+  --namespace supkube --create-namespace \
+  --set eula.accept=true \
+  --set velero.enabled=true
+```
+
+`--devel` 是因为目前所有公开版本都是 `0.9.x-alpha.N` pre-release，正式版（无 `-alpha` 后缀）发出来后可去掉。
+
+### 23.2 装之前先跑一次 Preflight
+
+```bash
+curl -fsSL https://charts.supkube.com/preflight.sh | bash
+```
+
+预检 10 项：K8s 版本 / kubectl 连通 / Helm 版本 / cluster-admin 权限 / StorageClass / CSI snapshot CRDs / snapshot-controller / VolumeSnapshotClass / 已有 Velero / 节点资源。返回 0 = 可以装，1 = 有 FAIL 项必须先修。
+
+### 23.3 EULA 与 License（必填）
+
+| values 路径 | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| `eula.accept` | bool | `false` | **必须显式设为 `true`**——否则 `helm install` 在 template render 阶段直接 fail，并打印需要加的参数提示。这是和 Kasten 一致的安装关卡。 |
+| `eula.email` | string | `""` | 运维 / 续约联系邮箱。会写进 `cm/supkube-eula` 与 Settings → About。 |
+| `eula.company` | string | `""` | 公司 / 团队名。同上。 |
+| `license.key` | string | `""` | License Key。**当前 alpha 阶段任意字符串都通过**，空 = 社区免费版。v0.9.1+ License Manager 上线后会做签名校验。 |
+
+实际安装命令：
+```bash
+helm install supkube supkube/supkube --devel ... \
+  --set eula.accept=true \
+  --set eula.email=ops@yourco.com \
+  --set eula.company="Your Company Ltd" \
+  --set license.key=YOUR-KEY-OR-EMPTY
+```
+
+### 23.4 镜像来源与 airgap
+
+| values 路径 | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| `image.registry` | string | `""` | 全局镜像 registry 前缀。**空 = 直接从 `supkube.azurecr.io` 公开匿名拉**。设为 `harbor.internal.corp/supkube-mirror` 则所有镜像（backend/frontend/dex/minio/velero）都从这里拉。Airgap 客户必填。 |
+| `backend.image.tag` / `frontend.image.tag` | string | 与 `appVersion` 一致 | 单独覆写某个组件的 tag（hotfix 场景）。 |
+| `backend.image.pullPolicy` | string | `IfNotPresent` | 同上。 |
+
+镜像架构: SupKube 镜像是 multi-arch manifest list（amd64 + arm64），K8s 节点自动按 CPU arch 挑变种，**客户安装命令零参数即可适配 AWS Graviton / Apple Silicon docker-desktop 等 ARM 集群**。
+
+### 23.5 认证模式
+
+| values 路径 | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| `auth.enabled` | bool | `true` | 开启 OIDC 登录流程。设 `false` 进入"demo 模式"（每个请求都是 admin，仅适合本地试用）。 |
+| `auth.dex.enabled` | bool | `true` | 启用内置 Dex（自带 connector 配置）。和外部 IdP 接 OIDC 时改 `false`。 |
+| `auth.oidc.issuerURL` | string | `""` | 外部 OIDC issuer。例：`https://customer-keycloak.example.com/realms/main`。当 `dex.enabled=false` 时必填。 |
+| `auth.oidc.clientID` / `clientSecret` | string | `""` | 上面 IdP 给我们这个 client 的凭据。 |
+| `auth.rbac.enabled` | bool | `false` | 开启 group/user → role 映射。生产强烈建议开。 |
+| `auth.rbac.defaultRole` | string | `"viewer"` | 未匹配任何 binding 的用户的默认角色。 |
+| `auth.rbac.bindings` | array | `[]` | RBAC 绑定列表，详见 §12。 |
+| `auth.staticTokens.enabled` | bool | `false` | API token（给 CI/CD/Terraform 用）。详见 §14。 |
+| `auth.basicAuth.enabled` | bool | `false` | Basic Auth（适合内网 proxy 已认证转发场景）。 |
+
+对应 Kasten 的 `auth.openshift.*` / `auth.oidc.*` 系列——我们用 Dex 中间层统一抽象，外部 IdP 兼容度更广。
+
+### 23.6 网络 / Ingress / TLS
+
+| values 路径 | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| `service.frontend.type` | string | `NodePort` | 前端 SVC 类型。LoadBalancer / ClusterIP 可选。 |
+| `service.frontend.nodePort` | int | `30888` | NodePort 端口。生产推荐改 Ingress。 |
+| `ingress.enabled` | bool | `false` | 启用 Ingress（对应 Kasten 的 `ingress.create`）。 |
+| `ingress.className` | string | `""` | IngressClass 名（nginx / traefik / istio）。 |
+| `ingress.hosts[].host` | string | `supkube.local` | 域名。 |
+| `ingress.annotations` | map | `{}` | cert-manager / 自定义 annotation 注入位置。 |
+
+### 23.7 子组件开关
+
+| values 路径 | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| `velero.enabled` | bool | `true` | 自动安装 Velero v1.18 subchart。**和 Kasten 最大的差别**——Kasten 让你自己装 Velero，我们 bundle。客户已有 Velero 时设 `false`。 |
+| `velero.configuration.features` | string | `EnableCSI` | Velero feature flags。`EnableCSI` 是 CSI snapshot 必需。 |
+| `velero.initContainers` | array | csi/aws/azure 三件套 | 默认装 CSI 插件 + AWS S3 + Azure Blob 插件。GCP 客户加 `velero-plugin-for-gcp`。 |
+| `localStore.enabled` | bool | `false` | 在集群内起 MinIO 作为 Local BSL（实现 3-2-1-1-0 的 "1 immutable copy"）。多节点 + 默认 SC 时推荐开。 |
+| `localStore.size` | string | `100Gi` | MinIO PVC 容量。 |
+| `localStore.objectLock.enabled` | bool | `true` | S3 Object Lock（WORM 不可变）。 |
+| `localStore.objectLock.mode` | string | `governance` | `governance`（admin 可解锁）/ `compliance`（即使 root 也不可删）。 |
+| `localStore.bucket` | string | `supkube-local` | MinIO bucket 名。第一次装完别改。 |
+
+### 23.8 资源限制
+
+| values 路径 | 默认 |
+|---|---|
+| `backend.resources.requests.{cpu,memory}` | `100m / 128Mi` |
+| `backend.resources.limits.{cpu,memory}` | `500m / 256Mi` |
+| `frontend.resources.requests.{cpu,memory}` | `50m / 64Mi` |
+| `frontend.resources.limits.{cpu,memory}` | `200m / 128Mi` |
+
+大集群（>200 namespace）建议 backend limit 拉到 `2000m / 1Gi`。
+
+### 23.9 完整安装样板
+
+**生产推荐配置**：
+
+```bash
+helm install supkube supkube/supkube --version 0.9.0-alpha.4 --devel \
+  --namespace supkube --create-namespace \
+  --set eula.accept=true \
+  --set eula.email=ops@example.com \
+  --set eula.company="Example Inc" \
+  \
+  --set velero.enabled=true \
+  --set localStore.enabled=true \
+  \
+  --set auth.enabled=true \
+  --set auth.rbac.enabled=true \
+  --set auth.rbac.defaultRole=viewer \
+  \
+  --set ingress.enabled=true \
+  --set ingress.className=nginx \
+  --set ingress.hosts[0].host=supkube.example.com \
+  --set ingress.hosts[0].paths[0].path=/ \
+  --set ingress.hosts[0].paths[0].pathType=Prefix
+```
+
+**Airgap 配置**（把所有公网拉换成内网 mirror）：
+```bash
+helm install supkube supkube/supkube --version 0.9.0-alpha.4 --devel \
+  --namespace supkube --create-namespace \
+  --set eula.accept=true \
+  --set image.registry=harbor.internal.corp/supkube-mirror \
+  --set velero.image.repository=harbor.internal.corp/supkube-mirror/velero \
+  ...
+```
+
+**已有 Velero 的客户**：
+```bash
+helm install supkube supkube/supkube --version 0.9.0-alpha.4 --devel \
+  --namespace supkube --create-namespace \
+  --set eula.accept=true \
+  --set velero.enabled=false \      # ← 不重装 Velero，复用现有
+  --set config.veleroNamespace=velero   # ← 指向现有 Velero 所在 ns
+```
+
+### 23.10 安装后验证
+
+```bash
+kubectl -n supkube get pods                 # 三个 pod 应都 Running
+kubectl -n supkube get cm supkube-eula -o yaml   # 看 EULA 记录
+helm -n supkube list                        # 看 chart 版本和 status
+curl -sk https://supkube.example.com/api/v1/status   # /status 返回 backend version
+```
+
+---
+
 ## 附录 A：常用 kubectl 排障命令
 
 ```bash

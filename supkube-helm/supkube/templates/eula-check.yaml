@@ -1,0 +1,54 @@
+{{- /*
+  EULA install-time gate. Two jobs:
+
+    1. Fail the `helm install` if eula.accept is not set to true. Surfaces
+       a clear, actionable error message — the customer sees exactly what
+       to add to their helm command.
+
+    2. If accepted, write the EULA acceptance metadata (accepted flag,
+       email, company, license key, acceptedAt timestamp) into a ConfigMap
+       in the release namespace. The backend reads this ConfigMap to
+       render Settings → About + to attach to support-bundle exports.
+
+  Why a real ConfigMap rather than just a `{{ fail }}` block:
+    - Some Helm wrappers (ArgoCD's helm template hook, Flux's HelmRelease
+      controller) format `fail` output as opaque tracebacks. A real
+      resource called `supkube-eula` gives ops folks a recognizable
+      `kubectl describe configmap` artifact they can find without
+      knowing Helm internals.
+    - Lets us record acceptedAt — auditors regularly ask "when was the
+      EULA accepted?"
+    - The backend reuses this ConfigMap to display the contact info
+      in Settings → About (license tier, registered to, etc.).
+
+  Kasten K10 uses the same `eula.accept` pattern, and customers coming
+  from K10 will recognize it.
+*/}}
+{{- if not .Values.eula.accept }}
+{{- fail "\n\n  ❌ SupKube install requires EULA acceptance.\n\n  Add --set eula.accept=true to your helm install command:\n\n    helm install supkube supkube/supkube --version <ver> --devel \\\n      -n supkube --create-namespace \\\n      --set eula.accept=true \\\n      --set velero.enabled=true\n\n  Recommended: also pass contact info for support/license renewal:\n    --set eula.email=ops@example.com\n    --set eula.company=\"Example Inc\"\n\n  Full install reference: USER_MANUAL §23\n  EULA text:              https://supkube.com/eula\n" }}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "supkube.fullname" . }}-eula
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "supkube.labels" . | nindent 4 }}
+  annotations:
+    # Mark as a Helm-owned resource that survives `helm uninstall` so the
+    # next `helm install` can read previous acceptance metadata (useful
+    # during upgrades when re-running install for testing).
+    "helm.sh/resource-policy": keep
+data:
+  accepted: {{ .Values.eula.accept | quote }}
+  email: {{ .Values.eula.email | quote }}
+  company: {{ .Values.eula.company | quote }}
+  licenseKey: {{ .Values.license.key | default "" | quote }}
+  # Plain-text timestamp so admins can `kubectl get cm supkube-eula -o yaml`
+  # and read it without jq tricks. Format matches RFC 3339 / ISO 8601.
+  acceptedAt: {{ now | date "2006-01-02T15:04:05Z" | quote }}
+  # Records the chart version + appVersion that this EULA acceptance covers.
+  # If we ever revise the EULA we'd compare against `chartVersion` to know
+  # if re-acceptance is required.
+  chartVersion: {{ .Chart.Version | quote }}
+  appVersion: {{ .Chart.AppVersion | quote }}

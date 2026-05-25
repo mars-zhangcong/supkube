@@ -186,26 +186,36 @@ helm install velero vmware-tanzu/velero \\
 # All pods should be Running before SupKube can dispatch backups/restores here.`
 }
 function supkubeInstallCmd(c) {
-  // v0.9.0.3: Helm repo lives on Azure Blob Static Website fronted by
-  // Cloudflare → charts.supkube.com. See hack/AZURE-SETUP.md +
-  // hack/publish-release.sh for the publishing side. index.yaml in the
-  // repo uses RELATIVE chart urls so the customer-facing URL can change
-  // without invalidating past entries.
+  // v0.9.1.0: now includes preflight pre-check + EULA acceptance (required
+  // since v0.9.1 — install fails with friendly error if not set). See
+  // USER_MANUAL §23 for full Install Reference. index.yaml uses RELATIVE
+  // chart urls so the customer-facing URL can change without invalidating
+  // past entries (see hack/AZURE-SETUP.md + hack/publish-release.sh).
   return `# Install SupKube on ${c.name}
+
+# 1. (Recommended) Preflight — verify the cluster is ready for SupKube:
+curl -fsSL https://charts.supkube.com/preflight.sh | bash
+
+# 2. Add SupKube repo + install
 helm repo add supkube https://charts.supkube.com/
 helm repo update
-helm install supkube supkube/supkube \\
+helm install supkube supkube/supkube --devel \\
   --kubeconfig <path-to-${c.name}-kubeconfig> \\
   --namespace supkube --create-namespace \\
+  --set eula.accept=true \\
+  --set eula.company="Your Company" \\
+  --set eula.email=ops@yourco.example \\
   --set velero.enabled=true \\
   --set localStore.enabled=false   # set true if you want in-cluster MinIO local BSL
 
 # Browse available versions before installing:
-# helm search repo supkube --versions
+# helm search repo supkube --versions --devel
 
 # Access via NodePort (default 30888):
 # kubectl --kubeconfig <path> get svc -n supkube
-# Default login: admin@supkube.local / admin (change immediately for production)`
+# Default login: admin@supkube.local / admin (change immediately for production)
+
+# Full install reference: https://charts.supkube.com/USER_MANUAL.md (§23)`
 }
 
 function phaseType(p) {
