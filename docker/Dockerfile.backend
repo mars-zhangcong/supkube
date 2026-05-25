@@ -14,13 +14,20 @@ RUN go mod download
 # Build
 ARG CACHEBUST=20260519
 ARG SUPKUBE_VERSION=0.8.10-alpha
+# Multi-arch: TARGETARCH is set by Docker BuildKit (via `buildx --platform`)
+# to amd64 / arm64 / etc. Without this, `go build` would default to the
+# BUILD-platform arch — meaning a multi-arch buildx run would emit two
+# identical binaries instead of one per target. Default to amd64 when
+# building without buildx (plain `docker build`) so legacy callers still
+# work. See hack/publish-release.sh for the buildx invocation.
+ARG TARGETARCH=amd64
 COPY . .
 # Embed version + build-stamp via -ldflags -X. Lets /api/v1/status report
 # what's actually running so users can confirm a `helm upgrade` rolled out.
 # BuildStamp comes from `date -u +%y%m%d-%H%M` at build time.
-RUN echo "cachebust=$CACHEBUST" && \
+RUN echo "cachebust=$CACHEBUST target=$TARGETARCH" && \
     BUILD_STAMP=$(date -u +%y%m%d-%H%M) && \
-    CGO_ENABLED=0 GOOS=linux go build \
+    CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
       -ldflags="-w -s \
         -X 'github.com/supkube/supkube-backend/internal/version.Version=${SUPKUBE_VERSION}' \
         -X 'github.com/supkube/supkube-backend/internal/version.BuildStamp=${BUILD_STAMP}'" \

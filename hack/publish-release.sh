@@ -158,43 +158,77 @@ echo "  Customer URL:        $CUSTOMER_FACING_URL"
 echo "════════════════════════════════════════════════════════════════"
 echo ""
 
-# --platform linux/amd64 is REQUIRED on Apple Silicon dev machines.
-# Without it, `docker build` on M-series Mac produces arm64 images, which
-# crash with `exec format error` on amd64 Kubernetes nodes (the default
-# for AKS / GKE / EKS / most managed K8s in 2026). Apple Silicon
-# docker-desktop runs amd64 images via Rosetta emulation, so local dev
-# still works. Multi-arch (linux/amd64 + linux/arm64) is the long-term
-# answer once we have arm64 K8s customers (e.g. AWS Graviton) — for now
-# amd64-only matches the 99% of real clusters.
-PLATFORM="${SUPKUBE_BUILD_PLATFORM:-linux/amd64}"
+# Multi-arch via Buildx
+# ─────────────────────
+# We publish manifest-list images that contain BOTH linux/amd64 AND
+# linux/arm64 variants. Kubernetes nodes auto-select the matching arch
+# at pull time, so customers run the SAME `helm install` command
+# regardless of whether they're on AKS x86, AWS Graviton arm64, or
+# Apple Silicon docker-desktop. No customer-facing --platform flag,
+# no per-arch tag, no "did you pick the right image?" support tickets.
+#
+# `docker buildx build --push` is the ONLY way to publish a multi-arch
+# manifest list — the legacy `docker build` + `docker push` pair can't
+# do it because the daemon only stores one arch at a time. Buildx hands
+# the multi-arch artifact directly to the registry.
+#
+# Requires Dockerfile.backend to declare `ARG TARGETARCH` and pass it
+# to `go build` as GOARCH (otherwise Go cross-compile picks the build
+# host's arch for every target — silently emitting 2 identical
+# binaries). See docker/Dockerfile.backend for that wiring. Frontend
+# is arch-agnostic JS bundled into multi-arch nginx — no Dockerfile
+# changes needed.
+PLATFORMS="${SUPKUBE_BUILD_PLATFORMS:-linux/amd64,linux/arm64}"
 
-# ─── 1/9. Build backend image ────────────────────────────────────────
-echo "▶ [1/9] Building backend image (platform: $PLATFORM)…"
-docker build \
-  --platform "$PLATFORM" \
-  -f docker/Dockerfile.backend \
-  -t "$ACR_LOGIN_SERVER/$BACKEND_NAME:$VERSION" \
-  -t "supkube/$BACKEND_NAME:$VERSION" \
-  supkube-backend
-
-# ─── 2/9. Build frontend image ───────────────────────────────────────
-echo ""
-echo "▶ [2/9] Building frontend image (platform: $PLATFORM)…"
-docker build \
-  --platform "$PLATFORM" \
-  -f docker/Dockerfile.frontend \
-  -t "$ACR_LOGIN_SERVER/$FRONTEND_NAME:$VERSION" \
-  -t "supkube/$FRONTEND_NAME:$VERSION" \
-  supkube-frontend
-
-# ─── 3/9. Push to ACR ────────────────────────────────────────────────
-echo ""
-echo "▶ [3/9] Logging into ACR + pushing images…"
+# ─── 1/9. Setup buildx + ACR auth ────────────────────────────────────
+echo "▶ [1/9] Preparing multi-arch buildx + ACR login…"
 ACR_NAME="${ACR_LOGIN_SERVER%%.*}"  # strip ".azurecr.io" → just the registry name
 az acr login --name "$ACR_NAME"
 
-docker push "$ACR_LOGIN_SERVER/$BACKEND_NAME:$VERSION"
-docker push "$ACR_LOGIN_SERVER/$FRONTEND_NAME:$VERSION"
+# Buildx builder. Modern docker-desktop (2023+) ships a multi-arch
+# builder by default ("desktop-linux"), but CI runners + older setups
+# need an explicit `buildx create`. Idempotent: if our named builder
+# already exists, we just `use` it.
+if ! docker buildx inspect supkube-multi >/dev/null 2>&1; then
+  echo "  Creating buildx builder 'supkube-multi'…"
+  docker buildx create --name supkube-multi --use --bootstrap
+else
+  docker buildx use supkube-multi
+fi
+
+# ─── 2/9. Build & push backend (multi-arch) ──────────────────────────
+echo ""
+echo "▶ [2/9] Building backend image (platforms: $PLATFORMS) → ACR…"
+docker buildx build \
+  --platform "$PLATFORMS" \
+  --push \
+  -f docker/Dockerfile.backend \
+  -t "$ACR_LOGIN_SERVER/$BACKEND_NAME:$VERSION" \
+  --build-arg "SUPKUBE_VERSION=$VERSION" \
+  supkube-backend
+
+# ─── 3/9. Build & push frontend (multi-arch) ─────────────────────────
+echo ""
+echo "▶ [3/9] Building frontend image (platforms: $PLATFORMS) → ACR…"
+docker buildx build \
+  --platform "$PLATFORMS" \
+  --push \
+  -f docker/Dockerfile.frontend \
+  -t "$ACR_LOGIN_SERVER/$FRONTEND_NAME:$VERSION" \
+  supkube-frontend
+
+# Local-dev shorthand: after the multi-arch push, pull the native-arch
+# variant back into the local Docker daemon and tag it as
+# `supkube/<name>:<version>` so historical local-dev shortcuts like
+# `kubectl set image deploy/supkube-backend backend=supkube/backend:VERSION`
+# (against the docker-desktop cluster) still work. Buildx `--load` can't
+# load multi-arch images into the daemon — but a plain `docker pull` of
+# a multi-arch tag fetches just the native arch, which is what we want.
+echo "  Pulling native-arch variants back into local daemon for dev shortcut…"
+docker pull "$ACR_LOGIN_SERVER/$BACKEND_NAME:$VERSION" >/dev/null
+docker pull "$ACR_LOGIN_SERVER/$FRONTEND_NAME:$VERSION" >/dev/null
+docker tag "$ACR_LOGIN_SERVER/$BACKEND_NAME:$VERSION"  "supkube/$BACKEND_NAME:$VERSION"
+docker tag "$ACR_LOGIN_SERVER/$FRONTEND_NAME:$VERSION" "supkube/$FRONTEND_NAME:$VERSION"
 
 # ─── 4/9. Bump Chart.yaml ────────────────────────────────────────────
 echo ""
