@@ -2,10 +2,31 @@ apiVersion: v2
 name: supkube
 description: Kubernetes data protection UI powered by Velero
 type: application
-version: 0.3.9
-appVersion: "0.7.9-alpha"
+version: 0.9.0-alpha.3
+appVersion: "0.9.0.3-alpha"
 keywords:
   - kubernetes
   - velero
   - backup
   - data-protection
+# v0.8.13 HC1: bundle Velero so customers don't have to install it
+# separately. Conditional on `velero.enabled` (default true in values.yaml)
+# so existing clusters with a hand-installed Velero can opt out with
+# `--set velero.enabled=false`.
+#
+# Why bundle Velero (decided 2026-05-24, Mars):
+#   - First-install time drops from "follow Velero docs + pick plugins +
+#     install CRDs + ..." to "helm install". Onboarding pain is the #1
+#     reason customers churn before they see value.
+#   - SupKube ships pinned to a known-good Velero version (currently
+#     v1.18) — we can ensure the right CSI/Azure/S3 plugins are loaded
+#     by default rather than relying on the customer to find them.
+#
+# Version pinning: track Velero 1.18.x (chart 9.x). When Velero releases
+# 1.19 we evaluate (potentially breaks our policypair controller etc),
+# bump the chart version, retest, then bump our appVersion.
+dependencies:
+  - name: velero
+    version: "9.0.4"
+    repository: "https://vmware-tanzu.github.io/helm-charts"
+    condition: velero.enabled

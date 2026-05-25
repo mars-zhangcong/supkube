@@ -12,7 +12,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/supkube/supkube-backend/internal/k8s"
 )
 
 // Dashboard summary cache
@@ -66,8 +65,10 @@ func GetDashboardSummary(c *gin.Context) {
 	// Build fresh summary
 	summary := &DashboardSummary{}
 
-	// Get cluster info (nodes + namespaces)
-	k8sClient, err := k8s.GetClient()
+	// Get cluster info (nodes + namespaces).
+	// v0.9.0.1 fix #3: route via the per-request helper so the Mode
+	// Switcher's selection actually changes what the user sees.
+	k8sClient, err := getRequestKubernetesClient(c)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -83,8 +84,8 @@ func GetDashboardSummary(c *gin.Context) {
 		summary.Cluster.Namespaces = len(nsList.Items)
 	}
 
-	// Get backup summary
-	runtimeClient, err := k8s.GetRuntimeClient()
+	// Get backup summary (also remote-routed).
+	runtimeClient, err := getRequestRuntimeClient(c)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

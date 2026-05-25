@@ -1,9 +1,16 @@
 replicaCount: 1
-
+# v0.9.0.3: image repositories point at supkube.azurecr.io (anonymous-pull
+# enabled, public). For local dev on docker-desktop the publish script also
+# tags every build as "supkube/<name>:<version>" so historical `kubectl set
+# image deploy/... = supkube/backend:<v>` shortcuts still work. The `tag`
+# default below is bumped per release by hack/publish-release.sh — keep it
+# synced with the latest published chart.appVersion so an explicit user
+# `helm install --version X` matches `--set backend.image.tag=X` if they
+# override values.
 backend:
   image:
-    repository: supkube/backend
-    tag: "0.7.9-alpha"
+    repository: supkube.azurecr.io/backend
+    tag: "0.9.0.3-alpha"
     pullPolicy: IfNotPresent
   port: 8080
   resources:
@@ -13,11 +20,10 @@ backend:
     limits:
       cpu: 500m
       memory: 256Mi
-
 frontend:
   image:
-    repository: supkube/frontend
-    tag: "0.7.9-alpha"
+    repository: supkube.azurecr.io/frontend
+    tag: "0.9.0.3-alpha"
     pullPolicy: IfNotPresent
   port: 80
   resources:
@@ -27,7 +33,6 @@ frontend:
     limits:
       cpu: 200m
       memory: 128Mi
-
 service:
   backend:
     type: ClusterIP
@@ -36,7 +41,6 @@ service:
     type: NodePort
     port: 80
     nodePort: 30888
-
 ingress:
   enabled: false
   className: ""
@@ -46,7 +50,440 @@ ingress:
       paths:
         - path: /
           pathType: Prefix
-
 config:
   veleroNamespace: velero
   logLevel: info
+# ===========================================================================
+# v0.8.13 HC1: Velero subchart (bundled)
+# ===========================================================================
+# SupKube ships Velero as a dependency so first-time installs work with a
+# single `helm install`. The block below is a subset of Velero chart values
+# (full reference: https://github.com/vmware-tanzu/helm-charts/tree/main/charts/velero).
+#
+# Disable on existing clusters that already have a hand-installed Velero:
+#   helm install supkube ... --set velero.enabled=false
+# This is the recommended path for our existing dev cluster (kubectl-
+# installed Velero in the `velero` namespace).
+#
+# The defaults below mirror what `velero install --use-node-agent
+# --uploader-type=kopia --plugins=velero-plugin-for-csi,
+# velero-plugin-for-aws,velero-plugin-for-microsoft-azure` would give you,
+# so customers get our supported feature matrix out of the box.
+velero:
+  enabled: true
+  # Namespace install target. The Velero subchart respects this in its
+  # NOTES.txt but the actual namespace is the Helm release's. We keep
+  # SupKube and Velero in separate namespaces (supkube + velero) for
+  # operational clarity — `kubectl logs -n velero` follows Velero docs.
+  # This requires `helm install --namespace velero --create-namespace`
+  # at the top level when bundled. Documented in USER_MANUAL §1.
+  namespaceOverride: velero
+  # CSI snapshot feature flag — required for the L1/L2 policypair model.
+  # Without this Velero falls back to filesystem-only backup, which works
+  # but is slower and misses CSI-aware semantics.
+  configuration:
+    features: EnableCSI
+    backupSyncPeriod: 60s
+    fsBackupTimeout: 4h
+    # Default BSL. Customers add Cloud BSLs via the UI later; this block
+    # is intentionally left empty so the chart doesn't try to create a
+    # default BSL with bogus credentials.
+    backupStorageLocation: []
+    volumeSnapshotLocation: []
+  # Plugins. Includes CSI (always), AWS (S3-compatible), Azure (Blob).
+  # GCP plugin is a v0.9 add — we don't preload it because the image is
+  # large and most customers don't need it.
+  initContainers:
+    - name: velero-plugin-for-csi
+      image: velero/velero-plugin-for-csi:v0.7.0
+      volumeMounts:
+        - mountPath: /target
+          name: plugins
+    - name: velero-plugin-for-aws
+      image: velero/velero-plugin-for-aws:v1.10.0
+      volumeMounts:
+        - mountPath: /target
+          name: plugins
+    - name: velero-plugin-for-microsoft-azure
+      image: velero/velero-plugin-for-microsoft-azure:v1.10.0
+      volumeMounts:
+        - mountPath: /target
+          name: plugins
+  # node-agent: required for filesystem backup (Restic/Kopia) AND for
+  # the Data Mover that moves CSI snapshots to BSL. Without this the
+  # entire "Cloud half" path (L2 export) fails silently.
+  deployNodeAgent: true
+  # Uploader. v1.18 default is kopia (Restic deprecated). We pin to be
+  # explicit — customers can switch via --set velero.configuration.uploaderType=restic.
+  configuration_2:
+  # Reserved for future feature toggles. The double underscore avoids
+  # clashing with the upstream `configuration` key.
+
+  # Snapshot timeout — long-running PV snapshots can exceed the 10m
+  # default. We bump to 4h matching fsBackupTimeout for consistency.
+  snapshotsEnabled: true
+  # CRDs install method. true = install CRDs from the chart (recommended
+  # for fresh clusters). Set false if you already installed Velero CRDs
+  # separately to avoid an "already exists" conflict.
+  installCRDs: true
+# ===========================================================================
+# v0.8.12 Local Backup Store (MinIO)
+# ===========================================================================
+# Optional in-cluster S3-compatible storage that acts as a "Local BSL" for
+# Velero. When enabled, every backup writes to TWO destinations:
+#   1. Local BSL  — fast, in-cluster MinIO  (this section)
+#   2. Cloud BSL  — durable, off-site (Azure Blob / S3 / OSS, configured
+#                   separately in the Storage Locations UI)
+#
+# Why this exists: Velero v1.18 deletes CSI VolumeSnapshotContent at backup
+# Completed, which broke the "Snapshot half = fast recovery" promise we
+# made through v0.8.11.2. The fix (ADR-029) is to make the "fast recovery"
+# tier a real Velero backup landing on an in-cluster S3 store, not a CSI
+# snapshot. See architecture 设计.md ADR-029.
+#
+# DISABLED by default: customers who only need durable cloud backups don't
+# pay for the extra in-cluster MinIO pod + PVC. Enable from the UI later
+# or set localStore.enabled=true here for first-install.
+localStore:
+  enabled: false
+  # Image. Pinned tag for reproducible builds. MinIO releases roughly
+  # weekly — bump tag in CI when we cut a SupKube release.
+  image:
+    repository: quay.io/minio/minio
+    tag: RELEASE.2025-04-22T22-12-26Z
+    pullPolicy: IfNotPresent
+  # PVC size. 100Gi is the conservative default that fits typical "5-10
+  # workload namespaces, daily backups, 30-day retention" sizing.
+  size: 100Gi
+  # Storage class for the MinIO PVC. Empty = cluster default. On AKS use
+  # "managed-csi" or "managed-csi-premium"; on EKS "gp3"; on GKE
+  # "standard-rwo". Docker Desktop default "hostpath" works for laptop demo.
+  storageClass: ""
+  # Object Lock enables S3 WORM (Write Once Read Many). Enabled means
+  # backups stored here become **truly immutable** for their retention
+  # period — even cluster-admin can't delete them. This is the "1" in
+  # 3-2-1-1-0 (one immutable copy).
+  #
+  # Mode:
+  #   governance — admin with s3:BypassGovernanceRetention CAN override the
+  #                lock. Recommended default; lets you recover from
+  #                misconfigured retention without recreating the bucket.
+  #   compliance — even root CAN'T delete until retention expires.
+  #                Use only when regulatory requirements demand it.
+  objectLock:
+    enabled: true
+    mode: governance
+  # Bucket name created inside MinIO on first boot. Velero treats this as
+  # the BSL's objectStorage.bucket. Lowercase + DNS-safe; don't change after
+  # first install (existing backups reference it).
+  bucket: supkube-local
+  # Root credentials for the embedded MinIO. We auto-generate the access
+  # key & secret at install time and store them in a K8s Secret. Override
+  # these only when migrating an existing MinIO install (rare).
+  #
+  # Leaving rootUser/rootPassword empty triggers a one-time random generation
+  # via the install-time Job — see local-store-bucket-init-job.yaml.
+  rootUser: ""
+  rootPassword: ""
+  service:
+    # ClusterIP is what Velero (in-cluster) hits via DNS. Don't change
+    # unless you're exposing MinIO externally — and if you are, you also
+    # need TLS, which we don't ship in v0.8.12.
+    type: ClusterIP
+    apiPort: 9000
+    consolePort: 9001
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+# ===========================================================================
+# v0.8.5 Authentication
+# ===========================================================================
+# SupKube's backend always validates OIDC JWTs. Different IdPs (Keycloak,
+# Okta, Azure AD, GitHub, LDAP, ...) are reached via Dex connectors. Set
+# auth.enabled=false to disable auth entirely (NOT recommended outside of
+# local Docker Desktop demos — anyone with the URL becomes admin).
+#
+# Three deployment modes:
+#
+#   1. Embedded Dex with static password (demo, default)
+#      auth.enabled=true
+#      auth.dex.enabled=true (with auth.dex.staticPasswords)
+#      Bundle Dex + log in as admin@supkube.local / admin
+#
+#   2. Embedded Dex + upstream connectors (production with Keycloak/Okta/AzureAD)
+#      auth.enabled=true
+#      auth.dex.enabled=true
+#      auth.dex.connectors=[{ ... see examples }]
+#      Login page shows "Login with <provider>" buttons
+#
+#   3. External OIDC issuer (e.g. customer's existing Dex/Keycloak)
+#      auth.enabled=true
+#      auth.dex.enabled=false
+#      auth.oidc.issuerURL=https://customer-keycloak.example.com/realms/main
+#      SupKube backend speaks OIDC directly to the customer's IdP
+auth:
+  enabled: true
+  # ─────────────────────────────────────────────────────────────────────
+  # v0.8.5 step 3: RBAC (Role-Based Access Control)
+  # ─────────────────────────────────────────────────────────────────────
+  # 3 fixed roles — admin > editor > viewer. OIDC `groups` claim maps to
+  # roles via the bindings below. See USER_MANUAL §12 for the full guide.
+  #
+  # When rbac.enabled=false, every authenticated user is treated as admin
+  # — backward compat with v0.8.5 step 1/2 deployments that shipped
+  # without RBAC. Production deployments SHOULD set enabled=true and
+  # write explicit bindings.
+  #
+  # defaultRole: applied when a user matches NO binding.
+  #   - "viewer"  → recommended for production (deny writes by default)
+  #   - "admin"   → backward compat default; convenient for demos
+  #   - ""        → no default; unbound users get 403 on everything
+  rbac:
+    enabled: false
+    defaultRole: "viewer"
+    # Each binding is one of:
+    #   { group, role[, namespaces] }   — match by OIDC groups claim
+    #   { user,  role[, namespaces] }   — match by email / username
+    # `namespaces` is honored ONLY when role=editor (admin is cluster-wide,
+    # viewer reads everything). Editor with no namespaces = NO access.
+    bindings: []
+    # bindings:
+    #   - group: platform-admins
+    #     role: admin
+    #   - group: app-team-postgres
+    #     role: editor
+    #     namespaces: [postgres-prod, postgres-staging]
+    #   - group: auditors
+    #     role: viewer
+    #   - user: admin@supkube.local      # bind a specific Dex static user
+    #     role: admin
+  # ─────────────────────────────────────────────────────────────────────
+  # v0.8.5 step 6: non-OIDC auth fallbacks
+  # ─────────────────────────────────────────────────────────────────────
+  # Two extra ways to call the API beyond the OIDC browser flow:
+  #
+  #   1. Static API tokens — for CI/CD, scripts, Terraform.
+  #      Bearer token; hash stored here, plaintext only on the caller.
+  #   2. Basic Auth via htpasswd — for environments behind a corporate
+  #      proxy that already authenticates and forwards Basic headers.
+  #
+  # Both are OFF by default. OIDC remains the canonical path for humans.
+  # See USER_MANUAL §14 for the full setup walkthrough.
+  staticTokens:
+    enabled: false
+    # Each token: { name, hash, role[, namespaces] }.
+    # Generate the plaintext on your workstation:
+    #   PLAIN=$(openssl rand -hex 32) && echo "plaintext: $PLAIN"
+    #   echo -n "$PLAIN" | sha256sum    # ← put the hash below
+    # Store $PLAIN in your CI's secret store; the cluster never sees it.
+    tokens: []
+    # tokens:
+    #   - name: github-actions-prod
+    #     hash: 0e9b6...e3f1      # sha256(plaintext) hex
+    #     role: editor
+    #     namespaces: [shop-prod]
+    #   - name: terraform
+    #     hash: 7c44a...9b02
+    #     role: admin
+  basic:
+    enabled: false
+    # Reference an existing K8s Secret with key "htpasswd". The chart
+    # mounts it at /etc/supkube/htpasswd inside the backend pod.
+    # Build the file:
+    #   htpasswd -bnBC 10 alice <pw> > htpasswd
+    #   htpasswd -bnBC 10 bob   <pw> >> htpasswd
+    #   kubectl create secret generic supkube-htpasswd \
+    #     --from-file=htpasswd
+    # Only bcrypt entries are honored; MD5 / SHA1 are rejected at boot.
+    secretName: "" # e.g. supkube-htpasswd
+  # Path under the frontend URL where Dex is reachable in-browser.
+  # The frontend nginx proxies this prefix to the Dex pod. Don't change
+  # unless you know what you're doing — it has to match Dex's issuer URL
+  # and the OIDC redirectURI baked into staticClients.
+  dexProxyPath: "/dex"
+  # OIDC issuer config. When auth.dex.enabled=true these are auto-derived
+  # from the Dex sub-chart below; set them explicitly only for mode #3.
+  oidc:
+    issuerURL: "" # e.g. https://supkube.example.com/dex
+    clientID: "supkube"
+    clientSecret: "" # leave empty if using clientSecretRef
+    clientSecretRef:
+      name: "" # e.g. supkube-oidc-secret
+      key: client-secret
+    # Claim names — Dex defaults match these. Adjust for non-Dex IdPs.
+    usernameClaim: "email"
+    groupsClaim: "groups"
+    scopes: ["openid", "profile", "email", "groups", "offline_access"]
+  # Embedded Dex (optional sub-chart, mode #1 and #2)
+  dex:
+    enabled: true
+    image:
+      repository: dexidp/dex
+      tag: v2.39.1
+      pullPolicy: IfNotPresent
+    # Public URL the BROWSER uses to reach Dex (through frontend nginx).
+    # For local Docker Desktop: http://localhost:30888
+    # For production: https://supkube.example.com
+    # Issuer = publicURL + dexProxyPath. Must be reachable from the user's
+    # browser AND from the backend pod (we use this to fetch OIDC discovery).
+    publicURL: "http://localhost:30888"
+    issuer: "http://localhost:30888/dex"
+    # Client secret SupKube uses to authenticate to its own Dex. In demo
+    # this is a fixed string; in production override via Helm. The backend
+    # reads the same value from auth.oidc.clientSecret (auto-wired).
+    clientSecret: "supkube-demo-secret"
+    # Static demo users. Generate hashes with EITHER:
+    #   htpasswd -bnBC 10 "" your-password | tr -d ':\n' | sed 's/$2y/$2a/'
+    # OR a one-liner Go:
+    #   go run -e 'package main; import("fmt"; "golang.org/x/crypto/bcrypt"); func main(){h,_:=bcrypt.GenerateFromPassword([]byte("YOUR-PW"),10); fmt.Println(string(h))}'
+    # Default below = literal password "admin" (verified against bcrypt.CompareHashAndPassword).
+    staticPasswords:
+      - email: "admin@supkube.local"
+        username: "admin"
+        userID: "08a8684b-db88-4b73-90a9-3cd1661f5466"
+        # bcrypt hash of "admin" — VERIFIED. Don't ship a "made up from memory"
+        # hash again (v0.8.5 step 1 burned half a day on exactly that bug).
+        hash: "$2a$10$v6mNFWflT1XN6WlnTlyTiebVRG4HGthIkGLNOJjJsCG9lCNyGUStK"
+    # ─── Secret injection for connector credentials ─────────────────────
+    # In production you DON'T want client secrets sitting in values.yaml
+    # (which usually lives in Git). Use envFromSecrets to load a K8s Secret
+    # into Dex's env vars, then reference them as $VAR in connector configs.
+    #
+    # Example:
+    #   1. Create the K8s Secret:
+    #      kubectl create secret generic supkube-oauth -n supkube \
+    #        --from-literal=GITHUB_CLIENT_ID=Iv1.abc... \
+    #        --from-literal=GITHUB_CLIENT_SECRET=xyz... \
+    #        --from-literal=KEYCLOAK_CLIENT_SECRET=...
+    #
+    #   2. Reference it here:
+    #      envFromSecrets:
+    #        - secretName: supkube-oauth
+    #
+    #   3. Use $VAR in connector config (Dex expands env vars on config load):
+    #      connectors:
+    #        - type: github
+    #          config:
+    #            clientID: "$GITHUB_CLIENT_ID"
+    #            clientSecret: "$GITHUB_CLIENT_SECRET"
+    #
+    # Trade-off: rotating the K8s Secret requires `kubectl rollout restart
+    # deploy/supkube-dex` to pick up new env values. v0.9 will add the
+    # reloader.stakater.com annotation to make this automatic.
+    envFromSecrets: []
+    # envFromSecrets:
+    #   - secretName: supkube-oauth
+    #     prefix: ""   # optional, prefix each key from the secret
+
+    # Or inject individual env vars (per-Secret-key references).
+    # Use this when you only need a few specific keys from a larger Secret.
+    env: []
+    # env:
+    #   - name: GITHUB_CLIENT_SECRET
+    #     valueFrom:
+    #       secretKeyRef:
+    #         name: supkube-github
+    #         key: client-secret
+
+    # Upstream connectors. Empty list = demo mode (only the local password
+    # DB above). Uncomment + fill in the ones you need.
+    #
+    # Each connector gets a "Login with X" button on the SupKube login
+    # screen. The `id` is what Dex uses internally — keep it short + DNS-
+    # friendly (matches what's passed as connector_id in the OAuth URL).
+    # The `name` is what users see on the button.
+    #
+    # IMPORTANT: redirectURI in upstream IdP configs must be
+    #   <publicURL>/dex/callback
+    # NOT /auth/callback — that's the SupKube SPA's route.
+    # Dex receives the IdP's callback first, then redirects to SupKube.
+    #
+    # See USER_MANUAL.md §11 for how to register the app in each IdP.
+    connectors: []
+    # ─── Example: Keycloak ────────────────────────────────────────────
+    # connectors:
+    #   - type: oidc
+    #     id: keycloak
+    #     name: "Login with Keycloak"
+    #     config:
+    #       issuer: https://keycloak.example.com/realms/master
+    #       clientID: supkube
+    #       clientSecret: <KEYCLOAK_CLIENT_SECRET>
+    #       redirectURI: http://localhost:30888/dex/callback
+    #       scopes: [openid, profile, email, groups]
+    #       # Keycloak groups claim is named "groups" by default. To
+    #       # surface groups in JWTs you must add a "Group Membership"
+    #       # mapper to the client in Keycloak admin UI.
+    #       getUserInfo: true
+    #       insecureSkipVerify: false
+    #
+    # ─── Example: Okta ────────────────────────────────────────────────
+    # connectors:
+    #   - type: oidc
+    #     id: okta
+    #     name: "Login with Okta"
+    #     config:
+    #       issuer: https://example.okta.com
+    #       clientID: 0oa...
+    #       clientSecret: <OKTA_CLIENT_SECRET>
+    #       redirectURI: http://localhost:30888/dex/callback
+    #       scopes: [openid, profile, email, groups]
+    #       # Okta groups claim requires explicit "groups" claim in
+    #       # the Okta app's OpenID Connect Token settings.
+    #
+    # ─── Example: Azure AD / Entra ID ────────────────────────────────
+    # connectors:
+    #   - type: oidc
+    #     id: azuread
+    #     name: "Login with Microsoft"
+    #     config:
+    #       issuer: https://login.microsoftonline.com/<TENANT_ID>/v2.0
+    #       clientID: <AAD_APP_ID>
+    #       clientSecret: <AAD_CLIENT_SECRET>
+    #       redirectURI: http://localhost:30888/dex/callback
+    #       scopes: [openid, profile, email]
+    #       # Azure AD doesn't include groups by default; configure
+    #       # "Token configuration" in the app registration to emit them.
+    #       getUserInfo: true
+    #
+    # ─── Example: GitHub (production: secrets via K8s Secret) ─────────
+    # Step 1. kubectl create secret generic supkube-github -n supkube \
+    #           --from-literal=GITHUB_CLIENT_ID=Iv1.abc... \
+    #           --from-literal=GITHUB_CLIENT_SECRET=xyz...
+    # Step 2. Set envFromSecrets above to load these into Dex env.
+    # Step 3. Connector uses $VAR placeholders — Dex resolves at load time.
+    #
+    # envFromSecrets:
+    #   - secretName: supkube-github
+    # connectors:
+    #   - type: github
+    #     id: github
+    #     name: "Login with GitHub"
+    #     config:
+    #       clientID: "$GITHUB_CLIENT_ID"
+    #       clientSecret: "$GITHUB_CLIENT_SECRET"
+    #       redirectURI: http://localhost:30888/dex/callback
+    #       # Optional: restrict login to members of specific orgs
+    #       # orgs:
+    #       #   - name: my-org
+    #       #     teams: [platform-admins]
+    #       loadAllGroups: true
+    #
+    # ─── Example: GitHub (local dev: secrets inline — DON'T COMMIT) ───
+    # connectors:
+    #   - type: github
+    #     id: github
+    #     name: "Login with GitHub"
+    #     config:
+    #       clientID: "Iv1.your-client-id"
+    #       clientSecret: "your-client-secret"
+    #       redirectURI: http://localhost:30888/dex/callback
+
+    # Go's time.ParseDuration only knows h/m/s — no "d". 168h = 7 days.
+    idTokenExpiry: "8h"
+    refreshTokenInactivity: "24h"
+    refreshTokenLifetime: "168h"

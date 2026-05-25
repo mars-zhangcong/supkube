@@ -202,7 +202,7 @@ onMounted(fetchAdvisor)
 }
 .page-desc {
   margin: 0;
-  color: #909399;
+  color: var(--sk-text-caption);
   font-size: 13px;
   max-width: 720px;
 }
@@ -211,11 +211,11 @@ onMounted(fetchAdvisor)
 .tier-card { text-align: center; }
 .tier-card-body { padding: 4px 0; }
 .tier-count { font-size: 28px; font-weight: 700; }
-.tier-label { font-size: 12px; color: #909399; margin-top: 2px; }
-.tier-card.tier-high .tier-count { color: #f56c6c; }
-.tier-card.tier-medium .tier-count { color: #e6a23c; }
+.tier-label { font-size: 12px; color: var(--sk-text-caption); margin-top: 2px; }
+.tier-card.tier-high .tier-count { color: var(--sk-status-error); }
+.tier-card.tier-medium .tier-count { color: var(--sk-status-warning); }
 .tier-card.tier-low .tier-count { color: #409eff; }
-.tier-card.tier-skip .tier-count { color: #909399; }
+.tier-card.tier-skip .tier-count { color: var(--sk-text-caption); }
 
 .advisor-skip-notice { margin-top: 16px; }
 
@@ -228,10 +228,10 @@ onMounted(fetchAdvisor)
   font-weight: 600;
   font-size: 13px;
 }
-.score-high { background: #fef0f0; color: #c45656; }
+.score-high { background: #fef0f0; color: var(--sk-status-error); }
 .score-medium { background: #fdf6ec; color: #b88230; }
 .score-low { background: #ecf5ff; color: #337ecc; }
-.score-skip { background: #f4f4f5; color: #909399; }
+.score-skip { background: #f4f4f5; color: var(--sk-text-caption); }
 
 .tier-chip {
   display: inline-flex;
@@ -240,17 +240,17 @@ onMounted(fetchAdvisor)
   font-size: 13px;
   font-weight: 500;
 }
-.tier-chip.tier-high { color: #c45656; }
+.tier-chip.tier-high { color: var(--sk-status-error); }
 .tier-chip.tier-medium { color: #b88230; }
 .tier-chip.tier-low { color: #337ecc; }
-.tier-chip.tier-skip { color: #909399; }
+.tier-chip.tier-skip { color: var(--sk-text-caption); }
 
 .schedule-cell { display: flex; flex-direction: column; gap: 2px; }
-.schedule-human { font-size: 13px; color: #303133; font-weight: 500; }
+.schedule-human { font-size: 13px; color: var(--sk-text-secondary); font-weight: 500; }
 .schedule-cron {
   font-family: 'SF Mono', Menlo, monospace;
   font-size: 11px;
-  color: #909399;
+  color: var(--sk-text-caption);
   background: transparent;
   padding: 0;
 }
@@ -259,10 +259,10 @@ onMounted(fetchAdvisor)
   margin: 0;
   padding-left: 16px;
   font-size: 12px;
-  color: #606266;
+  color: var(--sk-text-muted);
   line-height: 1.7;
 }
-.factor-plus { color: #67c23a; font-weight: 600; font-family: 'SF Mono', Menlo, monospace; }
-.factor-minus { color: #f56c6c; font-weight: 600; font-family: 'SF Mono', Menlo, monospace; }
-.muted { color: #c0c4cc; font-size: 12px; }
+.factor-plus { color: var(--sk-status-success); font-weight: 600; font-family: 'SF Mono', Menlo, monospace; }
+.factor-minus { color: var(--sk-status-error); font-weight: 600; font-family: 'SF Mono', Menlo, monospace; }
+.muted { color: var(--sk-text-placeholder); font-size: 12px; }
 </style>

@@ -1,0 +1,136 @@
+# Velero node-agent DaemonSet (v1.18.0).
+#
+# Why we ship this manifest instead of relying on `velero install --use-node-agent`:
+#   - `velero install` against an already-installed Velero either rejects or
+#     re-installs from scratch, both of which risk clobbering customer BSLs,
+#     plugin lists, and credentials.
+#   - Customers who used Helm to install Velero have the same problem from
+#     the other direction — `velero install` doesn't know about Helm's
+#     ownership labels.
+#   - A standalone DaemonSet manifest is portable across both install paths.
+#
+# Compatible with Velero v1.18.x. Reuses the existing `velero` ServiceAccount
+# (so no RBAC changes needed) and the existing `cloud-credentials` Secret.
+#
+# Required environment for Data Mover and Filesystem backups; OPTIONAL for
+# CSI-only backups (which don't actually move volume data).
+#
+# Verified images:
+#   velero/velero:v1.18.0
+#
+# Cluster-specific knobs you may need to change:
+#   * kubelet root path:
+#       - Docker Desktop / kind / kubeadm:   /var/lib/kubelet  (default below)
+#       - k3s:                                /var/lib/kubelet
+#       - some managed clouds:                /var/lib/kubelet (consistent)
+#       - GKE Autopilot:                      NOT SUPPORTED (no hostPath access)
+#   * --resource-timeout / --data-mover-prepare-timeout: increase for very
+#     large PVs (>100 GiB) where Kopia setup takes longer than 30 min.
+
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-agent
+  namespace: velero
+  labels:
+    component: velero
+    deploy: node-agent
+spec:
+  selector:
+    matchLabels:
+      name: node-agent
+  template:
+    metadata:
+      labels:
+        component: velero
+        name: node-agent
+    spec:
+      serviceAccountName: velero
+      # Privileged mounts of /var/lib/kubelet — required so the node-agent
+      # can see and read the volume contents of pods on this node. The
+      # mountPropagation: HostToContainer setting is what makes pod-level
+      # PV mounts visible to node-agent without it needing to be a member
+      # of the kubelet host.
+      securityContext:
+        runAsUser: 0
+      containers:
+        - name: node-agent
+          image: velero/velero:v1.18.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - /velero
+          args:
+            - node-agent
+            - server
+            - --features=EnableCSI
+          env:
+            - name: HOME
+              value: /tmp
+            - name: VELERO_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: VELERO_SCRATCH_DIR
+              value: /scratch
+            # CRITICAL: NODE_NAME from spec.nodeName.
+            # node-agent uses this to identify which node it's on so it
+            # can match DataUpload CRs to the right node + pass --node-name
+            # to the spawned data-mover backup pods. Without it, the
+            # microservice handoff is broken and DataUpload sits at
+            # "Accepted" forever (no error logged — silent stuck).
+            # Missing this in our v0.8.7.2 first DaemonSet draft cost
+            # ~20 min of debugging. Don't drop it.
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            # POD_NAME/NAMESPACE — used in log lines and for leader
+            # election if multiple node-agents race on the same node
+            # (shouldn't happen with a DaemonSet, but defensive).
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            # Velero's data-mover code path reads provider credentials
+            # from these env-pointed files. The same Secret content
+            # supplies all three; only the relevant one is read at
+            # runtime based on BSL.spec.provider.
+            - name: AWS_SHARED_CREDENTIALS_FILE
+              value: /credentials/cloud
+            - name: AZURE_CREDENTIALS_FILE
+              value: /credentials/cloud
+            - name: GOOGLE_APPLICATION_CREDENTIALS
+              value: /credentials/cloud
+          securityContext:
+            privileged: true
+          volumeMounts:
+            # /host_pods is where node-agent reads each Pod's mounted
+            # PVCs. mountPropagation: HostToContainer is mandatory; without
+            # it node-agent can see the mountpoint but not the actual
+            # underlying filesystem contents.
+            - name: host-pods
+              mountPath: /host_pods
+              mountPropagation: HostToContainer
+            - name: host-plugins
+              mountPath: /var/lib/kubelet/plugins
+              mountPropagation: HostToContainer
+            - name: scratch
+              mountPath: /scratch
+            - name: cloud-credentials
+              mountPath: /credentials
+      volumes:
+        - name: host-pods
+          hostPath:
+            path: /var/lib/kubelet/pods
+        - name: host-plugins
+          hostPath:
+            path: /var/lib/kubelet/plugins
+        - name: scratch
+          emptyDir: {}
+        - name: cloud-credentials
+          secret:
+            secretName: cloud-credentials

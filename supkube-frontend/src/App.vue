@@ -1,10 +1,17 @@
 <template>
-  <div id="app">
+  <!-- v0.8.5: bare layout on /login + /auth/callback — no sidebar/header
+       chrome around the login card. router-view directly. -->
+  <router-view v-if="$route.meta?.public" />
+  <div v-else id="app">
     <el-container>
       <el-aside :width="collapsed ? '64px' : '220px'" :class="{ 'is-collapsed': collapsed }">
         <div class="sidebar-brand" :class="{ 'is-collapsed': collapsed }">
-          <img src="/supkube-logo.svg" alt="SupKube" class="sidebar-logo" />
-          <span v-if="!collapsed" class="sidebar-brand-text">SupKube</span>
+          <!-- v0.8.11: logo + product name come from the cluster-wide
+               branding store (useBranding). Admin can change them in
+               Settings → Branding; everyone sees the new values
+               immediately (no per-browser localStorage). -->
+          <img :src="branding.logoUrl" :alt="branding.productName" class="sidebar-logo" />
+          <span v-if="!collapsed" class="sidebar-brand-text">{{ branding.productName }}</span>
           <button
             class="sidebar-toggle"
             type="button"
@@ -14,6 +21,56 @@
             <el-icon><ArrowLeft v-if="!collapsed" /><ArrowRight v-else /></el-icon>
           </button>
         </div>
+
+        <!-- v0.9.0.2: Mode Switcher.
+             Always rendered (collapsed-state issue from v0.9.0.1) — when
+             sidebar is collapsed we shrink to an icon-only trigger; the
+             dropdown menu is the same. Single-cluster users still get
+             the dropdown (with just "+ Add Cluster" as the only useful
+             action) so the entry path is uniform. -->
+        <div class="cluster-switcher" :class="{ 'is-collapsed': collapsed }">
+          <el-dropdown
+            trigger="click"
+            placement="bottom-start"
+            @command="onClusterPick"
+          >
+            <button class="cs-trigger" :class="{ 'is-collapsed': collapsed }" type="button" :title="cluster.activeLabel.value">
+              <span class="cs-label">
+                <el-icon class="cs-icon"><DocumentCopy /></el-icon>
+                <span v-if="!collapsed" class="cs-name">{{ cluster.activeLabel.value }}</span>
+              </span>
+              <el-icon v-if="!collapsed" class="cs-caret"><ArrowDown /></el-icon>
+            </button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item :command="cluster.MCM_ID" :class="{ 'is-active': cluster.isMCM.value }">
+                  <el-icon><Connection /></el-icon>
+                  {{ t('clusterSwitcher.mcm') }}
+                </el-dropdown-item>
+                <el-dropdown-item divided disabled class="cs-section-label">
+                  {{ t('clusterSwitcher.clusters') }}
+                </el-dropdown-item>
+                <el-dropdown-item
+                  v-for="c in cluster.clusters.value"
+                  :key="c.name"
+                  :command="c.name"
+                  :class="{ 'is-active': cluster.active.value === c.name || (!cluster.active.value && c.name === 'this-cluster') }"
+                  :disabled="c.phase !== 'Healthy' && c.name !== 'this-cluster'"
+                >
+                  <el-icon><DocumentCopy /></el-icon>
+                  <span>{{ c.displayName || c.name }}</span>
+                  <span v-if="c.type === 'primary'" class="cs-primary-mark">★</span>
+                  <span v-if="c.phase !== 'Healthy' && c.name !== 'this-cluster'" class="cs-phase-bad">{{ c.phase }}</span>
+                </el-dropdown-item>
+                <el-dropdown-item divided @click="goAddCluster">
+                  <el-icon><Plus /></el-icon>
+                  {{ t('clusterSwitcher.addCluster') }}
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
+
         <el-menu
           :router="true"
           :default-active="$route.path"
@@ -33,13 +90,17 @@
             <el-icon><FolderOpened /></el-icon>
             <template #title>{{ t('nav.restorePoints') }}</template>
           </el-menu-item>
-          <el-menu-item index="/restores">
-            <el-icon><RefreshRight /></el-icon>
-            <template #title>{{ t('nav.restores') }}</template>
+          <el-menu-item index="/activity">
+            <el-icon><DataLine /></el-icon>
+            <template #title>{{ t('nav.activity') }}</template>
           </el-menu-item>
           <el-menu-item index="/policies">
             <el-icon><Clock /></el-icon>
             <template #title>{{ t('nav.policies') }}</template>
+          </el-menu-item>
+          <el-menu-item index="/transform-sets">
+            <el-icon><Tools /></el-icon>
+            <template #title>{{ t('nav.transformSets') }}</template>
           </el-menu-item>
           <el-menu-item index="/storage">
             <el-icon><Coin /></el-icon>
@@ -61,8 +122,11 @@
       </el-aside>
       <el-container>
         <el-header>
-          <h2>{{ t('app.title') }}</h2>
-          <span class="version-badge">v0.7.9-alpha</span>
+          <!-- v0.8.11: header title is reactive to branding. The product
+               name comes from the cluster-wide store; the tagline tail
+               ("— Kubernetes Data Protection") stays i18n-translated. -->
+          <h2>{{ branding.productName }} {{ t('app.titleTail') }}</h2>
+          <span class="version-badge" :title="`Build: ${BUILD}`">v{{ VERSION }} <span class="build-suffix">· {{ BUILD }}</span></span>
           <span class="header-spacer"></span>
           <el-dropdown trigger="click" @command="onLocaleChange" class="locale-dropdown">
             <button class="locale-toggle" type="button" :title="t('settings.language')">
@@ -89,6 +153,31 @@
           >
             {{ isDark ? '☀' : '☾' }}
           </button>
+          <!-- v0.8.5: User badge + logout. Only renders when auth is on
+               (in demo mode the user is anonymous and logout is a no-op). -->
+          <el-dropdown v-if="auth.user.value" trigger="click" @command="onUserCmd" class="user-dropdown">
+            <button class="user-toggle" type="button" :title="auth.user.value.email || auth.user.value.username">
+              <span class="user-avatar">{{ userInitial }}</span>
+              <span class="user-name">{{ auth.user.value.username }}</span>
+              <!-- v0.8.5 step 3: role badge so user knows their permission level -->
+              <span v-if="auth.user.value.role" class="user-role" :class="`role-${auth.user.value.role}`">
+                {{ auth.user.value.role }}
+              </span>
+            </button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item disabled>
+                  <span class="user-info-line">{{ auth.user.value.email || auth.user.value.username }}</span>
+                </el-dropdown-item>
+                <el-dropdown-item v-if="auth.user.value.groups?.length" disabled>
+                  <span class="user-info-groups">{{ auth.user.value.groups.join(', ') }}</span>
+                </el-dropdown-item>
+                <el-dropdown-item v-if="auth.authEnabled.value" command="logout" divided>
+                  <el-icon><SwitchButton /></el-icon> {{ t('auth.logout') }}
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </el-header>
         <el-main>
           <router-view />
@@ -99,10 +188,78 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter, useRoute } from 'vue-router'
 import { SUPPORTED_LOCALES, setLocale } from './i18n'
-import { Monitor, Grid, FolderOpened, RefreshRight, Clock, Coin, Setting, Camera, MagicStick, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
+import {
+  Monitor, Grid, FolderOpened, RefreshRight, Clock, Coin, Setting,
+  Camera, MagicStick, ArrowLeft, ArrowRight, ArrowDown, DataLine,
+  Tools, SwitchButton, DocumentCopy, Connection, Plus
+} from '@element-plus/icons-vue'
+import { useAuth } from './composables/useAuth'
+import { useBranding } from './composables/useBranding'
+import { useCluster } from './composables/useCluster'
+import { VERSION, BUILD } from './version'
+
+const auth = useAuth()
+const cluster = useCluster()
+const router = useRouter()
+const route = useRoute()
+
+// v0.9.0 MC Mode Switcher actions.
+// v0.9.0.2 fix #3: picking "Multi-Cluster Manager" now actually navigates
+// to the dedicated /multicluster page (previously it just updated the
+// active cluster to _mcm without changing what was rendered).
+function onClusterPick(value) {
+  cluster.setActive(value, router)
+  if (value === cluster.MCM_ID) {
+    router.push({ path: '/multicluster' })
+  } else if (router.currentRoute.value.path === '/multicluster') {
+    // Picking a specific cluster while on the MCM page → drop into that
+    // cluster's Dashboard. Without this the user "switches cluster" but
+    // sees no change because the MCM page is global.
+    router.push({ path: '/dashboard', query: { cluster: value } })
+  }
+}
+function goAddCluster() {
+  router.push('/settings')
+  // Best-effort: hint Settings to open the Clusters tab. Settings.vue
+  // reads ?tab= from query on mount to set activeTab.
+  router.replace({ path: '/settings', query: { tab: 'clusters' } })
+}
+function goManageClusters() {
+  // Single-cluster static label → click → jumps to Settings → Clusters,
+  // which is entry path #3 of the design doc.
+  router.push({ path: '/settings', query: { tab: 'clusters' } })
+}
+
+// Refresh registry on app mount + on every route change (a click in
+// the Mode Switcher triggers route change → state stays in sync).
+onMounted(() => {
+  cluster.hydrateFromRoute(route)
+  cluster.refresh()
+})
+watch(() => route.query.cluster, (v) => {
+  if (v !== cluster.active.value) {
+    cluster.hydrateFromRoute(route)
+  }
+})
+// v0.8.11: cluster-wide branding (product name + logo + favicon).
+// Reactive — when admin saves Settings → Branding, the whole UI
+// flips to the new identity without a page reload.
+const { branding } = useBranding()
+
+const userInitial = computed(() => {
+  const u = auth.user.value
+  if (!u) return '?'
+  const src = u.username || u.email || '?'
+  return src.charAt(0).toUpperCase()
+})
+
+function onUserCmd(cmd) {
+  if (cmd === 'logout') auth.logout()
+}
 
 const { t, locale } = useI18n()
 const currentLocaleShort = computed(() => {
@@ -375,11 +532,35 @@ html.dark .schedule-cron { color: #909399 !important; }
   border-bottom: 1px solid #ebeef5;
   margin-bottom: 8px;
 }
+/* v0.9.0.2 — collapsed sidebar alignment, take 2.
+   The v0.9.0.1 attempt added flex-direction:column + align-items:center on
+   .sidebar-brand.is-collapsed, but kept the brand row's auto height (60px)
+   AND the default 10px gap from .sidebar-brand. The gap stayed inherited,
+   the toggle button stayed margin:auto from leftover flex sizing, and the
+   net effect was logo and toggle landing 3-4px left of the menu midline
+   (x=32 of the 64px column). Mars's screenshot showed two icons leaning
+   left, the menu icons below them landing centered — exactly that gap.
+   Take 2: collapse the brand row to icon-only height (no padding gap),
+   then stack logo + toggle as separate centered rows with their own
+   explicit 64px wrappers — Webkit/Blink/Gecko all agree on
+   width:100%; display:flex; justify-content:center. */
 .sidebar-brand.is-collapsed {
+  display: flex;
   flex-direction: column;
-  justify-content: center;
-  padding: 8px 0;
-  gap: 6px;
+  align-items: center;
+  justify-content: flex-start;
+  width: 64px;
+  height: auto;
+  padding: 10px 0 8px;
+  gap: 10px;
+}
+.sidebar-brand.is-collapsed .sidebar-logo {
+  display: block;
+  margin: 0 auto;        /* belt-and-braces centering for older Webkit */
+}
+.sidebar-brand.is-collapsed .sidebar-toggle {
+  display: inline-flex;
+  margin: 0 auto;
 }
 .sidebar-logo {
   width: 28px;
@@ -393,6 +574,107 @@ html.dark .schedule-cron { color: #909399 !important; }
   letter-spacing: -0.01em;
   flex: 1;
 }
+/* v0.9.0 MC Mode Switcher — sits between brand row and menu. */
+.cluster-switcher {
+  margin: 0 12px 12px;
+}
+/* v0.9.0.2 — collapsed Mode Switcher.
+   Match the el-menu-item geometry below it (margin: 2px 8px → 48px wide,
+   icon centered at x=32) so the row reads as part of the icon column
+   instead of a stranded 40px-wide button leaning left. */
+.cluster-switcher.is-collapsed {
+  margin: 0 8px 8px;
+}
+.cs-trigger.is-collapsed {
+  justify-content: center;
+  padding: 8px 0;
+  width: 48px;
+}
+.cs-trigger.is-collapsed .cs-label {
+  flex: 0 0 auto;          /* don't stretch the label slot — icon-only */
+  justify-content: center;
+}
+.cs-trigger.is-collapsed .cs-icon {
+  margin: 0;
+}
+.cs-trigger,
+.cs-static {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--sk-border-light, #e5e7eb);
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--sk-text, #1f2937);
+  transition: all 0.15s ease;
+}
+.cs-trigger:hover,
+.cs-static:hover {
+  border-color: var(--sk-primary, #4f46e5);
+  background: var(--sk-primary-bg-hover, #f5f3ff);
+}
+.cs-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+.cs-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+  color: var(--sk-primary, #4f46e5);
+}
+.cs-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.cs-caret {
+  font-size: 11px;
+  color: var(--sk-text-caption, #9ca3af);
+  flex-shrink: 0;
+}
+.cs-section-label {
+  font-size: 11px !important;
+  letter-spacing: 0.5px;
+  color: var(--sk-text-caption, #9ca3af) !important;
+  text-transform: uppercase;
+}
+.cs-primary-mark {
+  color: var(--sk-primary, #4f46e5);
+  margin-left: 4px;
+  font-size: 11px;
+}
+.cs-phase-bad {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--sk-status-error, #dc2626);
+}
+:deep(.el-dropdown-menu__item.is-active) {
+  background: var(--sk-primary-bg-hover, #f5f3ff);
+  color: var(--sk-primary, #4f46e5);
+  font-weight: 500;
+}
+/* Single-cluster static label: hover hint slides in from right */
+.cs-static { position: relative; }
+.cs-hover-hint {
+  position: absolute;
+  right: 10px;
+  opacity: 0;
+  font-size: 11px;
+  color: var(--sk-primary, #4f46e5);
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+.cs-static:hover .cs-hover-hint { opacity: 1; }
+.cs-static:hover .cs-name { opacity: 0.3; }
+
 .sidebar-toggle {
   display: inline-flex;
   align-items: center;
@@ -488,6 +770,14 @@ html.dark .schedule-cron { color: #909399 !important; }
   font-weight: 600;
   letter-spacing: 0.02em;
 }
+/* Build stamp tucked next to the version. Lower contrast so the version
+   reads first; the timestamp is a "is my browser cache fresh?" signal. */
+.version-badge .build-suffix {
+  opacity: 0.55;
+  font-weight: 500;
+  font-family: 'SF Mono', Menlo, monospace;
+  margin-left: 2px;
+}
 .header-spacer { flex: 1; }
 .theme-toggle,
 .locale-toggle {
@@ -512,6 +802,80 @@ html.dark .schedule-cron { color: #909399 !important; }
   color: #409eff;
 }
 .locale-dropdown { margin-right: 8px; }
+
+/* v0.8.5: user badge + dropdown in the header. Sits to the right of the
+ * theme toggle. Avatar circle + truncated username. */
+.user-dropdown { margin-left: 12px; }
+.user-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 12px 2px 2px;
+  height: 32px;
+  border: 1px solid #dcdfe6;
+  background: #ffffff;
+  border-radius: 16px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #303133;
+  transition: all 0.15s;
+}
+.user-toggle:hover {
+  border-color: #4f46e5;
+  background: #f5f3ff;
+}
+.user-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #4f46e5;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+.user-name {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.user-role {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.role-admin  { background: #fef0f0; color: #c45656; }
+.role-editor { background: #fdf6ec; color: #b88230; }
+.role-viewer { background: #f0f9eb; color: #67c23a; }
+html.dark .role-admin  { background: #2a1a1d; color: #f5b1b1; }
+html.dark .role-editor { background: #2b1f0c; color: #f0c473; }
+html.dark .role-viewer { background: #1a2c14; color: #c2e7b0; }
+.user-info-line {
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: #606266;
+}
+.user-info-groups {
+  font-size: 11px;
+  color: #909399;
+}
+html.dark .user-toggle {
+  background: #1f2026;
+  border-color: #3a3d44;
+  color: #e5eaf3;
+}
+html.dark .user-toggle:hover {
+  background: #1e1b4b;
+  border-color: #6366f1;
+}
+html.dark .user-info-line { color: #b1b3b8; }
 :deep(.el-dropdown-menu__item.is-active) {
   color: #409eff;
   font-weight: 600;

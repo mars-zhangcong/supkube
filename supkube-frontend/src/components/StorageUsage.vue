@@ -79,7 +79,7 @@ const option = computed(() => {
   background: #ffffff;
   border-radius: 8px;
   padding: 16px 20px 8px;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--sk-border);
 }
 .chart-header {
   display: flex;
@@ -90,11 +90,11 @@ const option = computed(() => {
 .chart-title {
   font-size: 14px;
   font-weight: 600;
-  color: #303133;
+  color: var(--sk-text-secondary);
 }
 .chart-subtitle {
   font-size: 12px;
-  color: #909399;
+  color: var(--sk-text-caption);
 }
 .chart-body { height: 260px; width: 100%; }
 .chart-empty {
@@ -102,7 +102,7 @@ const option = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #c0c4cc;
+  color: var(--sk-text-placeholder);
   font-size: 13px;
 }
 </style>

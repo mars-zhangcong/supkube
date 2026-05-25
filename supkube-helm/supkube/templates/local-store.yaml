@@ -1,0 +1,414 @@
+{{- if .Values.localStore.enabled -}}
+# ============================================================================
+# v0.8.12 Local Backup Store (MinIO)
+#
+# Provisions an in-cluster S3 endpoint for Velero. Wires it as a default-off
+# "Local BSL" so existing backups (which target Cloud BSL) are unaffected.
+#
+# Resources in this file:
+#   1. Secret  supkube-local-store-credentials   — MinIO root creds + Velero S3 cred
+#   2. PVC     supkube-local-store-data          — MinIO storage volume
+#   3. Deploy  supkube-local-store               — MinIO single-binary
+#   4. Service supkube-local-store               — ClusterIP + console
+#   5. Job     supkube-local-store-bucket-init   — mc mb + Object Lock on first install
+#   6. BSL     supkube-local-store               — Velero BackupStorageLocation
+#
+# Cleanup contract:
+#   helm uninstall → all of these are removed automatically because they
+#   live in the supkube release namespace except the BSL, which lives in
+#   the velero namespace (see explanation in the BSL section below).
+#
+# Why one file: localStore is a single feature with internal coupling
+# (Secret keys → Deployment env → Job mc-alias → BSL credential). Splitting
+# would mean four files all guarded by the same enabled-check and
+# referencing each other across files — harder to review than one
+# self-contained unit.
+# ============================================================================
+
+# ---------------------------------------------------------------------------
+# Secret — MinIO root creds + Velero AWS-format credential
+# ---------------------------------------------------------------------------
+# Two keys serve two consumers:
+#   rootUser / rootPassword  → injected as env into MinIO Deployment +
+#                              `mc alias set` in the init job
+#   cloud                    → AWS-format credential file Velero expects:
+#                              [default]
+#                              aws_access_key_id = ...
+#                              aws_secret_access_key = ...
+#                              When Velero's BSL.credential references this
+#                              Secret with key="cloud", it parses the file
+#                              and authenticates S3 calls against MinIO.
+#
+# We need BOTH formats because MinIO env vars expect raw values while
+# Velero parses an INI-style file. The values are identical; only the
+# encoding differs.
+#
+# Random generation: when rootUser/rootPassword in values are empty, the
+# template uses randAlphaNum 24 — deterministic per helm install but
+# regenerated on `helm install` (NOT on `helm upgrade`, because the lookup
+# below picks up the existing Secret). This is the standard Helm idiom
+# for "generate once, persist".
+{{- $existingSecret := (lookup "v1" "Secret" .Release.Namespace "supkube-local-store-credentials") }}
+{{- $rootUser := "" }}
+{{- $rootPassword := "" }}
+{{- if $existingSecret }}
+  {{- $rootUser = (index $existingSecret.data "rootUser" | b64dec) }}
+  {{- $rootPassword = (index $existingSecret.data "rootPassword" | b64dec) }}
+{{- else }}
+  {{- $rootUser = default (printf "supkube-%s" (randAlphaNum 8 | lower)) .Values.localStore.rootUser }}
+  {{- $rootPassword = default (randAlphaNum 32) .Values.localStore.rootPassword }}
+{{- end }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: supkube-local-store-credentials
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "supkube.labels" . | nindent 4 }}
+    app.kubernetes.io/component: local-store
+type: Opaque
+stringData:
+  rootUser: {{ $rootUser | quote }}
+  rootPassword: {{ $rootPassword | quote }}
+  # AWS-format credential file for Velero. Velero's S3 plugin reads
+  # AWS_SHARED_CREDENTIALS_FILE-style INI; profile name must be `default`
+  # unless BSL.config.profile is set (we don't override it).
+  cloud: |
+    [default]
+    aws_access_key_id={{ $rootUser }}
+    aws_secret_access_key={{ $rootPassword }}
+---
+# Same credential, copied to velero namespace. Velero's BSL.credential.name
+# is namespace-local — it cannot reference a Secret in another namespace.
+# So we duplicate. v0.9.x will replace this with a controller that mirrors
+# changes; for v0.8.12 the duplicate is acceptable since rotation requires
+# helm upgrade anyway.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: supkube-local-store-credentials
+  namespace: {{ .Values.config.veleroNamespace }}
+  labels:
+    {{- include "supkube.labels" . | nindent 4 }}
+    app.kubernetes.io/component: local-store
+type: Opaque
+stringData:
+  cloud: |
+    [default]
+    aws_access_key_id={{ $rootUser }}
+    aws_secret_access_key={{ $rootPassword }}
+---
+# ---------------------------------------------------------------------------
+# PVC — MinIO storage volume
+# ---------------------------------------------------------------------------
+# ReadWriteOnce is fine for v0.8.12 single-binary mode. Distributed-mode
+# (4+ replicas across nodes) would need RWX or one PVC per replica; that's
+# a v1.0 work item.
+#
+# Why not use the bitnami/minio Helm subchart: that chart pulls in an
+# Operator (operator.min.io) which deploys 4 pods minimum and introduces
+# 6 new CRDs. For "give every customer a local BSL" the operator is wildly
+# over-engineered — we just need one MinIO pod with one PVC.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: supkube-local-store-data
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "supkube.labels" . | nindent 4 }}
+    app.kubernetes.io/component: local-store
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.localStore.size }}
+  {{- if .Values.localStore.storageClass }}
+  storageClassName: {{ .Values.localStore.storageClass | quote }}
+  {{- end }}
+---
+# ---------------------------------------------------------------------------
+# Deployment — MinIO single-binary
+# ---------------------------------------------------------------------------
+# Strategy: Recreate (NOT RollingUpdate). MinIO single-binary holds an
+# exclusive lock on its data dir; two replicas would crash-loop fighting
+# for the lock. RollingUpdate brings up the new pod before terminating the
+# old one, which causes exactly that contention. Recreate guarantees the
+# old pod is gone before the new one starts.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: supkube-local-store
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "supkube.labels" . | nindent 4 }}
+    app.kubernetes.io/component: local-store
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "supkube.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: local-store
+  template:
+    metadata:
+      labels:
+        {{- include "supkube.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: local-store
+    spec:
+      containers:
+        - name: minio
+          image: "{{ .Values.localStore.image.repository }}:{{ .Values.localStore.image.tag }}"
+          imagePullPolicy: {{ .Values.localStore.image.pullPolicy }}
+          args:
+            - server
+            - /data
+            - --console-address
+            - ":{{ .Values.localStore.service.consolePort }}"
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: supkube-local-store-credentials
+                  key: rootUser
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: supkube-local-store-credentials
+                  key: rootPassword
+            # Disable browser-side phone-home + update-check. Same reason
+            # we don't want telemetry to leak to MinIO — air-gapped customer
+            # envs would see noisy egress failures.
+            - name: MINIO_UPDATE
+              value: "off"
+            - name: MINIO_BROWSER_REDIRECT
+              value: "off"
+          ports:
+            - name: api
+              containerPort: {{ .Values.localStore.service.apiPort }}
+              protocol: TCP
+            - name: console
+              containerPort: {{ .Values.localStore.service.consolePort }}
+              protocol: TCP
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          livenessProbe:
+            httpGet:
+              path: /minio/health/live
+              port: api
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /minio/health/ready
+              port: api
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.localStore.resources | nindent 12 }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: supkube-local-store-data
+---
+# ---------------------------------------------------------------------------
+# Service — in-cluster S3 endpoint
+# ---------------------------------------------------------------------------
+# Velero hits this via the BSL config.s3Url below. The DNS form
+# `<svc>.<ns>.svc:9000` is reachable from any pod in any namespace, which
+# is what Velero needs (it runs in the velero namespace).
+#
+# Console port (9001) is exposed only for cluster-internal admin use
+# (kubectl port-forward). v0.9 may add an Ingress; not in MVP scope.
+apiVersion: v1
+kind: Service
+metadata:
+  name: supkube-local-store
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "supkube.labels" . | nindent 4 }}
+    app.kubernetes.io/component: local-store
+spec:
+  type: {{ .Values.localStore.service.type }}
+  ports:
+    - name: api
+      port: {{ .Values.localStore.service.apiPort }}
+      targetPort: api
+      protocol: TCP
+    - name: console
+      port: {{ .Values.localStore.service.consolePort }}
+      targetPort: console
+      protocol: TCP
+  selector:
+    {{- include "supkube.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: local-store
+---
+# ---------------------------------------------------------------------------
+# Job — one-shot bucket creation + Object Lock setup
+# ---------------------------------------------------------------------------
+# Why a Job (not init container on the MinIO pod): bucket creation needs
+# the MinIO API to be live, which means the readiness probe has to pass
+# first. An init container on the same pod runs BEFORE the main MinIO
+# container, so it can't reach the API. A separate Job is cleaner.
+#
+# Idempotency: `mc mb --ignore-existing` makes re-running safe (helm
+# upgrade re-applies this Job; the bucket already exists → silent success).
+#
+# Object Lock requirement: MinIO refuses to enable Object Lock on a bucket
+# that already has objects. So we MUST create the bucket WITH lock enabled
+# from day one. The `--with-lock` flag does this atomically.
+#
+# Recreation policy: ttlSecondsAfterFinished cleans up the completed Job
+# pod 5 min later, keeping kubectl get pods quiet. The Job CR itself stays
+# until helm uninstall.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: supkube-local-store-bucket-init
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "supkube.labels" . | nindent 4 }}
+    app.kubernetes.io/component: local-store
+  annotations:
+    # `helm.sh/hook` runs this Job after the Deployment+Service are applied
+    # but before any user-facing release activity. "post-install,post-upgrade"
+    # ensures bucket exists on first deploy AND any time we bump MinIO.
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  ttlSecondsAfterFinished: 300
+  backoffLimit: 6
+  template:
+    metadata:
+      labels:
+        {{- include "supkube.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: local-store-init
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: mc
+          # The MinIO Client image; matches the MinIO server version where
+          # possible. We don't pin to the literal `latest` because Quay
+          # sometimes serves stale layers; pinning gives reproducible
+          # rollouts.
+          image: quay.io/minio/mc:RELEASE.2025-04-16T18-13-26Z
+          env:
+            # ORDER MATTERS: K8s `$(VAR)` substitution only resolves vars
+            # defined EARLIER in the list. MINIO_USER/MINIO_PASSWORD must
+            # come BEFORE MC_HOST_local, otherwise the URL stays literal
+            # "$(MINIO_USER)" and mc gets a malformed alias. Cost us one
+            # iteration to learn this — keeping the comment as a tripwire.
+            - name: MINIO_USER
+              valueFrom:
+                secretKeyRef:
+                  name: supkube-local-store-credentials
+                  key: rootUser
+            - name: MINIO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: supkube-local-store-credentials
+                  key: rootPassword
+            - name: MC_HOST_local
+              # MC_HOST_<alias> avoids needing `mc alias set` (which writes
+              # to a config file inside the container). The randAlphaNum
+              # 32 output is URL-safe by construction (no special chars).
+              value: "http://$(MINIO_USER):$(MINIO_PASSWORD)@supkube-local-store.{{ .Release.Namespace }}.svc:{{ .Values.localStore.service.apiPort }}"
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              # Wait until MinIO is reachable. Readiness probe should make
+              # this fast, but the Job can outrace pod startup on cold helm
+              # install. 60s ceiling = 30 × 2s.
+              for i in $(seq 1 30); do
+                if mc alias list local >/dev/null 2>&1; then
+                  echo "MinIO is ready (attempt $i)"
+                  break
+                fi
+                echo "Waiting for MinIO ($i/30)..."
+                sleep 2
+              done
+
+              # Create the bucket. Object Lock must be set at creation time
+              # — MinIO won't let you flip it on retroactively.
+              {{- if .Values.localStore.objectLock.enabled }}
+              echo "Creating bucket {{ .Values.localStore.bucket }} WITH Object Lock..."
+              mc mb --ignore-existing --with-lock local/{{ .Values.localStore.bucket }}
+              # Set default lock mode + retention period.
+              # ${RETENTION_DAYS} is enforced per object as a fallback; the
+              # actual hold period is set per backup by SupKube (matches
+              # the Velero schedule's TTL).
+              mc retention set --default {{ .Values.localStore.objectLock.mode | upper }} 30d local/{{ .Values.localStore.bucket }} || true
+              {{- else }}
+              echo "Creating bucket {{ .Values.localStore.bucket }} (Object Lock DISABLED — not recommended for production)..."
+              mc mb --ignore-existing local/{{ .Values.localStore.bucket }}
+              {{- end }}
+
+              # Versioning is required for Object Lock to work meaningfully
+              # (each object update creates a new version; lock prevents
+              # version deletion). MinIO auto-enables it with --with-lock,
+              # but we set it explicitly so a future "lock disabled" install
+              # still benefits from version history.
+              mc version enable local/{{ .Values.localStore.bucket }} || true
+
+              echo "Bucket {{ .Values.localStore.bucket }} ready."
+---
+# ---------------------------------------------------------------------------
+# BackupStorageLocation — Velero CR pointing to the in-cluster MinIO
+# ---------------------------------------------------------------------------
+# Lives in the velero namespace (NOT supkube) because Velero's BSL controller
+# only watches its own namespace. The credential Secret was duplicated above
+# for the same reason.
+#
+# default: false — we explicitly do NOT mark this as Velero's default BSL.
+# Two reasons:
+#   1. Existing installations may already have a `default` BSL (Azure Blob /
+#      cloud S3). Stealing the default would break their backups silently.
+#   2. SupKube's policypair controller (v0.8.10) selects BSL per backup via
+#      label `supkube.io/bsl-role=local|cloud`. The "default" concept doesn't
+#      apply.
+#
+# s3ForcePathStyle: "true" — MinIO uses path-style URLs (s3.amazonaws.com/
+# bucket/key) not virtual-host-style (bucket.s3.amazonaws.com/key). Velero
+# defaults to virtual-host; we override.
+#
+# region: "minio" — Velero requires SOME value here even for S3-compatible
+# stores that don't have regions. "minio" is the convention; the value is
+# never validated.
+apiVersion: velero.io/v1
+kind: BackupStorageLocation
+metadata:
+  name: supkube-local-store
+  namespace: {{ .Values.config.veleroNamespace }}
+  labels:
+    {{- include "supkube.labels" . | nindent 4 }}
+    app.kubernetes.io/component: local-store
+    # SupKube's policypair controller uses this label to identify the BSL
+    # role when expanding "local + cloud" policies into per-half Backups.
+    supkube.io/bsl-role: local
+  annotations:
+    # Human-readable hint for the UI. Frontend's Storage Locations page
+    # reads this to render the "Managed by SupKube" badge — distinguishes
+    # our auto-provisioned BSL from user-added cloud BSLs.
+    supkube.io/managed: "true"
+    supkube.io/object-lock: {{ .Values.localStore.objectLock.enabled | quote }}
+    supkube.io/object-lock-mode: {{ .Values.localStore.objectLock.mode | quote }}
+spec:
+  provider: aws
+  default: false
+  objectStorage:
+    bucket: {{ .Values.localStore.bucket }}
+  config:
+    region: minio
+    s3ForcePathStyle: "true"
+    # In-cluster DNS — both Velero pod and node-agent pods can resolve this.
+    s3Url: "http://supkube-local-store.{{ .Release.Namespace }}.svc:{{ .Values.localStore.service.apiPort }}"
+  credential:
+    name: supkube-local-store-credentials
+    key: cloud
+{{- end }}

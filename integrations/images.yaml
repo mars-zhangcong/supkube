@@ -1,0 +1,171 @@
+# SupKube 集成镜像清单（机器可读）
+#
+# 这是单一事实来源（single source of truth）。所有镜像分发脚本都读这个文件，
+# 包括：
+#   hack/mirror-images.sh     — 推到客户私有 registry
+#   hack/airgap-bundle.sh     — 打离线 tarball
+#   hack/verify-cluster.sh    — 检查集群中已装组件版本是否匹配
+#
+# 升级一个组件 = 改这里 + INTEGRATION.md。其他脚本不用改。
+#
+# Schema:
+#   integrations:
+#     - name:            组件标识（用于脚本日志）
+#       category:        core / optional / planned
+#       tier:            required / optional / test-only
+#       image:           registry/repo:tag
+#       digest:          sha256:...    # 可选；锁数字证书指纹
+#       supkubeVersion:  当前 SupKube 兼容的版本
+#       upstreamUrl:     源码仓库
+#       notes:           简注
+#
+# digest 锁定策略：
+#   - 生产 release 用 digest 而不是 tag — 防止上游 tag 被覆盖
+#   - 开发 / 测试 release 允许只用 tag — 升级测试更快
+#   - digest 可通过 `crane digest <image>:<tag>` 拿到
+
+apiVersion: supkube.io/v1
+kind: IntegrationManifest
+metadata:
+  name: supkube-v0.8.7.2
+  supkubeVersion: 0.8.7.2-alpha
+  releasedAt: 2026-05-22
+
+integrations:
+
+  # ─── SupKube 自身（这些镜像由 SupKube 自己 build；其它都是上游搬运）─────
+  - name: supkube-backend
+    category: core
+    tier: required
+    image: supkube/backend:0.8.7.2-alpha
+    supkubeVersion: 0.8.7.2-alpha
+    upstreamUrl: https://github.com/mars-zhangcong/supkube
+    notes: SupKube REST API + RBAC + audit + BSL meta aggregation
+
+  - name: supkube-frontend
+    category: core
+    tier: required
+    image: supkube/frontend:0.8.7.2-alpha
+    supkubeVersion: 0.8.7.2-alpha
+    upstreamUrl: https://github.com/mars-zhangcong/supkube
+    notes: Vue3 SPA served by nginx
+
+  # ─── Velero 栈 ───────────────────────────────────────────────────
+  - name: velero
+    category: core
+    tier: required
+    image: velero/velero:v1.18.0
+    supkubeVersion: 0.8.7.2-alpha
+    upstreamUrl: https://github.com/vmware-tanzu/velero
+    notes: |
+      Backup engine. Min compat v1.15 (DataUpload/DataDownload CRD introduced).
+      Same image runs the velero deployment AND the node-agent DaemonSet
+      (different command args).
+
+  - name: velero-plugin-aws
+    category: core
+    tier: optional   # 装哪个看 BSL provider
+    image: velero/velero-plugin-for-aws:v1.9.0
+    supkubeVersion: 0.8.7.2-alpha
+    upstreamUrl: https://github.com/vmware-tanzu/velero-plugin-for-aws
+    notes: BSL provider=aws / minio / cos / oss 都走这个
+
+  - name: velero-plugin-azure
+    category: core
+    tier: optional
+    image: velero/velero-plugin-for-microsoft-azure:v1.10.0
+    supkubeVersion: 0.8.7.2-alpha
+    upstreamUrl: https://github.com/vmware-tanzu/velero-plugin-for-microsoft-azure
+    notes: BSL provider=azure
+
+  # ─── Dex（OIDC）────────────────────────────────────────────────────
+  - name: dex
+    category: core
+    tier: required
+    image: dexidp/dex:v2.39.1
+    supkubeVersion: 0.8.7.2-alpha
+    upstreamUrl: https://github.com/dexidp/dex
+    notes: OIDC orchestration. SupKube backend speaks OIDC to Dex; Dex speaks to external IdPs.
+
+  # ─── K8s 平台基础设施（客户的 K8s 通常自带，但裸机要装）────────
+  - name: csi-snapshot-controller
+    category: core
+    tier: optional   # EKS/AKS/GKE 自带；裸机要装
+    image: registry.k8s.io/sig-storage/snapshot-controller:v8.0.1
+    supkubeVersion: 0.8.7.2-alpha
+    upstreamUrl: https://github.com/kubernetes-csi/external-snapshotter
+    notes: Coordinates VolumeSnapshot CRs. Cluster-singleton.
+
+  - name: csi-snapshot-webhook
+    category: core
+    tier: optional
+    image: registry.k8s.io/sig-storage/snapshot-validation-webhook:v8.0.1
+    supkubeVersion: 0.8.7.2-alpha
+    upstreamUrl: https://github.com/kubernetes-csi/external-snapshotter
+    notes: Webhook-level validation. Optional but recommended.
+
+  # ─── 测试用（生产不要）────────────────────────────────────────
+  - name: minio
+    category: optional
+    tier: test-only
+    image: quay.io/minio/minio:RELEASE.2024-04-18T19-09-19Z
+    supkubeVersion: 0.8.7.2-alpha
+    upstreamUrl: https://github.com/minio/minio
+    notes: Test BSL backend for local dev. Single instance, no HA.
+
+  - name: csi-hostpath
+    category: optional
+    tier: test-only
+    image: registry.k8s.io/sig-storage/hostpathplugin:v1.16.0
+    supkubeVersion: 0.8.7.2-alpha
+    upstreamUrl: https://github.com/kubernetes-csi/csi-driver-host-path
+    notes: Test CSI driver for Kind / Docker Desktop. Never use in production.
+
+  # ─── 已规划，未集成 ──────────────────────────────────────────
+  - name: prometheus
+    category: planned
+    tier: optional
+    image: quay.io/prometheus/prometheus:v2.51.0
+    supkubeVersion: 0.9.0   # 占位 — v0.9 才上车
+    upstreamUrl: https://github.com/prometheus/prometheus
+    notes: SupKube exposes /metrics; Prometheus scrapes via ServiceMonitor (v0.9).
+
+  - name: grafana
+    category: planned
+    tier: optional
+    image: grafana/grafana:10.4.2
+    supkubeVersion: 0.9.0
+    upstreamUrl: https://github.com/grafana/grafana
+    notes: Visualizes Prometheus + Velero metrics. v0.9 ships dashboard JSON.
+
+  - name: velero-plugin-gcp
+    category: planned
+    tier: optional
+    image: velero/velero-plugin-for-gcp:v1.9.0
+    supkubeVersion: 0.9.0
+    upstreamUrl: https://github.com/vmware-tanzu/velero-plugin-for-gcp
+    notes: BSL provider=gcp (planned v0.9 with GCS storage support)
+
+  - name: kanister
+    category: planned
+    tier: optional
+    image: ghcr.io/kanisterio/controller:0.108.0
+    supkubeVersion: 0.10.0
+    upstreamUrl: https://github.com/kanisterio/kanister
+    notes: Application-aware backup hooks (Blueprints). v0.10 territory.
+
+  - name: cert-manager
+    category: planned
+    tier: optional
+    image: quay.io/jetstack/cert-manager-controller:v1.14.4
+    supkubeVersion: 0.9.0
+    upstreamUrl: https://github.com/cert-manager/cert-manager
+    notes: Auto-issue Let's Encrypt / internal CA certs for Ingress + webhooks.
+
+  - name: reloader
+    category: planned
+    tier: optional
+    image: ghcr.io/stakater/reloader:v1.0.99
+    supkubeVersion: 0.9.0
+    upstreamUrl: https://github.com/stakater/Reloader
+    notes: Auto-restart deployments on referenced Secret/ConfigMap change (ADR-017 follow-up).

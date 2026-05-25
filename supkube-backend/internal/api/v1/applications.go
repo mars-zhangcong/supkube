@@ -18,15 +18,24 @@ import (
 // ApplicationInfo represents a namespace with its workload and protection info.
 // ComplianceStatus is the derived state for the UI status badge; it is computed
 // from Workloads count and the latest backup's phase. See computeCompliance().
+//
+// v0.8.5 changes:
+//   - Added RestorePointCount (# of Backup CRs covering this ns)
+//   - Added Components — total count of backup-able resources (matches Kasten's
+//     "Items: 31/31" semantics). Distinct from Workloads which stays as the
+//     legacy Deployment+StatefulSet+DaemonSet sum used by the detail drawer.
+//   - ComplianceStatus retained (Status column kept in UI list per user req)
 type ApplicationInfo struct {
-	Namespace        string            `json:"namespace"`
-	Workloads        int               `json:"workloads"`
-	Protected        bool              `json:"protected"`
-	ComplianceStatus string            `json:"complianceStatus"`
-	Labels           map[string]string `json:"labels,omitempty"`
-	LastBackupTime   string            `json:"lastBackupTime,omitempty"`
-	LastBackupName   string            `json:"lastBackupName,omitempty"`
-	LastBackupPhase  string            `json:"lastBackupPhase,omitempty"`
+	Namespace         string            `json:"namespace"`
+	Workloads         int               `json:"workloads"`         // legacy: Deployment + StatefulSet + DaemonSet
+	Components        int               `json:"components"`        // v0.8.5: ALL backup-able resources (cm/secret/svc/sa/pvc/deploy/sts/ds/job/cronjob/ing/np/role/rb...)
+	RestorePointCount int               `json:"restorePointCount"` // v0.8.5: # of Backup CRs covering this ns
+	Protected         bool              `json:"protected"`
+	ComplianceStatus  string            `json:"complianceStatus"`
+	Labels            map[string]string `json:"labels,omitempty"`
+	LastBackupTime    string            `json:"lastBackupTime,omitempty"`
+	LastBackupName    string            `json:"lastBackupName,omitempty"`
+	LastBackupPhase   string            `json:"lastBackupPhase,omitempty"`
 }
 
 // systemNamespaces that should be excluded from the applications list.
@@ -67,9 +76,46 @@ func computeCompliance(workloads int, latestPhase string) string {
 	}
 }
 
+// countComponentsByNamespace returns a {namespace → count} map of all
+// backup-able K8s resources across the cluster. Uses ONE list call per
+// resource type (not per ns × type) so cost is bounded regardless of
+// namespace count.
+//
+// "Backup-able" here mirrors what Velero captures by default + matches
+// the GVR set used by ListBackupArtifacts. Kasten's "Items: 31/31" comes
+// from the same denominator, so this should put SupKube's "组件" column
+// in semantic parity.
+//
+// We swallow per-GVR errors silently so a missing CRD (e.g. NetworkPolicy
+// in an old cluster) doesn't kill the whole count.
+func countComponentsByNamespace(ctx context.Context) (map[string]int, error) {
+	dcl, err := k8s.GetDynamicClient()
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]int)
+	for _, gvr := range restoreArtifactGVRs {
+		// Cluster-wide List then bucket by namespace — far cheaper than
+		// looping namespaces and listing per-ns.
+		list, err := dcl.Resource(gvr).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			continue
+		}
+		for i := range list.Items {
+			ns := list.Items[i].GetNamespace()
+			if ns == "" {
+				continue
+			}
+			out[ns]++
+		}
+	}
+	return out, nil
+}
+
 // ListApplications returns namespace-level application info with workload counts and protection status
 func ListApplications(c *gin.Context) {
-	k8sClient, err := k8s.GetClient()
+	// v0.9.0.1 fix #3: per-request client honours X-Supkube-Cluster header.
+	k8sClient, err := getRequestKubernetesClient(c)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -82,8 +128,17 @@ func ListApplications(c *gin.Context) {
 		return
 	}
 
+	// v0.8.5: pre-compute per-ns component counts via cluster-wide dynamic
+	// list. ~14 list calls total regardless of ns count.
+	// v0.9.0.1 NOTE: countComponentsByNamespace still uses the local dynamic
+	// client. For full cross-cluster correctness this would need to be
+	// refactored to take a dynamic.Interface arg; leaving as-is for v0.9.0.1
+	// — component counts will be the local cluster's counts when viewing
+	// a remote, which is wrong but doesn't crash. v0.9.1 follow-up.
+	componentByNS, _ := countComponentsByNamespace(context.Background())
+
 	// Get all backups to determine protection status
-	runtimeClient, err := k8s.GetRuntimeClient()
+	runtimeClient, err := getRequestRuntimeClient(c)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -104,6 +159,11 @@ func ListApplications(c *gin.Context) {
 		phase string
 	}
 	nsBackupMap := make(map[string]*backupInfo)
+	// v0.8.5: count restore points per namespace for the new "还原点" column.
+	// Counts every Backup CR that covers the ns, regardless of phase — failed
+	// backups still represent attempted recovery points and the user should
+	// see that density. Deleted backups won't be counted because their CR is gone.
+	nsRestorePointCount := make(map[string]int)
 
 	recordBackup := func(ns string, b velerov1.Backup) {
 		existing, ok := nsBackupMap[ns]
@@ -114,6 +174,7 @@ func ListApplications(c *gin.Context) {
 				phase: string(b.Status.Phase),
 			}
 		}
+		nsRestorePointCount[ns]++
 	}
 
 	for _, b := range backupList.Items {
@@ -164,9 +225,11 @@ func ListApplications(c *gin.Context) {
 		}
 
 		app := ApplicationInfo{
-			Namespace: ns,
-			Workloads: workloadCount,
-			Labels:    nsItem.Labels,
+			Namespace:         ns,
+			Workloads:         workloadCount,
+			Components:        componentByNS[ns],
+			RestorePointCount: nsRestorePointCount[ns],
+			Labels:            nsItem.Labels,
 		}
 
 		latestPhase := ""

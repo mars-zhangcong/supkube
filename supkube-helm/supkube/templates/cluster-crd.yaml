@@ -1,0 +1,156 @@
+{{- /*
+v0.9.0 MC1: Cluster CRD — registry of all clusters SupKube protects.
+
+Why a CRD (vs a ConfigMap or a Pinia/in-memory list):
+  - Survives backend restarts; the policypair controller and the
+    cross-cluster restore plumbing both need to enumerate clusters
+    out-of-band of the SPA.
+  - Standard K8s RBAC can scope Cluster CR access (admin-only create/
+    delete via the same rbac.go entries that gate other resources).
+  - When v0.9.x adds Distributions (the "this Global Policy applies
+    to clusters where label X = Y" feature), they reference Cluster
+    CRs by selector — already idiomatic.
+
+Why NOT use cluster-api (Cluster API CRDs from sig-cluster-lifecycle):
+  - Cluster API's `Cluster` resource is for *provisioning* clusters,
+    not for *registering* existing ones for cross-cluster operations.
+  - The CAPI CRD ships with ~50 fields specific to provisioner topology
+    (control plane refs, infrastructure refs, etc.) that we don't need.
+  - Our scope: known cluster + how to talk to it. Tiny CRD.
+
+Schema notes:
+  - kubeconfigSecretRef points to a Secret in the supkube namespace
+    holding the kubeconfig bytes. We never store kubeconfig content
+    directly in the CR; that's standard "credentials live in Secret"
+    pattern.
+  - status.phase mirrors the Kasten convention: Healthy / Unreachable
+    / Unauthorized / Unknown. The 60s health-check controller (MC2)
+    updates this.
+
+Install path:
+  - Lives in templates/ so `helm install` provisions it. Existing
+    installs add it on `helm upgrade`. We DO NOT delete this CRD on
+    `helm uninstall` (the orphaned CR objects would block other
+    cleanup); admins must delete CR objects first, then delete the
+    CRD by hand if they really want to.
+*/}}
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: clusters.supkube.io
+  labels:
+    {{- include "supkube.labels" . | nindent 4 }}
+  annotations:
+    # Keep CRD around on `helm uninstall` to avoid orphaning Cluster CRs.
+    "helm.sh/resource-policy": keep
+spec:
+  group: supkube.io
+  scope: Namespaced
+  names:
+    kind: Cluster
+    listKind: ClusterList
+    singular: cluster
+    plural: clusters
+    shortNames:
+      - skcluster
+    categories:
+      - supkube
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          required:
+            - spec
+          properties:
+            spec:
+              type: object
+              required:
+                - kubeconfigSecretRef
+              properties:
+                displayName:
+                  type: string
+                  description: "Human-friendly name shown in the UI; falls back to metadata.name when empty."
+                  maxLength: 100
+                type:
+                  type: string
+                  description: "primary = hosts the SupKube UI itself; secondary = remote cluster registered for cross-cluster ops."
+                  enum:
+                    - primary
+                    - secondary
+                  default: secondary
+                kubeconfigSecretRef:
+                  type: object
+                  required:
+                    - name
+                  properties:
+                    name:
+                      type: string
+                    key:
+                      type: string
+                      description: "Key inside the Secret holding the kubeconfig bytes. Default: kubeconfig"
+                      default: "kubeconfig"
+                context:
+                  type: string
+                  description: "Which context from the kubeconfig to use. Empty = current-context."
+                description:
+                  type: string
+                  maxLength: 500
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                  enum:
+                    - Healthy
+                    - Unreachable
+                    - Unauthorized
+                    - Unknown
+                  default: Unknown
+                lastChecked:
+                  type: string
+                  format: date-time
+                message:
+                  type: string
+                  description: "Most recent connection-check error, or empty when Healthy."
+                k8sVersion:
+                  type: string
+                nodeCount:
+                  type: integer
+                capabilities:
+                  type: array
+                  items:
+                    type: string
+                  description: "Detected capabilities: csi, dataMover, kopia, etc."
+                velero:
+                  type: object
+                  properties:
+                    installed:
+                      type: boolean
+                    version:
+                      type: string
+                    namespace:
+                      type: string
+      additionalPrinterColumns:
+        - name: Type
+          type: string
+          jsonPath: .spec.type
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: K8s
+          type: string
+          jsonPath: .status.k8sVersion
+        - name: Nodes
+          type: integer
+          jsonPath: .status.nodeCount
+        - name: Last Checked
+          type: date
+          jsonPath: .status.lastChecked
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      subresources:
+        status: {}

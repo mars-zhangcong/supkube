@@ -2,6 +2,9 @@ import { createApp } from 'vue'
 import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
 import 'element-plus/theme-chalk/dark/css-vars.css'
+// v0.8.10.2: SupKube design tokens (colour + typography). Imported BEFORE
+// any component CSS so var(--sk-*) is available globally. See UI_GUIDELINES.md.
+import './styles/tokens.css'
 import App from './App.vue'
 import router from './router'
 import { i18n } from './i18n'

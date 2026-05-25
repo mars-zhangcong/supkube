@@ -1,5 +1,7 @@
 # Build stage
-FROM golang:1.21-alpine AS builder
+# v0.8.5: bumped from 1.21 → 1.25 because go-oidc/v3 v3.18 requires 1.25+
+# (Go 1.25 has the synchronous mutex semantics go-jose v4 depends on).
+FROM golang:1.25-alpine AS builder
 
 RUN apk add --no-cache git
 
@@ -11,8 +13,18 @@ RUN go mod download
 
 # Build
 ARG CACHEBUST=20260519
+ARG SUPKUBE_VERSION=0.8.10-alpha
 COPY . .
-RUN echo "cachebust=$CACHEBUST" && CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /supkube-backend .
+# Embed version + build-stamp via -ldflags -X. Lets /api/v1/status report
+# what's actually running so users can confirm a `helm upgrade` rolled out.
+# BuildStamp comes from `date -u +%y%m%d-%H%M` at build time.
+RUN echo "cachebust=$CACHEBUST" && \
+    BUILD_STAMP=$(date -u +%y%m%d-%H%M) && \
+    CGO_ENABLED=0 GOOS=linux go build \
+      -ldflags="-w -s \
+        -X 'github.com/supkube/supkube-backend/internal/version.Version=${SUPKUBE_VERSION}' \
+        -X 'github.com/supkube/supkube-backend/internal/version.BuildStamp=${BUILD_STAMP}'" \
+      -o /supkube-backend .
 
 # Runtime stage
 FROM alpine:3.19

@@ -1,0 +1,121 @@
+{{- if .Values.auth.dex.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "supkube.fullname" . }}-dex
+  labels:
+    {{- include "supkube.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dex
+spec:
+  # Dex is stateless (memory storage) so a single replica is fine for
+  # demo/single-tenant. For HA, switch storage.type to "kubernetes" CRD
+  # storage and bump replicas — but expect customers running their own
+  # external Dex/Keycloak before we recommend going that route.
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "supkube.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: dex
+  template:
+    metadata:
+      labels:
+        {{- include "supkube.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: dex
+      annotations:
+        # Force a rollout when the ConfigMap content changes — Helm doesn't
+        # do this automatically, and Dex doesn't watch its own config file.
+        checksum/config: {{ include (print $.Template.BasePath "/dex-configmap.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "supkube.fullname" . }}
+      containers:
+        - name: dex
+          image: "{{ .Values.auth.dex.image.repository }}:{{ .Values.auth.dex.image.tag }}"
+          imagePullPolicy: {{ .Values.auth.dex.image.pullPolicy }}
+          command: ["/usr/local/bin/dex"]
+          args: ["serve", "/etc/dex/config.yaml"]
+          ports:
+            - name: http
+              containerPort: 5556
+              protocol: TCP
+          # Dex exposes /healthz on the same HTTP port. We use it for both
+          # liveness (is the binary alive?) and readiness (can it answer
+          # OIDC discovery?).
+          # Dex serves all routes under the issuer's path prefix. Our
+          # issuer is .../dex so healthz lives at /dex/healthz, not /healthz.
+          livenessProbe:
+            httpGet:
+              path: /dex/healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /dex/healthz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 300m
+              memory: 256Mi
+          # v0.8.5: Inject env vars into Dex from K8s Secrets so the
+          # connector configs can reference them as $VAR without storing
+          # the actual secret value in Git-committed values.yaml.
+          #
+          # Dex performs os.ExpandEnv() on its config.yaml at load time,
+          # which is why this works:
+          #   clientSecret: "$GITHUB_CLIENT_SECRET"  → resolved to real value
+          #
+          # Two ways to inject (both supported, can mix):
+          #   envFromSecrets: pull EVERY key from a Secret as an env var
+          #                   (simplest; one Secret = one bundle of vars)
+          #   env: individual var → specific Secret key references
+          {{- if or .Values.auth.dex.envFromSecrets .Values.auth.dex.env }}
+          {{- if .Values.auth.dex.envFromSecrets }}
+          envFrom:
+            {{- range .Values.auth.dex.envFromSecrets }}
+            - secretRef:
+                name: {{ .secretName }}
+              {{- if .prefix }}
+              prefix: {{ .prefix }}
+              {{- end }}
+            {{- end }}
+          {{- end }}
+          {{- if .Values.auth.dex.env }}
+          env:
+            {{- toYaml .Values.auth.dex.env | nindent 12 }}
+          {{- end }}
+          {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/dex
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "supkube.fullname" . }}-dex
+            items:
+              - key: config.yaml
+                path: config.yaml
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "supkube.fullname" . }}-dex
+  labels:
+    {{- include "supkube.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dex
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5556
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "supkube.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: dex
+{{- end }}

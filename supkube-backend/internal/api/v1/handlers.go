@@ -2,29 +2,91 @@ package v1
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/supkube/supkube-backend/internal/auth"
+	"github.com/supkube/supkube-backend/internal/gc"
 	"github.com/supkube/supkube-backend/internal/k8s"
+	"github.com/supkube/supkube-backend/internal/version"
 )
 
-// GetStatus returns system status
+// GetStatus returns system status. Public endpoint (bypasses auth) so
+// scripts can confirm what backend version is actually running before
+// they touch credentials. Use `curl -s http://supkube/api/v1/status` —
+// the build stamp tells you whether a recent helm upgrade actually
+// rolled out.
 func GetStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
-		"status":  "ok",
-		"version": "0.7.9-alpha",
+		"status":     "ok",
+		"version":    version.Version,
+		"buildStamp": version.BuildStamp,
 	})
+}
+
+// CreateNamespace creates a new namespace. Used by the Restore drawer's
+// "Create A New Namespace" flow so the user can restore into a fresh target
+// without bouncing out to kubectl. Refuses to (re)create protected namespaces.
+func CreateNamespace(c *gin.Context) {
+	var req struct {
+		Name string `json:"name" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := validateK8sName(req.Name); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if isProtectedNamespace(req.Name) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("namespace %q is protected and cannot be created via SupKube", req.Name)})
+		return
+	}
+	cl, err := k8s.GetClient()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: req.Name,
+			Labels: map[string]string{
+				"supkube.io/managed-by": "supkube",
+				"supkube.io/created-by": "restore-drawer",
+			},
+		},
+	}
+	if _, err := cl.CoreV1().Namespaces().Create(context.Background(), ns, metav1.CreateOptions{}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"name": req.Name})
+}
+
+// isProtectedNamespace lists namespaces SupKube refuses to delete or
+// reactively recreate. velero/kube-system/etc. are platform-critical and
+// supkube hosts the controller itself.
+func isProtectedNamespace(name string) bool {
+	switch name {
+	case "velero", "supkube", "kube-system", "kube-public", "kube-node-lease", "default":
+		return true
+	}
+	return false
 }
 
 // ListNamespaces returns all namespaces in the cluster
 func ListNamespaces(c *gin.Context) {
-	cl, err := k8s.GetClient()
+	cl, err := getRequestKubernetesClient(c) // v0.9.0.1 — header-routed
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -41,9 +103,23 @@ func ListNamespaces(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"items": names, "total": len(names)})
 }
 
-// ListBackups returns all Velero backups
+// ListBackups returns all Velero backups, each enriched with a `supkube`
+// sidecar containing dataPath / volume metadata / tarball size.
+//
+// v0.8.6: the enrichment is the "Backup Composition" answer to the
+// recurring "what's actually in this backup?" question. Pre-v0.8.6 the
+// list response was just the raw velerov1.Backup slice, which Velero
+// schema doesn't expose any of these fields on. See backup_meta.go +
+// backup_meta_bsl.go for the implementation.
+//
+// Volume metadata + tarball sizes are computed in BATCH (one cluster
+// query, one S3 ListObjectsV2) and then joined in memory, so a page of
+// 100 backups still costs only a few external calls.
 func ListBackups(c *gin.Context) {
-	cl, err := k8s.GetRuntimeClient()
+	// v0.9.0.1 fix #3 — route to remote cluster when X-Supkube-Cluster
+	// header is set by the SPA's Mode Switcher. Same wire format; same
+	// types; just a different rest.Config underneath.
+	cl, err := getRequestRuntimeClient(c)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -54,7 +130,68 @@ func ListBackups(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"items": backupList.Items, "total": len(backupList.Items)})
+	// Batch-fetch volume metadata for the whole list (1 VSC list call,
+	// 1 PVB list call). Avoid N round-trips per page row.
+	volMeta := collectVolumeMetadataBatch(c.Request.Context(), cl)
+	// v0.8.10.4: batch reserved-bytes (one PVC list per unique included
+	// namespace) so Snapshot RPs whose VSCs got auto-deleted by Velero
+	// v1.18 still show a meaningful Size cell.
+	reservedMeta := reservedBytesBatch(c.Request.Context(), cl, backupList.Items)
+	// v0.8.11 #24: stable Application Items count per backup. One pass
+	// over the unique namespace set; same categorisation as the drawer's
+	// artifact-breakdown.
+	appItemsMeta := applicationItemsBatch(c.Request.Context(), backupList.Items)
+
+	items := make([]map[string]interface{}, 0, len(backupList.Items))
+	for i := range backupList.Items {
+		b := &backupList.Items[i]
+		meta := SupKubeBackupMeta{
+			DataPath: classifyDataPath(b),
+		}
+		if v, ok := volMeta[b.Name]; ok {
+			meta.VolumeCount = v.Count
+			meta.VolumeBytes = v.Bytes
+		}
+		meta.ReservedBytes = reservedMeta[b.Name]
+		meta.ApplicationItems = appItemsMeta[b.Name]
+		// Tarball size from BSL is cached per-BSL with 60s TTL so a
+		// page render is O(BSL count) external calls, not O(backup count).
+		size, errStr := getBackupTarballSize(c.Request.Context(), cl, b)
+		meta.TarballBytes = size
+		meta.TarballError = errStr
+
+		items = append(items, enrichBackupForResponse(b, meta))
+	}
+	c.JSON(http.StatusOK, gin.H{"items": items, "total": len(items)})
+}
+
+// enrichBackupForResponse takes a velerov1.Backup and our SupKube
+// sidecar, and produces a JSON-friendly map that embeds the original
+// Backup fields verbatim + adds a top-level "supkube" key.
+//
+// We marshal-then-unmarshal once to flatten the Backup into a map.
+// The cost is real (small JSON round-trip per row) but it keeps the
+// existing client-side `row.metadata.name`, `row.status.phase`, etc.
+// references working with zero changes — that's worth ~2 µs per row.
+func enrichBackupForResponse(b *velerov1.Backup, meta SupKubeBackupMeta) map[string]interface{} {
+	raw, err := json.Marshal(b)
+	if err != nil {
+		// Should never happen for a typed Velero struct; fall back to
+		// a minimal shape so the row still renders.
+		return map[string]interface{}{
+			"metadata": map[string]interface{}{"name": b.Name},
+			"supkube":  meta,
+		}
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return map[string]interface{}{
+			"metadata": map[string]interface{}{"name": b.Name},
+			"supkube":  meta,
+		}
+	}
+	out["supkube"] = meta
+	return out
 }
 
 // CreateBackup creates a new Velero backup.
@@ -73,6 +210,11 @@ func CreateBackup(c *gin.Context) {
 		StorageLocation          string            `json:"storageLocation"`
 		SnapshotVolumes          *bool             `json:"snapshotVolumes"`
 		DefaultVolumesToFsBackup *bool             `json:"defaultVolumesToFsBackup"`
+		// v0.8.7: Data Mover. Layered on top of CSI — when true, Velero
+		// takes the CSI snapshot and Kopia-uploads its contents to the
+		// BSL, making the backup portable across clusters. Requires
+		// node-agent DaemonSet to be deployed in the velero namespace.
+		SnapshotMoveData *bool `json:"snapshotMoveData"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -82,6 +224,36 @@ func CreateBackup(c *gin.Context) {
 		req.DefaultVolumesToFsBackup != nil && *req.DefaultVolumesToFsBackup {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "ambiguous volume mode: pick exactly one of snapshotVolumes (CSI) or defaultVolumesToFsBackup (filesystem)"})
 		return
+	}
+	// Data Mover only makes sense layered on CSI — it's "take the CSI
+	// snapshot then upload it". Filesystem backup already uploads,
+	// so combining them is a config smell. Reject early with the user-
+	// visible reason rather than letting Velero silently ignore one.
+	if req.SnapshotMoveData != nil && *req.SnapshotMoveData {
+		csiOn := req.SnapshotVolumes != nil && *req.SnapshotVolumes
+		if !csiOn {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "snapshotMoveData requires snapshotVolumes=true (Data Mover is layered on CSI)"})
+			return
+		}
+		if req.DefaultVolumesToFsBackup != nil && *req.DefaultVolumesToFsBackup {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "snapshotMoveData conflicts with defaultVolumesToFsBackup (both try to upload; pick one)"})
+			return
+		}
+	}
+	// v0.8.5 step 3: editor can only create Backups for their scoped ns.
+	// Empty IncludedNamespaces = whole-cluster backup, which only admin
+	// can do (editor must specify at least one ns within scope).
+	if !auth.RequireNamespaceAccess(c, req.IncludedNamespaces...) {
+		return
+	}
+	if len(req.IncludedNamespaces) == 0 {
+		user := auth.FromContext(c)
+		if user != nil && user.Role == auth.RoleEditor {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+				"error": "editors must explicitly list includedNamespaces (whole-cluster backups require admin)",
+			})
+			return
+		}
 	}
 
 	cl, err := k8s.GetRuntimeClient()
@@ -99,6 +271,7 @@ func CreateBackup(c *gin.Context) {
 			ExcludedNamespaces:       req.ExcludedNamespaces,
 			SnapshotVolumes:          req.SnapshotVolumes,
 			DefaultVolumesToFsBackup: req.DefaultVolumesToFsBackup,
+			SnapshotMoveData:         req.SnapshotMoveData,
 		},
 	}
 	if req.TTL != "" {
@@ -122,7 +295,13 @@ func CreateBackup(c *gin.Context) {
 	c.JSON(http.StatusCreated, backup)
 }
 
-// GetBackup returns a specific backup
+// GetBackup returns a specific backup, enriched with the same `supkube`
+// sidecar shape ListBackups produces.
+//
+// For single-backup queries we compute volume metadata directly (the
+// batch helper is overkill for N=1) but we still go through the BSL
+// cache for tarball size — repeated detail-page polls hit the same
+// 60s-cached BSL listing.
 func GetBackup(c *gin.Context) {
 	name := c.Param("name")
 	cl, err := k8s.GetRuntimeClient()
@@ -135,7 +314,18 @@ func GetBackup(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, backup)
+	volCount, volBytes := collectVolumeMetadata(c.Request.Context(), cl, name)
+	tarballBytes, tarballErr := getBackupTarballSize(c.Request.Context(), cl, backup)
+	reservedBytes := reservedBytesForBackup(c.Request.Context(), cl, backup)
+	meta := SupKubeBackupMeta{
+		DataPath:      classifyDataPath(backup),
+		VolumeCount:   volCount,
+		VolumeBytes:   volBytes,
+		ReservedBytes: reservedBytes,
+		TarballBytes:  tarballBytes,
+		TarballError:  tarballErr,
+	}
+	c.JSON(http.StatusOK, enrichBackupForResponse(backup, meta))
 }
 
 // DeleteBackup deletes a backup
@@ -167,6 +357,19 @@ func DeleteBackup(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
+	// v0.8.5 step 3: editor can only delete Backups whose ns is in scope.
+	// Whole-cluster backups (empty IncludedNamespaces) require admin.
+	if len(backup.Spec.IncludedNamespaces) == 0 {
+		user := auth.FromContext(c)
+		if user != nil && user.Role == auth.RoleEditor {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+				"error": "deleting a whole-cluster backup requires admin",
+			})
+			return
+		}
+	} else if !auth.RequireNamespaceAccess(c, backup.Spec.IncludedNamespaces...) {
+		return
+	}
 
 	// DBR name: <backup>-<ts>. Velero auto-cleans DBRs after processing;
 	// the unique suffix lets us re-trigger a delete if a prior one stalled.
@@ -188,8 +391,17 @@ func DeleteBackup(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create DeleteBackupRequest: " + err.Error()})
 		return
 	}
+	// v0.8.8: schedule a deferred orphan-GC scan ~60s from now. Velero's
+	// DBR controller cleans most things but leaks Data Mover retained
+	// VSC/VS. The debounced timer in gc.TriggerSoon coalesces rapid
+	// deletes into a single scan, avoiding K8s API churn when a user
+	// bulk-deletes 20 restore points in a row.
+	k8sCli, kerr := k8s.GetClient()
+	if kerr == nil {
+		gc.TriggerSoon(context.Background(), cl, k8sCli)
+	}
 	c.JSON(http.StatusAccepted, gin.H{
-		"message":              "Delete in progress (cascade)",
+		"message":              "Delete in progress (cascade); orphan cleanup scheduled ~60s",
 		"deleteBackupRequest":  dbrName,
 		"backupName":           name,
 	})
@@ -197,7 +409,7 @@ func DeleteBackup(c *gin.Context) {
 
 // ListRestores returns all Velero restores
 func ListRestores(c *gin.Context) {
-	cl, err := k8s.GetRuntimeClient()
+	cl, err := getRequestRuntimeClient(c) // v0.9.0.1 — header-routed
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -211,39 +423,247 @@ func ListRestores(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"items": restoreList.Items, "total": len(restoreList.Items)})
 }
 
-// CreateRestore creates a new Velero restore
+// CreateRestore creates a new Velero restore (v0.7.10 — Kasten-style flow).
+//
+// Why each field exists (problem this solves):
+//
+//   - NamespaceMapping  : target ns picker. Empty mapping → restore in-place to
+//     original ns. Non-empty value redirects each source ns to its target.
+//   - CleanupBeforeRestore : Velero's default `existingResourcePolicy: none`
+//     skips resources that already exist, which makes the restore a no-op when
+//     the target ns is unchanged. With this flag we delete the target ns first
+//     and wait until it's fully gone, then create the Restore. This matches
+//     Kasten's "the contents of the selected namespace will be overwritten"
+//     promise.
+//   - IncludedResources / ExcludedResources : per-artifact selection from the
+//     drawer's Spec checkbox list. We pass them through to Velero, which
+//     filters at restore time.
+//   - ExistingResourcePolicy : explicit "" / "none" / "update" choice for
+//     advanced users who do not want a full ns wipe but still want to overwrite
+//     mutable resources like ConfigMaps/Secrets.
 func CreateRestore(c *gin.Context) {
 	var req struct {
-		Name                string   `json:"name" binding:"required"`
-		BackupName          string   `json:"backupName" binding:"required"`
-		IncludedNamespaces  []string `json:"includedNamespaces"`
-		NamespaceMapping    map[string]string `json:"namespaceMapping"`
+		Name                   string            `json:"name" binding:"required"`
+		BackupName             string            `json:"backupName" binding:"required"`
+		IncludedNamespaces     []string          `json:"includedNamespaces"`
+		NamespaceMapping       map[string]string `json:"namespaceMapping"`
+		CleanupBeforeRestore   bool              `json:"cleanupBeforeRestore"`
+		IncludedResources      []string          `json:"includedResources"`
+		ExcludedResources      []string          `json:"excludedResources"`
+		ExistingResourcePolicy string            `json:"existingResourcePolicy"`
+		// v0.8.2 Transform Set integration. When non-empty, the Restore
+		// references the named ConfigMap in velero ns so Velero applies
+		// the JSONPath patches at restore time. We don't materialize
+		// anything new here — just write the ref.
+		TransformSetName       string            `json:"transformSetName,omitempty"`
+		// v0.9.0 MC3 — cross-cluster restore. Empty or "this-cluster" means
+		// "restore on the local cluster" (existing v0.8 behavior). Otherwise
+		// the named cluster must be a registered Cluster CR; we use its
+		// kubeconfig to apply the Restore CR on the remote cluster instead.
+		// The remote cluster's Velero must already have the Backup metadata
+		// synced (via BackupSyncController from a shared BSL) — MC4 will
+		// automate the BSL sync; for MC3 we just apply the Restore CR and
+		// let Velero fail-loudly if metadata isn't present yet.
+		TargetCluster          string            `json:"targetCluster,omitempty"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
+	// v0.8.5 step 3: editor must have access to BOTH source ns (from
+	// IncludedNamespaces) AND target ns (from NamespaceMapping values).
+	// Otherwise an editor scoped to ns-A could restore an ns-B backup
+	// into ns-A — sneakily exfiltrating data they shouldn't see.
+	nsToCheck := append([]string{}, req.IncludedNamespaces...)
+	nsToCheck = append(nsToCheck, collectRestoreTargetNamespaces(req.NamespaceMapping, req.IncludedNamespaces)...)
+	if !auth.RequireNamespaceAccess(c, nsToCheck...) {
+		return
+	}
+
 	cl, err := k8s.GetRuntimeClient()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	// Cleanup-before-restore: delete the target namespace(s) first. We compute
+	// the target set from NamespaceMapping values (when present) or from
+	// IncludedNamespaces (when restoring in-place). Refuses to touch protected
+	// namespaces — that's a guardrail, not a user choice.
+	if req.CleanupBeforeRestore {
+		targets := collectRestoreTargetNamespaces(req.NamespaceMapping, req.IncludedNamespaces)
+		if err := deleteNamespacesAndWait(context.Background(), targets, 60*time.Second); err != nil {
+			c.JSON(http.StatusConflict, gin.H{"error": fmt.Sprintf("cleanup failed: %v", err)})
+			return
+		}
+	}
+
+	spec := velerov1.RestoreSpec{
+		BackupName:         req.BackupName,
+		IncludedNamespaces: req.IncludedNamespaces,
+		NamespaceMapping:   req.NamespaceMapping,
+		IncludedResources:  req.IncludedResources,
+		ExcludedResources:  req.ExcludedResources,
+	}
+	// Velero rejects unknown ExistingResourcePolicy values. Only forward when
+	// the caller explicitly set "none" or "update"; empty string preserves
+	// Velero's default behavior.
+	switch req.ExistingResourcePolicy {
+	case "none", "update":
+		spec.ExistingResourcePolicy = velerov1.PolicyType(req.ExistingResourcePolicy)
+	case "":
+		// leave unset
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid existingResourcePolicy %q (allowed: none, update, empty)", req.ExistingResourcePolicy)})
+		return
+	}
+
+	// v0.8.2: Transform Set ref. Velero expects ResourceModifier to live
+	// as a ConfigMap in the same namespace (velero) — we just write the
+	// LocalObjectReference. The ConfigMap itself was created by the
+	// Transform Set CRUD endpoints earlier (or by the Pre-flight
+	// "Apply Suggested Fix" flow).
+	if req.TransformSetName != "" {
+		spec.ResourceModifier = &corev1.TypedLocalObjectReference{
+			APIGroup: nil, // core/v1 → APIGroup must be nil
+			Kind:     "ConfigMap",
+			Name:     req.TransformSetName,
+		}
+	}
+
 	restore := &velerov1.Restore{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      req.Name,
 			Namespace: "velero",
+			Labels: map[string]string{
+				"supkube.io/managed-by": "supkube",
+			},
+			Annotations: map[string]string{},
 		},
-		Spec: velerov1.RestoreSpec{
-			BackupName:         req.BackupName,
-			IncludedNamespaces: req.IncludedNamespaces,
-			NamespaceMapping:   req.NamespaceMapping,
-		},
+		Spec: spec,
 	}
+
+	// v0.9.0 MC3+MC4 — cross-cluster dispatch.
+	//
+	// If targetCluster is empty or "this-cluster", fall through to the
+	// existing local client. Otherwise:
+	//   1. (MC3) Resolve target cluster + its kubeconfig Secret, build a
+	//      remote velero-aware client.
+	//   2. (MC4) Auto-mirror the BSL + credential Secret onto the target
+	//      and wait for the target's Velero to sync the Backup CR.
+	//   3. (MC3) Apply the Restore CR on the remote cluster.
+	if req.TargetCluster != "" && req.TargetCluster != "this-cluster" {
+		// Stamp the source cluster identity for audit / cross-cluster UI
+		// reconciliation. The target cluster's Velero ignores this; only
+		// SupKube cares about it.
+		restore.ObjectMeta.Annotations["supkube.io/restore-target-cluster"] = req.TargetCluster
+		restore.ObjectMeta.Annotations["supkube.io/restore-initiated-by"] = "supkube-multicluster"
+
+		remoteCli, rerr := buildRemoteVeleroClient(context.Background(), req.TargetCluster)
+		if rerr != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": "target cluster: " + rerr.Error()})
+			return
+		}
+
+		// MC4 — auto-sync BSL + secret + wait for Backup CR. Takes up to
+		// backupSyncTimeout (90s default). The user sees a spinner; this
+		// is acceptable UX because cross-cluster restore is intrinsically
+		// an "explicit slow op" — they expect the wait.
+		prepCtx, prepCancel := context.WithTimeout(context.Background(), backupSyncTimeout+15*time.Second)
+		defer prepCancel()
+		if err := prepareTargetForCrossClusterRestore(prepCtx, remoteCli, req.BackupName); err != nil {
+			// Surface the precise message — the SPA shows it raw to the
+			// admin; pre-flight failures are typically actionable
+			// (wrong BSL, secret missing, network ACL, etc.).
+			c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
+			return
+		}
+
+		if err := remoteCli.Create(context.Background(), restore); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "remote restore create: " + err.Error()})
+			return
+		}
+		// Echo the same CR back in the response with the target-cluster
+		// annotation visible so the SPA can pivot the user to the target
+		// cluster's Activity page.
+		c.JSON(http.StatusCreated, restore)
+		return
+	}
+
+	// Local-cluster path (unchanged from v0.8.x).
 	if err := cl.Create(context.Background(), restore); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusCreated, restore)
+}
+
+// collectRestoreTargetNamespaces returns the set of namespaces that the
+// restore will populate. NamespaceMapping values (target side) take precedence;
+// when no mapping is given we fall back to IncludedNamespaces (in-place).
+func collectRestoreTargetNamespaces(mapping map[string]string, included []string) []string {
+	seen := map[string]struct{}{}
+	add := func(n string) {
+		if n == "" {
+			return
+		}
+		seen[n] = struct{}{}
+	}
+	if len(mapping) > 0 {
+		for _, v := range mapping {
+			add(v)
+		}
+	} else {
+		for _, n := range included {
+			add(n)
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for n := range seen {
+		out = append(out, n)
+	}
+	return out
+}
+
+// deleteNamespacesAndWait deletes each namespace and blocks until each one is
+// actually gone (or the per-namespace timeout elapses). Returns the first
+// error encountered. Protected namespaces are rejected up-front so the user
+// cannot blow up velero/kube-system by accident.
+func deleteNamespacesAndWait(ctx context.Context, names []string, timeout time.Duration) error {
+	if len(names) == 0 {
+		return nil
+	}
+	for _, n := range names {
+		if isProtectedNamespace(n) {
+			return fmt.Errorf("refusing to delete protected namespace %q", n)
+		}
+	}
+	cl, err := k8s.GetClient()
+	if err != nil {
+		return err
+	}
+	for _, name := range names {
+		// Issue delete; ignore NotFound (idempotent).
+		if err := cl.CoreV1().Namespaces().Delete(ctx, name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+			return fmt.Errorf("delete ns %q: %w", name, err)
+		}
+		// Poll until the namespace is fully removed. Velero's restore would
+		// otherwise race a still-Terminating ns and report "operation cannot
+		// be fulfilled".
+		deadline := time.Now().Add(timeout)
+		for {
+			_, err := cl.CoreV1().Namespaces().Get(ctx, name, metav1.GetOptions{})
+			if apierrors.IsNotFound(err) {
+				break
+			}
+			if time.Now().After(deadline) {
+				return fmt.Errorf("namespace %q still terminating after %s", name, timeout)
+			}
+			time.Sleep(1 * time.Second)
+		}
+	}
+	return nil
 }
 
 // GetRestore returns a specific restore
@@ -275,6 +695,12 @@ func DeleteRestore(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
+	// v0.8.5 step 3: editor must have access to the Restore's target ns.
+	// Target derived from NamespaceMapping (cross-ns) or IncludedNamespaces (in-place).
+	targets := collectRestoreTargetNamespaces(restore.Spec.NamespaceMapping, restore.Spec.IncludedNamespaces)
+	if !auth.RequireNamespaceAccess(c, targets...) {
+		return
+	}
 	if err := cl.Delete(context.Background(), restore); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -282,11 +708,23 @@ func DeleteRestore(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "restore deleted"})
 }
 
-// GetRestoreResults returns structured errors/warnings from the restore status.
-// Velero stores the full log/results files in object storage via DownloadRequest;
-// that flow will be wired in v0.6. For now this endpoint exposes everything that's
-// already in the Restore CR's .status — which covers validation failures, per-
-// resource errors, and warnings and is enough to debug most Failed restores.
+// GetRestoreResults returns the full structured errors/warnings for a Restore.
+//
+// Why this used to be a stub: Velero only stores error/warning *counts* in
+// `Restore.status.errors` and `.warnings`. The actual messages live in object
+// storage (BSL) as a gzipped JSON blob keyed by namespace. To retrieve them
+// you must create a `DownloadRequest` CRD with target kind RestoreResults,
+// wait for the Velero controller to populate `.status.downloadURL` (a
+// short-lived presigned BSL URL), then HTTP GET + gunzip the body.
+//
+// v0.7.11: we now do exactly that, so the Restores page can actually show
+// the user *why* a restore reported `FinalizingPartiallyFailed` instead of
+// just an opaque "Errors (1)" badge.
+//
+// The detailed fetch is best-effort: if anything in the DownloadRequest dance
+// fails (controller slow, BSL temporarily unreachable, URL expired), we still
+// return the summary so the drawer renders. The error message is exposed as
+// `detailedError` for diagnostics.
 func GetRestoreResults(c *gin.Context) {
 	name := c.Param("name")
 	cl, err := k8s.GetRuntimeClient()
@@ -300,22 +738,62 @@ func GetRestoreResults(c *gin.Context) {
 		return
 	}
 	status := restore.Status
-	c.JSON(http.StatusOK, gin.H{
-		"name":              restore.Name,
-		"phase":             string(status.Phase),
-		"failureReason":     status.FailureReason,
-		"validationErrors":  status.ValidationErrors,
-		"errors":            status.Errors,
-		"warnings":          status.Warnings,
-		"progress":          status.Progress,
-		"startTimestamp":    status.StartTimestamp,
+
+	payload := gin.H{
+		"name":                restore.Name,
+		"phase":               string(status.Phase),
+		"failureReason":       status.FailureReason,
+		"validationErrors":    status.ValidationErrors,
+		"errors":              status.Errors,
+		"warnings":            status.Warnings,
+		"progress":            status.Progress,
+		"startTimestamp":      status.StartTimestamp,
 		"completionTimestamp": status.CompletionTimestamp,
-	})
+	}
+
+	// Only fetch detailed results when the restore is in a terminal state AND
+	// has something interesting to report. Skipping the call for green
+	// restores avoids the ~3s round-trip cost on the happy path. Velero phases
+	// we treat as "ready to download":
+	//   Completed, PartiallyFailed, FinalizingPartiallyFailed, Failed
+	phase := string(status.Phase)
+	terminal := phase == "Completed" || phase == "PartiallyFailed" ||
+		phase == "Failed" || phase == "FinalizingPartiallyFailed" ||
+		phase == "Finalizing"
+	if terminal && (status.Errors > 0 || status.Warnings > 0) {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		detailed, err := fetchRestoreDetailedResults(ctx, name)
+		if err != nil {
+			payload["detailedError"] = err.Error()
+		} else {
+			payload["detailed"] = detailed
+		}
+	}
+
+	c.JSON(http.StatusOK, payload)
 }
 
-// ListSchedules returns all Velero schedules
+// ListSchedules returns Policies (aggregated view, v0.8.9).
+//
+// Pre-v0.8.9 this returned a flat array of velerov1.Schedule. v0.8.9
+// adds the dual-schedule pair model — two K8s Schedules forming one
+// logical Policy. To preserve the 1-row-per-policy UI experience we
+// aggregate here.
+//
+// Response shape change: items[] now contains PolicyAggregate entries,
+// not raw Schedules. Frontend reads:
+//   item.policyName       → display name + URL identifier
+//   item.mode             → "single" | "dual"
+//   item.snapshotSchedule → the L1 / snapshot half (always present)
+//   item.exportSchedule   → only set when mode=dual
+//
+// Backwards compat: legacy pre-v0.8.9 single Schedules (no labels) come
+// through as mode=single with the Schedule in snapshotSchedule — old
+// frontends that read `item.snapshotSchedule.metadata.name` keep working
+// for these. New frontends should read item.policyName + .mode.
 func ListSchedules(c *gin.Context) {
-	cl, err := k8s.GetRuntimeClient()
+	cl, err := getRequestRuntimeClient(c) // v0.9.0.1 — header-routed
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -326,72 +804,163 @@ func ListSchedules(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"items": scheduleList.Items, "total": len(scheduleList.Items)})
+	policies := aggregateSchedulesIntoPolicies(scheduleList.Items)
+	// v0.8.10.1: enrich each policy with restorePointCount so the
+	// Policies page can show a clickable RP count column. Single bulk
+	// Backup list inside — non-fatal on error (column shows 0).
+	policies = enrichRestorePointCounts(context.Background(), cl, policies)
+	c.JSON(http.StatusOK, gin.H{
+		"items": policies,
+		"total": len(policies),
+	})
 }
 
 // CreateSchedule creates a new Velero schedule.
-// v0.7 Actions model: the UI collapses Snapshot+Export intent into a single
-// Velero Schedule, but carries the original intent in annotations so the
-// v0.9 self-managed scheduler can split it back out. Annotations on the
-// Schedule itself (not on the template) — they describe policy intent, not
-// per-backup metadata.
+// CreateSchedule (v0.8.9) — creates either ONE or TWO Velero Schedules
+// representing a SupKube Policy.
+//
+// Single-schedule (L1, legacy): produces 1 Schedule with `policy-role:
+// snapshot` label. Backups it fires keep the CSI snapshot cluster-local.
+//
+// Dual-schedule (L2, new): produces 2 Schedules — `<name>` (snapshot
+// half, snapshotMoveData=false, short TTL, local BSL) and
+// `<name>-export` (export half, snapshotMoveData=true, long TTL, cloud
+// BSL). Each fires independently per its own cron; the resulting two
+// Backups are grouped in the UI by the shared `policy-name` label.
+//
+// See policy.go for the data model + naming convention.
 func CreateSchedule(c *gin.Context) {
+	// Backwards-compat: accept the legacy single-schedule fields
+	// alongside the new Dual + role-specific fields. Frontend can
+	// migrate at its own pace.
 	var req struct {
+		// Common fields (apply to either / both halves)
 		Name                     string            `json:"name" binding:"required"`
 		Schedule                 string            `json:"schedule" binding:"required"`
 		IncludedNamespaces       []string          `json:"includedNamespaces"`
-		TTL                      string            `json:"ttl"`
-		StorageLocation          string            `json:"storageLocation"`
 		SnapshotVolumes          *bool             `json:"snapshotVolumes"`
 		DefaultVolumesToFsBackup *bool             `json:"defaultVolumesToFsBackup"`
+		Paused                   bool              `json:"paused"`
 		Annotations              map[string]string `json:"annotations"`
+
+		// Legacy single-schedule fields (used when Dual=false)
+		TTL              string `json:"ttl"`
+		StorageLocation  string `json:"storageLocation"`
+		SnapshotMoveData *bool  `json:"snapshotMoveData"` // legacy; new code derives from role
+
+		// v0.8.9 Dual mode (L2) fields
+		Dual                    bool   `json:"dual"`
+		SnapshotTTL             string `json:"snapshotTtl,omitempty"`
+		SnapshotStorageLocation string `json:"snapshotStorageLocation,omitempty"`
+		ExportTTL               string `json:"exportTtl,omitempty"`
+		ExportStorageLocation   string `json:"exportStorageLocation,omitempty"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	// v0.8.5 step 3: editor must have access to all included namespaces.
+	if !auth.RequireNamespaceAccess(c, req.IncludedNamespaces...) {
+		return
+	}
+	if len(req.IncludedNamespaces) == 0 {
+		user := auth.FromContext(c)
+		if user != nil && user.Role == auth.RoleEditor {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+				"error": "editors must explicitly list includedNamespaces (whole-cluster schedules require admin)",
+			})
+			return
+		}
+	}
+
 	cl, err := k8s.GetRuntimeClient()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	template := velerov1.BackupSpec{
+	// Adapt the request into the cross-cutting PolicyRequest used by
+	// policy.go's builders. The Dual flag drives whether we materialize
+	// one or two schedules.
+	pr := &PolicyRequest{
+		Name:                     req.Name,
+		Schedule:                 req.Schedule,
 		IncludedNamespaces:       req.IncludedNamespaces,
+		Paused:                   req.Paused,
+		Annotations:              req.Annotations,
 		SnapshotVolumes:          req.SnapshotVolumes,
 		DefaultVolumesToFsBackup: req.DefaultVolumesToFsBackup,
+		Dual:                     req.Dual,
 	}
-	if req.TTL != "" {
-		duration, parseErr := time.ParseDuration(req.TTL)
-		if parseErr != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid TTL format: " + parseErr.Error()})
-			return
-		}
-		template.TTL = metav1.Duration{Duration: duration}
-	}
-	if req.StorageLocation != "" {
-		template.StorageLocation = req.StorageLocation
+	if req.Dual {
+		// L2: caller MUST supply per-role TTLs + BSLs. We don't fall
+		// back to single-mode TTL to avoid silent UX surprise.
+		pr.SnapshotTTL = req.SnapshotTTL
+		pr.SnapshotStorageLocation = req.SnapshotStorageLocation
+		pr.ExportTTL = req.ExportTTL
+		pr.ExportStorageLocation = req.ExportStorageLocation
+	} else {
+		// L1 (or legacy): the single TTL + BSL apply to the snapshot half.
+		pr.SnapshotTTL = req.TTL
+		pr.SnapshotStorageLocation = req.StorageLocation
 	}
 
-	schedule := &velerov1.Schedule{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        req.Name,
-			Namespace:   "velero",
-			Annotations: req.Annotations,
-		},
-		Spec: velerov1.ScheduleSpec{
-			Schedule: req.Schedule,
-			Template: template,
-		},
+	// Build + create the snapshot half. Always present.
+	snapSched, err := pr.buildSchedule(roleSnapshot)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
-	if err := cl.Create(context.Background(), schedule); err != nil {
+	if err := cl.Create(context.Background(), snapSched); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusCreated, schedule)
+
+	// Optionally build + create the export half. If this fails after
+	// the snapshot half was already created, we surface the error AND
+	// leave the snapshot half in place (a partial L2 = a usable L1,
+	// rather than aborting both and leaving the user with nothing).
+	if req.Dual {
+		expSched, err := pr.buildSchedule(roleExport)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error":         "snapshot half created but export half failed to build: " + err.Error(),
+				"partialPolicy": snapSched.Name,
+			})
+			return
+		}
+		if err := cl.Create(context.Background(), expSched); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":         "snapshot half created but export half failed: " + err.Error(),
+				"partialPolicy": snapSched.Name,
+			})
+			return
+		}
+		c.JSON(http.StatusCreated, PolicyAggregate{
+			PolicyName:       req.Name,
+			Mode:             "dual",
+			SnapshotSchedule: snapSched,
+			ExportSchedule:   expSched,
+		})
+		return
+	}
+
+	// Single-schedule response (L1).
+	c.JSON(http.StatusCreated, PolicyAggregate{
+		PolicyName:       req.Name,
+		Mode:             "single",
+		SnapshotSchedule: snapSched,
+	})
 }
 
-// DeleteSchedule deletes a schedule
+// DeleteSchedule deletes a Policy — pair-aware in v0.8.9.
+//
+// If the policy is dual-mode (snapshot + export), BOTH schedules are
+// deleted. RBAC check runs on the snapshot half's ns scope (export
+// half always has the same ns since they're built from one PolicyRequest).
+//
+// Legacy single-schedule policies (no `policy-name` label) are deleted
+// by their exact name, same as pre-v0.8.9.
 func DeleteSchedule(c *gin.Context) {
 	name := c.Param("name")
 	cl, err := k8s.GetRuntimeClient()
@@ -399,21 +968,46 @@ func DeleteSchedule(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	schedule := &velerov1.Schedule{}
-	if err := cl.Get(context.Background(), client.ObjectKey{Name: name, Namespace: "velero"}, schedule); err != nil {
+	policy, err := findPolicy(c.Request.Context(), cl, name)
+	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
-	if err := cl.Delete(context.Background(), schedule); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	// Editor RBAC: scope-cover the snapshot half's ns. Both halves
+	// always share IncludedNamespaces by construction.
+	if !auth.RequireNamespaceAccess(c, policy.SnapshotSchedule.Spec.Template.IncludedNamespaces...) {
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "schedule deleted"})
+	// Delete in order: export first (so a partial failure leaves the
+	// snapshot half — a usable L1 — rather than orphaning the export).
+	deleted := []string{}
+	if policy.ExportSchedule != nil {
+		if err := cl.Delete(c.Request.Context(), policy.ExportSchedule); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":   "failed to delete export half: " + err.Error(),
+				"deleted": deleted,
+			})
+			return
+		}
+		deleted = append(deleted, policy.ExportSchedule.Name)
+	}
+	if err := cl.Delete(c.Request.Context(), policy.SnapshotSchedule); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "failed to delete snapshot half: " + err.Error(),
+			"deleted": deleted,
+		})
+		return
+	}
+	deleted = append(deleted, policy.SnapshotSchedule.Name)
+	c.JSON(http.StatusOK, gin.H{
+		"message": "policy deleted",
+		"deleted": deleted,
+	})
 }
 
 // ListStorageLocations returns all backup storage locations
 func ListStorageLocations(c *gin.Context) {
-	cl, err := k8s.GetRuntimeClient()
+	cl, err := getRequestRuntimeClient(c) // v0.9.0.1 — header-routed
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

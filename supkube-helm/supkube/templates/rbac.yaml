@@ -13,22 +13,61 @@ metadata:
     {{- include "supkube.labels" . | nindent 4 }}
 rules:
   - apiGroups: ["velero.io"]
-    resources: ["backups", "restores", "schedules", "backupstoragelocations", "volumesnapshotlocations", "deletebackuprequests"]
-    verbs: ["get", "list", "watch", "create", "update", "delete"]
+    resources: ["backups", "restores", "schedules", "backupstoragelocations", "volumesnapshotlocations", "deletebackuprequests", "downloadrequests"]
+    # v0.8.10: added `patch` so the policypair controller can stamp the
+    # cross-reference annotation `supkube.io/dual-rp-paired` onto the
+    # snapshot-half Backup after firing the export half. Without patch,
+    # the back-link drops and the UI's Paired-with banner only renders
+    # one direction (export→snapshot, not snapshot→export). Also needed
+    # by the startup migration that flips export-half Schedules to
+    # paused=true.
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # v0.8.7.3: read-only access to Velero's data-movement CRs.
+  #   - podvolumebackups (v1):      filesystem backup (restic/kopia)
+  #   - datauploads/datadownloads (v2alpha1): Data Mover (Kopia)
+  # Backup composition meta aggregates totalBytes from these to show
+  # "how much data this backup actually moved". List/watch only — we
+  # never mutate these (Velero owns the controllers).
+  - apiGroups: ["velero.io"]
+    resources: ["podvolumebackups", "podvolumerestores", "datauploads", "datadownloads", "backuprepositories"]
+    # v0.8.8 orphan GC needs delete on these too. backuprepositories stay
+    # watch-only (Velero owns those; we shouldn't delete repos).
+    verbs: ["get", "list", "watch", "delete"]
   # Read-only access to CSI snapshot resources so SupKube can:
   #   - list VolumeSnapshotClass options when user picks Volume Backup Mode
   #   - surface VolumeSnapshot/VolumeSnapshotContent progress in BackupDetail
+  # v0.8.8: + delete/patch for orphan GC (volumesnapshots+contents only;
+  # snapshot classes stay read-only — those are cluster admin's to define).
+  # patch is needed because the GC must flip deletionPolicy from Retain to
+  # Delete before deleting (otherwise the underlying CSI driver snapshot
+  # stays around even after the VSC is gone).
   - apiGroups: ["snapshot.storage.k8s.io"]
-    resources: ["volumesnapshots", "volumesnapshotcontents", "volumesnapshotclasses"]
+    resources: ["volumesnapshotclasses"]
     verbs: ["get", "list", "watch"]
+  - apiGroups: ["snapshot.storage.k8s.io"]
+    resources: ["volumesnapshots", "volumesnapshotcontents"]
+    verbs: ["get", "list", "watch", "delete", "patch"]
   # Read access to StorageClasses + CSIDrivers so Policy capability detection
   # can determine which namespaces have PVCs on CSI-snapshot-capable SCs.
   - apiGroups: ["storage.k8s.io"]
     resources: ["storageclasses", "csidrivers"]
     verbs: ["get", "list", "watch"]
+  # v0.7.10: Namespace create + delete needed for Restore drawer's
+  # "Create A New Namespace" flow and cleanup-before-restore. ServiceAccount
+  # listing needed for the artifact preview.
   - apiGroups: [""]
-    resources: ["namespaces", "pods", "services", "persistentvolumeclaims", "configmaps", "nodes"]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["pods", "services", "persistentvolumeclaims", "nodes", "serviceaccounts"]
     verbs: ["get", "list"]
+  # v0.8.2: configmaps need full CRUD because Transform Sets are stored
+  # as ConfigMaps in the velero namespace (consumed by Velero's native
+  # spec.resourceModifierRef). Cluster-wide for simplicity in v0.8;
+  # v0.8.1 RBAC overhaul will scope this to a velero-namespace Role.
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   # Secrets: write access needed because creating a BackupStorageLocation also
   # provisions a credentials Secret in the velero namespace. Cluster-wide for
   # simplicity in v0.5.x; v0.8 RBAC overhaul will restrict this to a
@@ -39,6 +78,33 @@ rules:
   - apiGroups: ["apps"]
     resources: ["deployments", "statefulsets", "replicasets", "daemonsets"]
     verbs: ["get", "list"]
+  # v0.7.10: Restore drawer's Spec artifact preview enumerates these via the
+  # dynamic client. Read-only — Velero is the one actually creating them at
+  # restore time.
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses", "networkpolicies"]
+    verbs: ["get", "list"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings"]
+    verbs: ["get", "list"]
+  # v0.8.5 step 4: audit log writes K8s Events into the supkube ns; the
+  # ListAuditLogs handler reads them for the UI. cluster-scope because
+  # rbac.yaml is ClusterRole; restricting to supkube ns alone would
+  # require an additional Role+RoleBinding. Low blast radius (Events are
+  # ephemeral data) so cluster scope is acceptable.
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "create"]
+  - apiGroups: ["events.k8s.io"]
+    resources: ["events"]
+    verbs: ["get", "list", "create"]
+  # v0.9.0 MC1: Cluster registry CR + lifecycle status patch.
+  - apiGroups: ["supkube.io"]
+    resources: ["clusters", "clusters/status"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

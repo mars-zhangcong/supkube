@@ -18,3 +18,17 @@ dist/
 .vscode/
 .idea/
 .cachebust
+
+# Test cluster credentials — never commit kubeconfigs.
+# Mars's AKS kubeconfigs downloaded from Cloud Shell for multi-cluster
+# testing contain client-key-data; committing would leak admin access.
+engineer-testing/kc-*.yaml
+engineer-testing/kc-*.yml
+engineer-testing/*.kubeconfig
+*.kubeconfig
+
+# Helm subcharts downloaded by `helm dependency update`. Chart.lock
+# pins versions so reproducibility is preserved without committing the
+# .tgz payloads (which can be 10s of MB each). hack/publish-release.sh
+# re-runs `helm dep update` before packaging.
+supkube-helm/*/charts/*.tgz

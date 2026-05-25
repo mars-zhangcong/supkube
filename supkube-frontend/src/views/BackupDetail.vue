@@ -177,6 +177,61 @@
       </el-col>
     </el-row>
 
+    <!-- v0.8.6 Backup Composition — answers the "what's in this backup
+         and how big is it?" questions the v0.8.5 retrospective raised.
+         Pure read of the new `supkube` enrichment from /backups/:name. -->
+    <el-card v-if="backup?.supkube" style="margin-top: 20px">
+      <template #header>
+        <span>{{ t('backupDetail.composition.title') }}</span>
+        <span class="composition-hint">{{ t('backupDetail.composition.hint') }}</span>
+      </template>
+      <el-row :gutter="20">
+        <el-col :span="8">
+          <div class="composition-block">
+            <div class="composition-label">{{ t('restorePoints.dataPath') }}</div>
+            <span class="data-path-chip" :class="`data-path-${backup.supkube.dataPath}`">
+              {{ dataPathIcon }} {{ t(`restorePoints.dataPathLabel.${backup.supkube.dataPath}`) }}
+            </span>
+            <p class="composition-explain">
+              {{ t(`restorePoints.dataPathHelp.${backup.supkube.dataPath}`) }}
+            </p>
+          </div>
+        </el-col>
+        <el-col :span="8">
+          <div class="composition-block">
+            <div class="composition-label">{{ t('backupDetail.composition.volumeData') }}</div>
+            <div class="composition-number">{{ formatBytes(backup.supkube.volumeBytes) }}</div>
+            <p class="composition-explain">
+              <template v-if="backup.supkube.volumeCount > 0">
+                {{ t('backupDetail.composition.volumeBreakdown', { count: backup.supkube.volumeCount }) }}
+              </template>
+              <template v-else>
+                {{ t('backupDetail.composition.volumeEmpty') }}
+              </template>
+            </p>
+            <p v-if="backup.supkube.dataPath === 'csi-snapshot'" class="composition-caveat">
+              ⚠ {{ t('backupDetail.composition.csiCaveat') }}
+            </p>
+          </div>
+        </el-col>
+        <el-col :span="8">
+          <div class="composition-block">
+            <div class="composition-label">{{ t('backupDetail.composition.tarball') }}</div>
+            <div class="composition-number">
+              <span v-if="backup.supkube.tarballBytes">{{ formatBytes(backup.supkube.tarballBytes) }}</span>
+              <span v-else class="composition-muted">—</span>
+            </div>
+            <p class="composition-explain">
+              {{ t('backupDetail.composition.tarballHelp') }}
+            </p>
+            <p v-if="backup.supkube.tarballError" class="composition-caveat">
+              ⚠ {{ backup.supkube.tarballError }}
+            </p>
+          </div>
+        </el-col>
+      </el-row>
+    </el-card>
+
     <!-- Labels & Annotations -->
     <el-card style="margin-top: 20px" v-if="backup?.metadata?.labels">
       <template #header>Labels</template>
@@ -194,9 +249,35 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { getBackup, deleteBackup } from '../api/velero'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { normalizePhase, phaseTagType } from '../utils/phase'
+
+const { t } = useI18n()
+
+// v0.8.6: shared formatters mirrored from Backups.vue. We deliberately
+// duplicate (rather than extracting to a util module) so this view's
+// rendering doesn't break when the list page changes its helper shapes.
+// Six lines of copy-paste vs. a coupling risk that bites later.
+const formatBytes = (n) => {
+  if (n === undefined || n === null || n === 0) return '—'
+  const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB']
+  let v = Number(n)
+  let i = 0
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++ }
+  const fixed = i >= 2 ? v.toFixed(1) : Math.round(v)
+  return `${fixed} ${units[i]}`
+}
+const dataPathIcon = computed(() => {
+  switch (backup.value?.supkube?.dataPath) {
+    case 'csi-snapshot':  return '📸'
+    case 'data-mover':    return '🚚'
+    case 'filesystem':    return '📁'
+    case 'metadata-only': return '📋'
+    default:              return '❔'
+  }
+})
 
 const route = useRoute()
 const router = useRouter()
@@ -332,7 +413,8 @@ const fetchBackup = async () => {
 }
 
 const restoreFromBackup = () => {
-  router.push({ path: '/restores', query: { backup: backup.value?.metadata?.name } })
+  // v0.8.0: route to Activity Restore filter (legacy used /restores).
+  router.push({ path: '/activity', query: { type: 'Restore' } })
 }
 
 const handleDelete = async () => {
@@ -370,7 +452,7 @@ onMounted(() => {
 .rp-name {
   font-family: 'SF Mono', Menlo, Consolas, monospace;
   font-size: 16px;
-  color: #303133;
+  color: var(--sk-text-secondary);
 }
 .rp-type-tag {
   margin-left: 4px;
@@ -383,14 +465,14 @@ onMounted(() => {
   font-size: 12px;
 }
 .fingerprint-label {
-  color: #909399;
+  color: var(--sk-text-caption);
 }
 .fingerprint-short {
   font-family: 'SF Mono', Menlo, Consolas, monospace;
   background: #f5f7fa;
   padding: 2px 8px;
   border-radius: 4px;
-  color: #606266;
+  color: var(--sk-text-muted);
   font-size: 11px;
 }
 .fingerprint-copy {
@@ -410,11 +492,11 @@ onMounted(() => {
 .action-title {
   font-size: 15px;
   font-weight: 600;
-  color: #303133;
+  color: var(--sk-text-secondary);
 }
 .action-subtitle {
   font-size: 11px;
-  color: #909399;
+  color: var(--sk-text-caption);
   font-weight: 500;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -440,13 +522,74 @@ onMounted(() => {
 .object-path {
   font-family: 'SF Mono', Menlo, Consolas, monospace;
   font-size: 11px;
-  color: #606266;
+  color: var(--sk-text-muted);
   background: #f5f7fa;
   padding: 1px 6px;
   border-radius: 3px;
 }
-.muted { color: #c0c4cc; }
-.csi-ok { color: #67c23a; font-weight: 600; }
-.csi-partial { color: #e6a23c; font-weight: 600; }
-.csi-warn { color: #f56c6c; font-size: 12px; margin-left: 6px; }
+.muted { color: var(--sk-text-placeholder); }
+.csi-ok { color: var(--sk-status-success); font-weight: 600; }
+.csi-partial { color: var(--sk-status-warning); font-weight: 600; }
+.csi-warn { color: var(--sk-status-error); font-size: 12px; margin-left: 6px; }
+
+/* v0.8.6 Backup Composition panel */
+.composition-hint {
+  margin-left: 12px;
+  font-size: 12px;
+  color: var(--sk-text-caption);
+  font-weight: 400;
+}
+.composition-block {
+  padding: 8px 0;
+}
+.composition-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sk-text-caption);
+  margin-bottom: 8px;
+}
+.composition-number {
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--sk-text);
+  font-family: 'SF Mono', Menlo, monospace;
+  line-height: 1.2;
+  margin-bottom: 8px;
+}
+.composition-explain {
+  font-size: 12px;
+  color: var(--sk-text-muted);
+  line-height: 1.5;
+  margin: 0;
+}
+.composition-caveat {
+  font-size: 12px;
+  color: var(--sk-status-error);
+  background: #fdf3f4;
+  padding: 6px 10px;
+  border-radius: 6px;
+  margin: 8px 0 0 0;
+  line-height: 1.4;
+}
+.composition-muted { color: var(--sk-text-placeholder); font-weight: 500; }
+
+/* Shared chip style with list view — duplicated rather than extracted
+   so this view is self-contained and a chip-rename in the list can't
+   accidentally break the detail page. */
+.data-path-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 12px;
+  margin-bottom: 8px;
+}
+.data-path-csi-snapshot  { color: #409eff; background: #ecf5ff; }
+.data-path-data-mover    { color: #722ed1; background: #f4ecfd; }
+.data-path-filesystem    { color: var(--sk-status-success); background: #f0f9eb; }
+.data-path-metadata-only { color: var(--sk-text-caption); background: #f4f4f5; }
+.data-path-unknown       { color: var(--sk-text-placeholder); background: #f5f7fa; }
 </style>

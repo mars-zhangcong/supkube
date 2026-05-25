@@ -1,5 +1,11 @@
 <template>
   <div class="dashboard">
+    <!-- v0.8.12.5: DR Topology hero card. Sits above the stat tiles
+         because it answers "is my protection actually working?" — the
+         question every Dashboard visitor cares about most. Stats below
+         are quantitative; this is the qualitative signal. -->
+    <DRTopology />
+
     <el-row :gutter="20">
       <el-col :span="4">
         <el-card>
@@ -128,7 +134,7 @@
       <template #header>
         <div class="card-header">
           <span>{{ t('dashboard.recentRestores') }}</span>
-          <el-button type="primary" size="small" @click="$router.push('/restores')">
+          <el-button type="primary" size="small" @click="$router.push('/activity?type=Restore')">
             {{ t('dashboard.viewAll') }}
           </el-button>
         </div>
@@ -157,6 +163,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getDashboardSummary, getBackups, getRestores, getNamespaces, getApplications, getSchedules } from '../api/velero'
+import DRTopology from '../components/DRTopology.vue'
 import { normalizePhase, phaseTagType } from '../utils/phase'
 import BackupSuccessTrend from '../components/BackupSuccessTrend.vue'
 import StorageUsage from '../components/StorageUsage.vue'
@@ -326,8 +333,8 @@ onUnmounted(() => {
 .stat { text-align: center; padding: 10px; }
 .stat-value { font-size: 2em; font-weight: bold; }
 .stat-label { color: #666; margin-top: 5px; }
-.success { color: #67c23a; }
-.danger { color: #f56c6c; }
+.success { color: var(--sk-status-success); }
+.danger { color: var(--sk-status-error); }
 .card-header {
   display: flex;
   justify-content: space-between;
@@ -340,7 +347,7 @@ onUnmounted(() => {
   background: #fdf6ec;
 }
 .compliance-card.compliance-ok {
-  border-left-color: #67c23a;
+  border-left-color: var(--sk-status-success);
   background: #f0f9eb;
 }
 .imported-card {
@@ -368,17 +375,17 @@ onUnmounted(() => {
 }
 .compliance-icon {
   font-size: 22px;
-  color: #e6a23c;
+  color: var(--sk-status-warning);
 }
 .compliance-icon-ok {
   font-size: 22px;
-  color: #67c23a;
+  color: var(--sk-status-success);
 }
 .compliance-text {
   flex: 1;
   font-size: 13px;
-  color: #303133;
+  color: var(--sk-text-secondary);
   line-height: 1.5;
 }
-.compliance-text strong { color: #1f2329; }
+.compliance-text strong { color: var(--sk-text); }
 </style>

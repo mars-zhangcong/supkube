@@ -5,7 +5,10 @@
         <h3>{{ t('policies.title') }}</h3>
         <p class="page-desc">{{ t('policies.desc') }}</p>
       </div>
-      <el-button type="primary" @click="showCreateDialog = true">
+      <el-button type="primary"
+        :disabled="!auth.canDo('policy.create')"
+        :title="!auth.canDo('policy.create') ? t('common.noPermission') : ''"
+        @click="openCreateDrawer">
         <el-icon><Plus /></el-icon>
         {{ t('policies.create') }}
       </el-button>
@@ -35,68 +38,106 @@
 
     <el-card>
       <el-table :data="filteredSchedules" style="width: 100%" v-loading="loading">
-        <el-table-column prop="metadata.name" :label="t('common.name').toUpperCase()" sortable min-width="160">
+        <!-- v0.8.10.6: Name column carries policy name + Action chip +
+             Status chip (Validation collapsed to Invalid-only). NO
+             namespace chips here — Resources is back as its own column. -->
+        <el-table-column prop="metadata.name" :label="t('common.name').toUpperCase()" sortable min-width="240">
           <template #default="{ row }">
-            <span class="policy-name">{{ row.metadata?.name }}</span>
-          </template>
-        </el-table-column>
-
-        <el-table-column :label="t('policies.validation').toUpperCase()" width="130">
-          <template #default="{ row }">
-            <span class="validation-cell" :class="`validation-${validationOf(row).key}`">
-              {{ validationOf(row).icon }} {{ validationOf(row).label }}
-            </span>
-          </template>
-        </el-table-column>
-
-        <el-table-column :label="t('policies.resources').toUpperCase()" min-width="180">
-          <template #default="{ row }">
-            <el-tooltip
-              v-for="ns in resourceNamespaces(row)"
-              :key="ns"
-              :content="t('policies.namespaceTooltip', { name: ns })"
-              placement="top"
-              :show-after="200"
-            >
-              <el-tag
-                size="small"
-                effect="plain"
-                round
-                class="ns-chip"
-              >🗂 {{ ns }}</el-tag>
-            </el-tooltip>
-          </template>
-        </el-table-column>
-
-        <el-table-column :label="t('policies.action').toUpperCase()" width="190">
-          <template #default="{ row }">
-            <span class="action-text">{{ actionTextOf(row) }}</span>
-          </template>
-        </el-table-column>
-
-        <el-table-column :label="t('policies.frequency').toUpperCase()" width="160">
-          <template #default="{ row }">
-            <div class="freq-cell">
-              <div class="freq-human">{{ frequencyLabelOf(row) }}</div>
-              <code class="freq-cron">{{ row.spec?.schedule }}</code>
+            <div class="policy-cell">
+              <div class="policy-name">{{ row.metadata?.name }}</div>
+              <div class="policy-cell-chips">
+                <span class="sk-chip sk-chip-status-muted">{{ actionTextOf(row) }}</span>
+                <span v-if="row.spec?.paused" class="sk-chip sk-chip-status-warning">
+                  {{ t('policies.paused') }}
+                </span>
+                <span v-else class="sk-chip sk-chip-status-success">
+                  {{ t('policies.active') }}
+                </span>
+                <span v-if="validationOf(row).key !== 'valid'" class="sk-chip sk-chip-status-error">
+                  {{ validationOf(row).label }}
+                </span>
+              </div>
             </div>
           </template>
         </el-table-column>
 
-        <el-table-column :label="t('policies.lastRunTime').toUpperCase()" width="180">
+        <!-- v0.8.10.6: Resources column restored. Per user instruction:
+             each namespace renders on its own row (vertical stack), no
+             emoji per UI_GUIDELINES §3.1. -->
+        <el-table-column :label="t('policies.resources').toUpperCase()" width="160">
           <template #default="{ row }">
-            <span v-if="row.status?.lastBackup">{{ formatTime(row.status.lastBackup) }}</span>
+            <div v-if="resourceNamespaces(row).length > 0" class="policy-ns-col">
+              <el-tooltip
+                v-for="ns in resourceNamespaces(row)"
+                :key="ns"
+                :content="t('policies.namespaceTooltip', { name: ns })"
+                placement="top"
+                :show-after="200"
+              >
+                <span class="policy-ns-chip">{{ ns }}</span>
+              </el-tooltip>
+            </div>
             <span v-else class="muted">—</span>
           </template>
         </el-table-column>
 
-        <el-table-column :label="t('policies.lastRunStatus').toUpperCase()" width="140">
+        <el-table-column :label="t('policies.frequency').toUpperCase()" width="140">
           <template #default="{ row }">
-            <el-tag v-if="row.spec?.paused" type="warning" size="small">{{ t('policies.paused') }}</el-tag>
-            <el-tag v-else-if="row.status?.lastBackup" type="success" size="small">{{ t('policies.scheduled') }}</el-tag>
+            <div class="freq-cell">
+              <!-- v0.8.10.5: paused + 0 0 1 1 * cron is SupKube's
+                   "On Demand" idiom (no automatic run, fire via Run
+                   Once only). Per user feedback show that explicitly. -->
+              <template v-if="row.spec?.paused">
+                <div class="sk-body-strong">{{ t('policies.onDemand') }}</div>
+              </template>
+              <template v-else>
+                <div class="freq-human">{{ frequencyLabelOf(row) }}</div>
+                <code class="freq-cron">{{ row.spec?.schedule }}</code>
+              </template>
+            </div>
+          </template>
+        </el-table-column>
+
+        <!-- v0.8.10.1: Restore Point count column. Clickable when >0 —
+             takes the user to /backups pre-filtered by this policy's
+             name. Backups.vue reads ?policy=<name> and matches the
+             velero.io/schedule-name label on either half of the dual
+             pair. Muted "0" when no RPs (policy created but never ran). -->
+        <el-table-column :label="t('policies.restorePoints').toUpperCase()" width="140" sortable
+          :sort-method="(a, b) => (a.restorePointCount || 0) - (b.restorePointCount || 0)">
+          <template #default="{ row }">
+            <a
+              v-if="(row.restorePointCount || 0) > 0"
+              class="rp-count rp-count-link"
+              @click.stop="goPolicyRPs(row)"
+            >
+              <el-icon><FolderOpened /></el-icon>
+              {{ row.restorePointCount }}
+            </a>
+            <span v-else class="rp-count rp-count-zero">
+              <el-icon><FolderOpened /></el-icon>
+              0
+            </span>
+          </template>
+        </el-table-column>
+
+        <!-- v0.8.10.5: Last Run Time — date + time on two lines so the
+             column can be narrower. (Old single-line "5/22/2026, 5:00:23
+             PM" pushed the table to ~1500px wide.) -->
+        <el-table-column :label="t('policies.lastRunTime').toUpperCase()" width="120">
+          <template #default="{ row }">
+            <div v-if="row.status?.lastBackup" class="stacked-time">
+              <div class="sk-body">{{ formatDate(row.status.lastBackup) }}</div>
+              <div class="sk-caption">{{ formatTimeOnly(row.status.lastBackup) }}</div>
+            </div>
             <span v-else class="muted">—</span>
           </template>
         </el-table-column>
+
+        <!-- v0.8.10.5: Last Run Status column dropped. The Active /
+             Paused chip moved into the Name cell (see top column),
+             which is the only meaningful state for a policy at rest. -->
+
 
         <el-table-column label="" width="60" align="right">
           <template #default="{ row }">
@@ -121,43 +162,86 @@
       </el-table>
     </el-card>
 
-    <!-- View drawer: read-only display of policy spec + status + raw CR -->
+    <!-- Policy Details drawer
+         v0.8.10.2: aligned to UI_GUIDELINES §5 (Action Details template).
+         H1 + H2 + chip row, sections with H3 uppercase, sticky footer. -->
     <el-drawer
       v-model="viewDrawerVisible"
-      :title="t('policies.viewTitle', { name: viewRow?.metadata?.name })"
       direction="rtl"
-      size="640px"
+      :size="'560px'"
       :destroy-on-close="true"
+      :with-header="false"
+      class="sk-policy-view-drawer"
     >
-      <div v-if="viewRow" class="view-body">
-        <el-descriptions :column="1" border size="small" class="view-section">
-          <el-descriptions-item :label="t('common.name')">
-            <code>{{ viewRow.metadata.name }}</code>
-          </el-descriptions-item>
-          <el-descriptions-item :label="t('policies.action')">
-            {{ actionTextOf(viewRow) }}
-          </el-descriptions-item>
-          <el-descriptions-item :label="t('policies.frequency')">
-            {{ frequencyLabelOf(viewRow) }} (<code>{{ viewRow.spec?.schedule }}</code>)
-          </el-descriptions-item>
-          <el-descriptions-item :label="t('common.namespace')">
-            {{ (viewRow.spec?.template?.includedNamespaces || ['*']).join(', ') }}
-          </el-descriptions-item>
-          <el-descriptions-item :label="t('policies.exportRetention')">
-            {{ formatTTL(viewRow.spec?.template?.ttl) }}
-          </el-descriptions-item>
-          <el-descriptions-item :label="t('policies.storageProfile')">
-            <code>{{ viewRow.spec?.template?.storageLocation || 'default' }}</code>
-          </el-descriptions-item>
-          <el-descriptions-item :label="t('common.status')">
-            <el-tag :type="viewRow.spec?.paused ? 'warning' : 'success'" size="small">
+      <div v-if="viewRow" class="sk-drawer">
+        <button class="sk-drawer-close" type="button" @click="viewDrawerVisible = false" aria-label="Close">×</button>
+
+        <!-- ════ Header zone ════ -->
+        <div class="sk-drawer-header">
+          <div class="sk-h1">{{ t('activity.detail.titlePolicy') }}</div>
+          <div class="sk-h2 sk-drawer-subject" :title="viewRow.metadata.name">{{ viewRow.metadata.name }}</div>
+          <div class="sk-drawer-chips">
+            <span class="sk-chip" :class="viewRow.spec?.paused ? 'sk-chip-status-warning' : 'sk-chip-status-success'">
               {{ viewRow.spec?.paused ? t('policies.paused') : t('policies.active') }}
-            </el-tag>
-          </el-descriptions-item>
-          <el-descriptions-item v-if="viewRow.status?.lastBackup" :label="t('policies.lastRunTime')">
-            {{ formatTime(viewRow.status.lastBackup) }}
-          </el-descriptions-item>
-        </el-descriptions>
+            </span>
+            <span class="sk-chip sk-chip-status-muted">{{ actionTextOf(viewRow) }}</span>
+            <span v-if="viewRow.restorePointCount > 0" class="sk-chip sk-chip-type-snapshot">
+              {{ viewRow.restorePointCount }} {{ t('policies.restorePoints') }}
+            </span>
+          </div>
+        </div>
+
+        <!-- ════ Section: SCHEDULE ════ -->
+        <section class="sk-section">
+          <div class="sk-h3">{{ t('policies.frequency') }}</div>
+          <div class="sk-fields">
+            <div class="sk-field-label sk-caption">{{ t('policies.frequency') }}</div>
+            <div class="sk-field-value sk-body">{{ frequencyLabelOf(viewRow) }}</div>
+            <div class="sk-field-label sk-caption">Cron</div>
+            <div class="sk-field-value"><code class="sk-mono">{{ viewRow.spec?.schedule || '—' }}</code></div>
+          </div>
+        </section>
+
+        <!-- ════ Section: TARGETS ════ -->
+        <section class="sk-section">
+          <div class="sk-h3">{{ t('policies.resources') }}</div>
+          <div class="sk-fields">
+            <div class="sk-field-label sk-caption">{{ t('common.namespace') }}</div>
+            <div class="sk-field-value sk-body">{{ (viewRow.spec?.template?.includedNamespaces || ['*']).join(', ') }}</div>
+          </div>
+        </section>
+
+        <!-- ════ Section: RETENTION & STORAGE ════ -->
+        <section class="sk-section">
+          <div class="sk-h3">{{ t('policies.exportRetention') }}</div>
+          <div class="sk-fields">
+            <div class="sk-field-label sk-caption">{{ t('policies.exportRetention') }}</div>
+            <div class="sk-field-value sk-body">{{ formatTTL(viewRow.spec?.template?.ttl) }}</div>
+            <div class="sk-field-label sk-caption">{{ t('policies.storageProfile') }}</div>
+            <div class="sk-field-value">
+              <code class="sk-mono">{{ viewRow.spec?.template?.storageLocation || 'default' }}</code>
+            </div>
+          </div>
+        </section>
+
+        <!-- ════ Section: LAST RUN ════ -->
+        <section class="sk-section" v-if="viewRow.status?.lastBackup">
+          <div class="sk-h3">{{ t('policies.lastRunTime') }}</div>
+          <div class="sk-body">{{ formatTime(viewRow.status.lastBackup) }}</div>
+        </section>
+      </div>
+
+      <!-- ════ Sticky bottom action bar ════ -->
+      <div v-if="viewRow" class="sk-drawer-footer">
+        <el-button
+          v-if="viewRow.restorePointCount > 0"
+          type="primary"
+          @click="goPolicyRPsFromDrawer(viewRow)"
+        >
+          {{ t('policies.restorePoints') }} ({{ viewRow.restorePointCount }})
+        </el-button>
+        <span class="sk-drawer-footer-spacer"></span>
+        <el-button @click="viewDrawerVisible = false">{{ t('common.close') }}</el-button>
       </div>
     </el-drawer>
 
@@ -177,24 +261,25 @@
       </div>
     </el-drawer>
 
-    <!-- Create Policy Dialog (v0.7 Actions model) -->
+    <!-- Create/Edit Policy Drawer (v0.7 Actions model + v0.8.5 step 5 edit) -->
     <el-drawer
       v-model="showCreateDialog"
-      :title="t('policies.newPolicy')"
+      :title="editMode ? t('policies.editPolicy', { name: editingName }) : t('policies.newPolicy')"
       direction="rtl"
       size="560px"
       :destroy-on-close="false"
       class="new-policy-drawer"
+      @close="onDrawerClose"
     >
       <el-form :model="createForm" label-position="top" class="kasten-form">
         <el-form-item required>
           <template #label>
             <div class="kasten-label-block">
               <strong>{{ t('common.name') }}</strong>
-              <span class="kasten-label-help">{{ t('policies.nameHelp') }}</span>
+              <span class="kasten-label-help">{{ editMode ? t('policies.nameImmutable') : t('policies.nameHelp') }}</span>
             </div>
           </template>
-          <el-input v-model="createForm.name" placeholder="daily-backup" />
+          <el-input v-model="createForm.name" placeholder="daily-backup" :disabled="editMode" />
         </el-form-item>
 
         <el-form-item>
@@ -247,12 +332,36 @@
               @click="selectFrequency(f.key)"
             >{{ f.label }}</button>
           </div>
-          <el-input
-            v-if="createForm.frequency === 'custom'"
-            v-model="createForm.snapshot.schedule"
-            placeholder="0 * * * *  (cron)"
-            style="margin-top: 8px"
-          />
+          <!-- v0.8.7.6: On Demand notice. Shown when user picks the
+               new "On Demand" preset to explain that the policy will
+               only run when manually triggered via Run Once. -->
+          <p v-if="createForm.frequency === 'ondemand'" class="ondemand-notice">
+            ℹ️ {{ t('policies.onDemandNotice') }}
+          </p>
+        </el-form-item>
+
+        <!-- Resources (Included Namespaces) — moved here in v0.8.7.4 to
+             mirror Kasten's "Frequency → Selection Type → Applications"
+             order. Picking what to protect comes BEFORE retention/storage
+             details because it answers the "is this even relevant to me"
+             question first. -->
+        <el-form-item>
+          <template #label>
+            <div class="kasten-label-block">
+              <strong>{{ t('policies.resources') }}</strong>
+              <span class="kasten-label-help">{{ t('policies.resourcesHelp') }}</span>
+            </div>
+          </template>
+          <el-select
+            v-model="createForm.includedNamespaces"
+            multiple
+            filterable
+            allow-create
+            :placeholder="t('policies.namespacesPlaceholder')"
+            style="width: 100%"
+          >
+            <el-option v-for="ns in namespaces" :key="ns" :label="ns" :value="ns" />
+          </el-select>
         </el-form-item>
 
         <!-- Snapshot Retention (always shown) -->
@@ -281,56 +390,141 @@
           </el-form-item>
           <el-form-item>
             <template #label><strong>{{ t('policies.storageProfile') }}</strong></template>
-            <el-input v-model="createForm.export.storageLocation" placeholder="default" />
+            <!-- v0.8.7.4: dropdown sourced from /storage-locations.
+                 Unavailable BSLs are listed but disabled so user can't
+                 pick a known-broken target. Provider chip on the right
+                 of each option gives one-glance "is this Azure or S3?". -->
+            <el-select
+              v-model="createForm.export.storageLocation"
+              filterable
+              :placeholder="t('policies.storageProfilePlaceholder')"
+              style="width: 100%"
+            >
+              <!-- v0.8.12 LBS3: hide the in-cluster Local BSL from this
+                   Cloud-only selector (bslRole=local). The Cloud half
+                   should never land in the Local store; pairing rules
+                   downstream depend on this separation. -->
+              <el-option
+                v-for="bsl in cloudOnlyStorageLocations"
+                :key="bsl.name"
+                :label="bsl.name"
+                :value="bsl.name"
+                :disabled="bsl.phase !== 'Available'"
+              >
+                <span style="float: left">
+                  {{ bsl.name }}
+                  <span v-if="bsl.isDefault" class="bsl-default-badge">default</span>
+                  <span v-if="bsl.objectLockEnabled" style="margin-left: 6px; color: #059669; font-size: 12px">🛡</span>
+                </span>
+                <span style="float: right; color: #909399; font-size: 12px">
+                  {{ bsl.provider }}{{ bsl.phase !== 'Available' ? ' · ' + bsl.phase : '' }}
+                </span>
+              </el-option>
+            </el-select>
+            <!-- v0.8.12 LBS3: warn when the selected Cloud BSL has NO
+                 Object Lock. 3-2-1-1-0 needs "1 Immutable"; without lock
+                 the cloud copy is ransom-vulnerable. -->
+            <p v-if="selectedCloudBSL && !selectedCloudBSL.objectLockEnabled" class="form-hint form-hint-warn">
+              ⚠ {{ t('policies.noObjectLockWarn') }}
+            </p>
+            <p v-else-if="selectedCloudBSL && selectedCloudBSL.objectLockEnabled" class="form-hint form-hint-ok">
+              🛡 {{ t('policies.objectLockOk', { mode: selectedCloudBSL.objectLockMode || 'governance' }) }}
+            </p>
+            <p v-if="cloudOnlyStorageLocations.length === 0" class="form-hint">
+              {{ t('policies.storageProfileEmpty') }}
+            </p>
           </el-form-item>
         </template>
 
-        <!-- Volume Mode -->
+        <!-- Data Path (v0.8.7.5: split into Snapshot Engine + Export Engine
+             columns to mirror Kasten's L1/L2 mental model. The Action
+             pill above (L1/L2) gates which column is interactive:
+
+               L1 = Snapshot only        → left column active, right grayed
+               L2 = Snapshot + Export    → right column active, left grayed
+                    (because Data Mover already implies CSI snapshot,
+                     Filesystem path skips snapshot entirely)
+
+             Implementation: still ONE source-of-truth value in
+             createForm.snapshot.dataPath. The two-column visual is
+             purely for clarity. A watcher migrates the value when
+             Action switches so the user can't end up with an L1/L2
+             vs. dataPath mismatch (which v0.8.7.4 silently allowed). -->
         <el-form-item>
           <template #label>
             <div class="kasten-label-block">
-              <strong>{{ t('policies.volumeMode') }}</strong>
-              <span class="kasten-label-help">{{ t('policies.volumeModeHelp') }}</span>
+              <strong>{{ t('policies.dataPath') }}</strong>
+              <span class="kasten-label-help">{{ t('policies.dataPathHelp') }}</span>
             </div>
           </template>
-          <div class="kasten-pill-group">
-            <button
-              type="button"
-              class="kasten-pill"
-              :class="{ 'is-active': createForm.snapshot.volumeMode === 'filesystem' }"
-              @click="createForm.snapshot.volumeMode = 'filesystem'"
-            >📁 Filesystem</button>
-            <button
-              type="button"
-              class="kasten-pill"
-              :class="{ 'is-active': createForm.snapshot.volumeMode === 'csi' }"
-              @click="createForm.snapshot.volumeMode = 'csi'"
-            >📸 CSI</button>
+          <div class="data-path-2col">
+            <!-- ─── Left: Snapshot only (L1) ─── -->
+            <div class="data-path-col" :class="{ 'is-active-col': !createForm.export.enabled, 'is-disabled-col': createForm.export.enabled }">
+              <div class="data-path-col-head">
+                <span class="data-path-col-title">📸 {{ t('policies.dataPathSection.snapshotOnly') }}</span>
+                <span class="data-path-col-sub">{{ t('policies.dataPathSection.snapshotOnlySub') }}</span>
+              </div>
+              <div class="data-path-col-body">
+                <button
+                  type="button"
+                  class="kasten-pill data-path-pill"
+                  :class="{ 'is-active': createForm.snapshot.dataPath === 'csi-snapshot' }"
+                  :disabled="createForm.export.enabled"
+                  :title="t('policies.dataPathTip.csi')"
+                  @click="setDataPath('csi-snapshot')"
+                >📸 {{ t('policies.dataPathChoice.csi') }}</button>
+                <button
+                  type="button"
+                  class="kasten-pill data-path-pill"
+                  :class="{ 'is-active': createForm.snapshot.dataPath === 'metadata-only' }"
+                  :disabled="createForm.export.enabled"
+                  :title="t('policies.dataPathTip.meta')"
+                  @click="setDataPath('metadata-only')"
+                >📋 {{ t('policies.dataPathChoice.meta') }}</button>
+              </div>
+            </div>
+
+            <!-- ─── Right: Snapshot + Export (L2) ─── -->
+            <div class="data-path-col" :class="{ 'is-active-col': createForm.export.enabled, 'is-disabled-col': !createForm.export.enabled }">
+              <div class="data-path-col-head">
+                <span class="data-path-col-title">🚚 {{ t('policies.dataPathSection.snapshotExport') }}</span>
+                <span class="data-path-col-sub">{{ t('policies.dataPathSection.snapshotExportSub') }}</span>
+              </div>
+              <div class="data-path-col-body">
+                <button
+                  type="button"
+                  class="kasten-pill data-path-pill"
+                  :class="{ 'is-active': createForm.snapshot.dataPath === 'data-mover' }"
+                  :disabled="!createForm.export.enabled"
+                  :title="t('policies.dataPathTip.mover')"
+                  @click="setDataPath('data-mover')"
+                >🚚 {{ t('policies.dataPathChoice.mover') }}</button>
+                <button
+                  type="button"
+                  class="kasten-pill data-path-pill"
+                  :class="{ 'is-active': createForm.snapshot.dataPath === 'filesystem' }"
+                  :disabled="!createForm.export.enabled"
+                  :title="t('policies.dataPathTip.fs')"
+                  @click="setDataPath('filesystem')"
+                >📁 {{ t('policies.dataPathChoice.fs') }}</button>
+              </div>
+            </div>
           </div>
+          <p v-if="createForm.snapshot.dataPath === 'data-mover' || createForm.snapshot.dataPath === 'filesystem'"
+             class="data-path-prereq">
+            ℹ️ {{ t('policies.dataPathPrereq') }}
+          </p>
         </el-form-item>
 
-        <!-- Resources (Included Namespaces) -->
-        <el-form-item>
-          <template #label>
-            <div class="kasten-label-block">
-              <strong>{{ t('policies.resources') }}</strong>
-              <span class="kasten-label-help">{{ t('policies.resourcesHelp') }}</span>
-            </div>
-          </template>
-          <el-select
-            v-model="createForm.includedNamespaces"
-            multiple
-            filterable
-            allow-create
-            :placeholder="t('policies.namespacesPlaceholder')"
-            style="width: 100%"
-          >
-            <el-option v-for="ns in namespaces" :key="ns" :label="ns" :value="ns" />
-          </el-select>
-        </el-form-item>
+        <!-- (Resources block was moved above to right after Backup
+             Frequency in v0.8.7.4 to match Kasten ordering. Don't
+             re-add it here.) -->
 
-        <!-- Capability detection result (only shown for CSI mode + selected ns) -->
-        <el-form-item v-if="createForm.snapshot.volumeMode === 'csi' && createForm.includedNamespaces.length > 0">
+        <!-- Capability detection result (only shown for CSI mode + selected ns).
+             Data Mover also runs CSI snapshots under the hood, so the same
+             capability check applies — show it for both 'csi-snapshot' and
+             'data-mover'. -->
+        <el-form-item v-if="(createForm.snapshot.dataPath === 'csi-snapshot' || createForm.snapshot.dataPath === 'data-mover') && createForm.includedNamespaces.length > 0">
           <template #label><strong>{{ t('policies.csiCheck') }}</strong></template>
           <div v-loading="capabilityLoading" class="capability-result">
             <div v-if="capabilityError" class="capability-error">
@@ -361,15 +555,43 @@
       </el-form>
 
       <template #footer>
+        <!-- v0.8.12 LBS4: 3-2-1-1-0 score preview.
+             Shows how the policy-being-edited contributes to the cluster's
+             compliance score. Live-computed from the form state — same
+             rules engine the Dashboard DR Topology uses (kept in sync via
+             shared definition in the comment below).
+             Not blocking: a 2/5 policy still saves, but the chip strip
+             makes the gap visible so the user can fix it before clicking
+             Create rather than discovering it later on the Dashboard. -->
+        <div class="policy-score-strip">
+          <div class="pss-head">
+            <span class="sk-caption pss-label">3-2-1-1-0</span>
+            <span class="pss-count">{{ scorePreview.filter((r) => r.ok).length }}/5</span>
+            <span class="sk-caption pss-hint">{{ t('policies.scorePreviewHint') }}</span>
+          </div>
+          <div class="pss-dots">
+            <span
+              v-for="(r, i) in scorePreview"
+              :key="`pss-${i}`"
+              class="pss-item"
+              :class="{ 'is-ok': r.ok, 'is-bad': !r.ok }"
+              :title="r.note || r.label"
+            >
+              <span class="pss-dot">{{ r.ok ? '●' : '○' }}</span>
+              <span class="pss-rule">{{ r.label }}</span>
+            </span>
+          </div>
+        </div>
+
         <div class="drawer-footer">
           <el-button @click="showCreateDialog = false">{{ t('common.cancel') }}</el-button>
           <el-button
             type="primary"
-            @click="handleCreate"
+            @click="handleSubmit"
             :loading="creating"
             :disabled="csiBlocked()"
           >
-            {{ t('common.create') }}
+            {{ editMode ? t('common.save') : t('common.create') }}
           </el-button>
         </div>
       </template>
@@ -379,15 +601,37 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Plus, Search } from '@element-plus/icons-vue'
+import { Plus, Search, FolderOpened } from '@element-plus/icons-vue'
 import {
   getSchedules, getSchedule, createSchedule, patchSchedule, deleteSchedule,
-  runScheduleOnce, getNamespaces, getNamespaceStorageCapability
+  runScheduleOnce, getNamespaces, getNamespaceStorageCapability,
+  getStorageLocations
 } from '../api/velero'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const { t } = useI18n()
+const router = useRouter()
+
+// v0.8.10.1: jump from a Policy row's RP count to the Restore Points
+// page pre-filtered by this policy. Same UX pattern as the Applications
+// page's RP count cell (which uses ?namespace=). Here we use ?policy=
+// because a policy can span multiple namespaces and the user's question
+// is "what RPs did THIS policy produce", not "what's in this ns".
+const goPolicyRPs = (row) => {
+  const name = row?._policy?.name || row?.metadata?.name
+  if (!name) return
+  router.push({ path: '/backups', query: { policy: name } })
+}
+// v0.8.10.2: same nav as goPolicyRPs but also closes the View drawer
+// first so the user doesn't see the drawer linger over the new page.
+const goPolicyRPsFromDrawer = (row) => {
+  viewDrawerVisible.value = false
+  goPolicyRPs(row)
+}
+import { useAuth } from '../composables/useAuth'
+const auth = useAuth()
 
 const schedules = ref([])
 
@@ -512,13 +756,20 @@ const handleCommand = (cmd, row) => {
   }
 }
 
-const openView = async (row) => {
-  try {
-    const res = await getSchedule(row.metadata.name)
-    viewRow.value = res.data
-  } catch {
-    viewRow.value = row
-  }
+// v0.8.10.5 fix: openView used to re-fetch via getSchedule(name) and
+// store the PolicyAggregate response directly. But v0.8.9 changed
+// /schedules to return PolicyAggregate (policyName / mode / snapshotSchedule
+// / exportSchedule), while the View drawer template reads flat fields
+// like viewRow.metadata.name + viewRow.spec.template.ttl. The mismatch
+// made every field `undefined` → drawer rendered as gray overlay with
+// no content.
+//
+// Fix: the `row` we receive is ALREADY flattened by fetchSchedules
+// (see the .map() there). Use it directly. No need to re-fetch since
+// the list view already has fresh data, and re-fetching just gives us
+// a shape mismatch.
+const openView = (row) => {
+  viewRow.value = row
   viewDrawerVisible.value = true
 }
 
@@ -541,11 +792,150 @@ const handleRevalidate = (row) => {
   }
 }
 
-const handleEdit = (row) => {
-  // v0.7.8 placeholder — full Edit form lands in v0.8 alongside RBAC.
-  // Open the YAML drawer for now so the user can at least inspect the spec.
-  ElMessage.info(t('policies.editComingSoon'))
-  openYaml(row)
+// v0.8.5 step 5: real Edit form.
+//
+// The Create drawer doubles as the Edit drawer — same fields, same layout,
+// same handlers. The only differences are:
+//   - Drawer title / button label
+//   - Name + ns scope are disabled (rename = new policy; ns moves are
+//     possible but limited to the editor's scope and surfaced as a warning)
+//   - Submit goes to PATCH /schedules/:name instead of POST /schedules
+//
+// We hydrate `createForm` from the existing Velero Schedule + the
+// supkube.io/* intent annotations so the editor sees the SAME shape they'd
+// see in Create, not raw Velero fields.
+const handleEdit = async (row) => {
+  if (!auth.canDo('policy.edit')) {
+    ElMessage.warning(t('common.noPermission'))
+    return
+  }
+  // Fetch the live spec — the row from the list may be stale (controller
+  // status fields aren't in our list payload).
+  let live = row
+  try {
+    const res = await getSchedule(row.metadata.name)
+    live = res.data
+  } catch (e) {
+    ElMessage.warning(t('policies.editFetchFailed'))
+  }
+  createForm.value = hydrateFormFromSchedule(live)
+  editMode.value = true
+  editingName.value = live.metadata?.name || ''
+  // v0.8.7.4: refresh BSL list so the Storage Profile dropdown has the
+  // current Available/Unavailable state of every BSL, not whatever was
+  // cached when the page first loaded.
+  fetchStorageLocations()
+  showCreateDialog.value = true
+}
+
+// hydrateFormFromSchedule: reverse of collapseToVelero().
+// v0.8.9 — accepts either the new PolicyAggregate shape (from GET
+// /schedules/:name post-v0.8.9) or a legacy raw Schedule. The
+// extractAggregate helper normalizes both into a {snap, exp} pair
+// so the rest of the function doesn't care which it got.
+const hydrateFormFromSchedule = (input) => {
+  const f = defaultForm()
+
+  // Normalize: PolicyAggregate vs raw Schedule.
+  let snap = null
+  let exp = null
+  let policyName = ''
+  if (input?.policyName !== undefined) {
+    // New aggregate shape.
+    snap = input.snapshotSchedule || null
+    exp = input.exportSchedule || null
+    policyName = input.policyName || snap?.metadata?.name || ''
+  } else if (input?.spec) {
+    // Legacy raw Schedule.
+    snap = input
+    policyName = input.metadata?.name || ''
+  }
+  // The "primary" half (snapshot) drives all common form fields.
+  const sched = snap
+  const tmpl = sched?.spec?.template || {}
+  const ann = sched?.metadata?.annotations || {}
+
+  f.name = policyName
+  f.comments = ann['supkube.io/comments'] || ''
+  f.includedNamespaces = Array.isArray(tmpl.includedNamespaces) ? [...tmpl.includedNamespaces] : []
+
+  const snapSched = ann['supkube.io/snapshot-schedule'] || sched?.spec?.schedule || '0 0 * * *'
+  const snapRet = ann['supkube.io/snapshot-retention'] || '24h'
+  // v0.8.7 dataPath derivation. Prefer the annotation; fall back to
+  // old volume-mode; last resort, infer from the spec triple.
+  // v0.8.9 quirk: when in dual mode, the snapshot half ALWAYS has
+  // snapshotMoveData=false, but the user's "intent" is still
+  // Data Mover (since the export half does upload). So when we see
+  // a paired policy, force dataPath='data-mover' regardless of the
+  // snapshot half's flags.
+  let dataPath = ann['supkube.io/data-path']
+  if (!dataPath) {
+    const oldMode = ann['supkube.io/volume-mode']
+    if (oldMode === 'csi') dataPath = 'csi-snapshot'
+    else if (oldMode === 'filesystem') dataPath = 'filesystem'
+  }
+  if (!dataPath) {
+    if (tmpl.snapshotMoveData)          dataPath = 'data-mover'
+    else if (tmpl.defaultVolumesToFsBackup) dataPath = 'filesystem'
+    else if (tmpl.snapshotVolumes)      dataPath = 'csi-snapshot'
+    else                                 dataPath = 'metadata-only'
+  }
+  // If there's an export half, the policy is effectively Data Mover OR
+  // Filesystem — pick whichever the export half's spec uses.
+  if (exp) {
+    const expTmpl = exp.spec?.template || {}
+    if (expTmpl.defaultVolumesToFsBackup) dataPath = 'filesystem'
+    else dataPath = 'data-mover'
+  }
+  f.snapshot.schedule = snapSched
+  f.snapshot.schedulePreset = snapSched
+  f.snapshot.retention = snapRet
+  f.snapshot.dataPath = dataPath
+
+  // v0.8.9 Export side derivation:
+  //   - exp present → dual mode L2; pull export retention + BSL from
+  //     the export half's spec.
+  //   - exp missing + annotation export-enabled=true → legacy L2 (pre-
+  //     v0.8.9 single-schedule that intended L2); pull from annotation.
+  //   - else → L1.
+  let expEnabled = false
+  let expSched = sched?.spec?.schedule || '0 0 * * *'
+  let expRet = '720h'
+  let expBsl = 'default'
+  if (exp) {
+    expEnabled = true
+    expSched = exp.spec?.schedule || expSched
+    const expTmpl = exp.spec?.template || {}
+    if (expTmpl.ttl) expRet = expTmpl.ttl
+    if (expTmpl.storageLocation) expBsl = expTmpl.storageLocation
+  } else if (ann['supkube.io/export-enabled'] === 'true') {
+    expEnabled = true
+    expSched = ann['supkube.io/export-schedule'] || expSched
+    expRet = ann['supkube.io/export-retention'] || (tmpl.ttl ? tmpl.ttl : '720h')
+    expBsl = tmpl.storageLocation || 'default'
+  }
+  f.export.enabled = expEnabled
+  f.export.schedule = expSched
+  f.export.schedulePreset = expSched
+  f.export.retention = expRet
+  f.export.storageLocation = expBsl
+
+  // v0.8.7.6 Frequency derivation:
+  //   - sched.spec.paused == true  → ondemand (overrides any cron match)
+  //   - cron matches a preset      → that preset
+  //   - no match + not paused      → fall back to daily (the safest
+  //                                  default for an unknown cron;
+  //                                  v0.9 will add "Advanced cron" input
+  //                                  for real custom cron strings)
+  f.paused = !!sched?.spec?.paused
+  if (f.paused) {
+    f.frequency = 'ondemand'
+  } else {
+    const matchKey = Object.entries(FREQUENCY_TO_CRON).find(([key, cron]) => key !== 'ondemand' && cron === snapSched)?.[0]
+    f.frequency = matchKey || 'daily'
+  }
+
+  return f
 }
 
 const handleRunOnce = async (row) => {
@@ -566,9 +956,114 @@ const handleRunOnce = async (row) => {
   }
 }
 const namespaces = ref([])
+// v0.8.7.4: Storage Profile dropdown. Pulled from /storage-locations once
+// per drawer open. Includes Phase so the dropdown can disable
+// Unavailable BSLs (preventing the user from picking a known-broken one).
+// Each entry: { name, provider, phase, isDefault }
+const storageLocations = ref([])
+
+// v0.8.12 LBS3: derived list excluding the in-cluster Local BSL. The
+// Cloud BSL selector should only show user-added cloud destinations
+// (Azure Blob / S3 / OSS / Tencent COS). The Local store gets its own
+// dedicated treatment via the Local Backup Store card.
+const cloudOnlyStorageLocations = computed(() =>
+  storageLocations.value.filter((b) => b.bslRole !== 'local')
+)
+
+// Currently-selected Cloud BSL object (or null). Drives the inline
+// Object Lock badge + the no-lock warning below the selector.
+const selectedCloudBSL = computed(() => {
+  const name = createForm.value?.export?.storageLocation
+  if (!name) return null
+  return storageLocations.value.find((b) => b.name === name) || null
+})
+
+// v0.8.12 LBS4: 3-2-1-1-0 score preview for the policy being created/edited.
+//
+// Rules — must stay in sync with backend internal/api/v1/topology.go
+// (computeTopologyScore). The backend's score is global ("does ANY ns
+// satisfy this?"); here it's per-policy ("if this policy ran, would
+// IT satisfy each rule?"). Same five buckets, different scope.
+//
+//   3 Copies     = L2 dual policy (writes to BOTH Local + Cloud BSL)
+//                  → source PVC + local + cloud = 3 distinct copies
+//   2 Media      = Local BSL (in-cluster) + Cloud BSL (object storage)
+//                  → satisfied iff L2 dual
+//   1 Off-site   = Cloud BSL exists AND is Available
+//   1 Immutable  = at least one half writes to a BSL with Object Lock
+//                  (Local has it on by default; Cloud depends on user setup)
+//   0 Errors     = configuration-level: no missing required field that
+//                  would make the first run fail (BSL chosen, ns chosen,
+//                  schedule valid). Runtime failures are evaluated by
+//                  the global Dashboard scoreboard.
+//
+// Local BSL state is loaded lazily — we read from storageLocations
+// (which is fetched on mount). If the in-cluster Local BSL hasn't been
+// enabled yet, the Local copies / immutability assumptions degrade.
+const scorePreview = computed(() => {
+  const f = createForm.value || {}
+  const isDual = !!(f.export && f.export.enabled)
+  const cloud = selectedCloudBSL.value
+  const cloudAvailable = !!(cloud && cloud.phase === 'Available')
+  const cloudLocked = !!(cloud && cloud.objectLockEnabled)
+
+  // Local BSL: SupKube-managed in-cluster MinIO. Detected via the
+  // supkube.io/bsl-role=local label that LBS1's Helm chart stamps.
+  const localBSL = storageLocations.value.find((b) => b.bslRole === 'local')
+  const localAvailable = !!(localBSL && localBSL.phase === 'Available')
+  const localLocked = !!(localBSL && localBSL.objectLockEnabled)
+
+  // L1 policies write only to Cloud (Local is implicit via SupKube's
+  // policypair controller; we still count "Local" as a copy when the
+  // Local BSL exists, even for L1, because the controller will route
+  // there). v0.8.12 simplification: treat L1 as "Cloud only".
+  const hasLocal = isDual && localAvailable
+  const hasCloud = cloudAvailable
+
+  // Config-level "0 Errors" check: required fields populated
+  const hasNamespaces = !!(f.namespaces && f.namespaces.length > 0)
+  const hasName = !!f.name
+  const hasSchedule = !!(f.snapshot && (f.snapshot.cron || f.snapshot.frequency))
+  const configClean = hasName && hasNamespaces && hasSchedule && (isDual ? cloudAvailable : true)
+
+  return [
+    {
+      label: t('topology.score.three'),
+      ok: hasLocal && hasCloud,
+      note: !hasLocal ? t('policies.scoreNotes.localMissing') : (!hasCloud ? t('policies.scoreNotes.cloudMissing') : '')
+    },
+    {
+      label: t('topology.score.two'),
+      ok: hasLocal && hasCloud,
+      note: !isDual ? t('policies.scoreNotes.notDual') : ''
+    },
+    {
+      label: t('topology.score.one'),
+      ok: cloudAvailable,
+      note: !cloud ? t('policies.scoreNotes.noCloudPicked') : (!cloudAvailable ? t('policies.scoreNotes.cloudUnavailable') : '')
+    },
+    {
+      label: t('topology.score.immutable'),
+      ok: cloudLocked || (hasLocal && localLocked),
+      note: t('policies.scoreNotes.enableLock')
+    },
+    {
+      label: t('topology.score.zero'),
+      ok: configClean,
+      note: !hasNamespaces ? t('policies.scoreNotes.pickNs') : (!hasName ? t('policies.scoreNotes.pickName') : '')
+    }
+  ]
+})
 const loading = ref(false)
 const creating = ref(false)
 const showCreateDialog = ref(false)
+// v0.8.5 step 5: edit mode for the same drawer.
+//   editMode === false  → Create flow (POST /schedules)
+//   editMode === true   → Edit flow (PATCH /schedules/:name)
+// editingName persists across the open-drawer lifecycle; we use it for
+// the PATCH URL and to show "Editing <name>" in the title.
+const editMode = ref(false)
+const editingName = ref('')
 // (schedules + filter state already declared above near the toolbar logic)
 
 // v0.7 Actions model: Snapshot (always on) + Export (default on, opt-out
@@ -583,12 +1078,25 @@ const defaultForm = () => ({
   // safe baseline for most workloads.
   frequency: 'daily',
   includedNamespaces: [],
+  // v0.8.7.6: 'paused' is the Velero Schedule field that disables
+  // automatic cron runs. We expose it as the "On Demand" frequency:
+  // policy is created with a real cron (whatever was last set) but
+  // paused=true so the Schedule controller never triggers a Backup.
+  // User can still trigger backups manually via the Run Once action.
+  paused: false,
   snapshot: {
     enabled: true,
     schedulePreset: '0 0 * * *',
     schedule: '0 0 * * *',
     retention: '24h',
-    volumeMode: 'filesystem' // 'filesystem' | 'csi'
+    // v0.8.7 dataPath — 4-way Velero spec dispatch:
+    //   csi-snapshot  → snapshotVolumes=true,  fsBackup=false, moveData=false
+    //   data-mover    → snapshotVolumes=true,  fsBackup=false, moveData=true
+    //   filesystem    → snapshotVolumes=false, fsBackup=true,  moveData=false
+    //   metadata-only → snapshotVolumes=false, fsBackup=false, moveData=false
+    // Default 'csi-snapshot' matches Velero's own default behavior so
+    // a user clicking through without thinking gets the safest fast path.
+    dataPath: 'csi-snapshot'
   },
   export: {
     enabled: true,
@@ -603,21 +1111,29 @@ const createForm = ref(defaultForm())
 // Kasten-style frequency preset map. Each option drives BOTH the snapshot
 // and export schedule (export stays in lock-step by default — v0.9 will
 // expose an "Advanced: separate cadences" toggle).
+//
+// v0.8.7.6: replaced 'custom' (which silently set cron to '0 * * * *' ≡
+// "Every hour" while UI claimed "Custom" — a pure footgun) with
+// 'ondemand'. On Demand = Velero spec.paused=true, no auto-runs at all,
+// only manually triggered via Run Once. Matches Kasten K10's "On Demand"
+// preset. The cron stays at whatever the user last picked (or daily)
+// because Velero needs SOME schedule value even when paused; the
+// controller honors paused and skips firing.
 const FREQUENCY_TO_CRON = {
-  hourly: '0 * * * *',
-  every6h: '0 */6 * * *',
-  daily: '0 0 * * *',
-  weekly: '0 0 * * 0',
-  monthly: '0 0 1 * *',
-  custom: '0 * * * *'
+  hourly:   '0 * * * *',
+  every6h:  '0 */6 * * *',
+  daily:    '0 0 * * *',
+  weekly:   '0 0 * * 0',
+  monthly:  '0 0 1 * *',
+  ondemand: '0 0 * * *'  // placeholder; paused=true makes this irrelevant
 }
 const frequencyChoices = computed(() => [
-  { key: 'hourly', label: t('advisor.schedule.hourly') },
-  { key: 'every6h', label: t('advisor.schedule.every6h') },
-  { key: 'daily', label: t('advisor.schedule.daily') },
-  { key: 'weekly', label: t('advisor.schedule.weekly') },
-  { key: 'monthly', label: t('advisor.schedule.monthly') },
-  { key: 'custom', label: t('policies.frequencyCustom') }
+  { key: 'hourly',   label: t('advisor.schedule.hourly') },
+  { key: 'every6h',  label: t('advisor.schedule.every6h') },
+  { key: 'daily',    label: t('advisor.schedule.daily') },
+  { key: 'weekly',   label: t('advisor.schedule.weekly') },
+  { key: 'monthly',  label: t('advisor.schedule.monthly') },
+  { key: 'ondemand', label: t('policies.frequencyOnDemand') }
 ])
 
 const selectFrequency = (key) => {
@@ -629,6 +1145,9 @@ const selectFrequency = (key) => {
     createForm.value.export.schedule = cron
     createForm.value.export.schedulePreset = cron
   }
+  // v0.8.7.6: On Demand pauses the schedule; any other preset un-pauses
+  // it (in case the user is converting from On Demand back to a cadence).
+  createForm.value.paused = (key === 'ondemand')
 }
 
 // Action button-group handler: snapshot-only vs snapshot+export. Mirrors
@@ -645,6 +1164,52 @@ const selectAction = (mode) => {
   }
 }
 
+// v0.8.7.5: Data Path setter respects the L1/L2 Action constraint.
+// Components call setDataPath(value) instead of directly assigning so
+// invalid combos (e.g. picking 'csi-snapshot' while L2 export is on)
+// can't be reached even via DevTools manipulation of v-model bindings.
+//
+// Why a function and not v-model: the 4-pill grid used to write
+// directly to createForm.snapshot.dataPath, which allowed users to
+// silently end up with "L2 selected + CSI-only path" → no export
+// despite the L2 label. Forcing through this helper keeps the UI
+// self-consistent.
+const setDataPath = (value) => {
+  const L1Only = ['csi-snapshot', 'metadata-only']
+  const L2Only = ['data-mover', 'filesystem']
+  if (createForm.value.export.enabled && L1Only.includes(value)) return  // L2 active, L1 option clicked → ignore
+  if (!createForm.value.export.enabled && L2Only.includes(value)) return // L1 active, L2 option clicked → ignore
+  createForm.value.snapshot.dataPath = value
+}
+
+// migrateDataPathOnActionChange: when user flips L1 ↔ L2, the currently-
+// selected dataPath may no longer be valid. We auto-migrate to the most
+// "intent-preserving" sibling:
+//
+//   L1 → L2:
+//     csi-snapshot  → data-mover    (both use CSI; L2 just adds Kopia export)
+//     metadata-only → metadata-only invalid for L2; pick data-mover as fallback
+//
+//   L2 → L1:
+//     data-mover    → csi-snapshot  (drop Kopia export, keep CSI)
+//     filesystem    → metadata-only (no CSI snapshot was ever taken; nearest sibling)
+const migrateDataPathOnActionChange = (l2Enabled) => {
+  const dp = createForm.value.snapshot.dataPath
+  if (l2Enabled) {
+    if (dp === 'csi-snapshot') createForm.value.snapshot.dataPath = 'data-mover'
+    else if (dp === 'metadata-only') createForm.value.snapshot.dataPath = 'data-mover'
+  } else {
+    if (dp === 'data-mover') createForm.value.snapshot.dataPath = 'csi-snapshot'
+    else if (dp === 'filesystem') createForm.value.snapshot.dataPath = 'metadata-only'
+  }
+}
+
+// Watch Action toggle (createForm.export.enabled) and migrate.
+watch(
+  () => createForm.value.export.enabled,
+  (newVal) => { migrateDataPathOnActionChange(newVal) }
+)
+
 // Capability detection — when user picks CSI mode + selected namespaces, check
 // each namespace's PVCs are on CSI-snapshot-capable StorageClasses. We block
 // "Create" if any incompatibility found; UI surfaces the offending PVCs.
@@ -653,15 +1218,23 @@ const capabilityLoading = ref(false)
 const capabilityError = ref('')
 
 const incompatiblePVCs = (capabilityResults.value)
+// v0.8.7: 'csi-snapshot' AND 'data-mover' both depend on CSI snapshot
+// support — Data Mover takes the CSI snapshot first then ships it.
+// So the same capability gate applies to both. 'filesystem' walks the
+// FS (no snapshot needed) and 'metadata-only' captures no PVs, so they
+// pass the gate trivially.
 const csiBlocked = () => {
-  if (createForm.value.snapshot.volumeMode !== 'csi') return false
+  const dp = createForm.value.snapshot.dataPath
+  if (dp !== 'csi-snapshot' && dp !== 'data-mover') return false
   return capabilityResults.value.some(r => r.incompatibleCount > 0)
 }
 
 const refreshCapability = async () => {
   capabilityError.value = ''
   const nsList = createForm.value.includedNamespaces
-  if (createForm.value.snapshot.volumeMode !== 'csi' || nsList.length === 0) {
+  const dp = createForm.value.snapshot.dataPath
+  // Check capability for any path that depends on CSI snapshots.
+  if ((dp !== 'csi-snapshot' && dp !== 'data-mover') || nsList.length === 0) {
     capabilityResults.value = []
     return
   }
@@ -682,7 +1255,7 @@ const refreshCapability = async () => {
 }
 
 watch(
-  () => [createForm.value.includedNamespaces.slice(), createForm.value.snapshot.volumeMode],
+  () => [createForm.value.includedNamespaces.slice(), createForm.value.snapshot.dataPath],
   () => { refreshCapability() },
   { deep: false }
 )
@@ -690,6 +1263,16 @@ watch(
 const formatTime = (ts) => {
   if (!ts) return '-'
   return new Date(ts).toLocaleString()
+}
+// v0.8.10.5: date / time split for the stacked column layout.
+// Locale-aware via Intl so zh-CN sees "2026/5/23" and en sees "5/23/2026".
+const formatDate = (ts) => {
+  if (!ts) return ''
+  return new Date(ts).toLocaleDateString()
+}
+const formatTimeOnly = (ts) => {
+  if (!ts) return ''
+  return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
 // Derive Protection Level from a Velero Schedule. Reads our intent
@@ -772,7 +1355,33 @@ const fetchSchedules = async () => {
   loading.value = true
   try {
     const res = await getSchedules()
-    schedules.value = res.data.items || []
+    // v0.8.9: backend now returns PolicyAggregate items, not raw Schedules.
+    // Adapt to the legacy table shape so existing template bindings
+    // (row.metadata.name, row.spec.schedule, etc.) keep working —
+    // by flattening: row = snapshotSchedule + synthetic mode chip.
+    // The export half is exposed under row.supkube.exportHalf for
+    // detail views that want it.
+    const items = res.data.items || []
+    schedules.value = items.map(agg => {
+      // Defensive: an aggregate with no snapshot half shouldn't exist
+      // (backend invariant), but if it does we synthesize an empty
+      // shell so the row doesn't crash.
+      const snap = agg.snapshotSchedule || { metadata: { name: agg.policyName }, spec: {} }
+      return {
+        ...snap,
+        // Inject the policy-level fields so existing
+        // template code can read them without breaking.
+        _policy: {
+          name: agg.policyName,
+          mode: agg.mode,
+          exportHalf: agg.exportSchedule || null
+        },
+        // v0.8.10.1: hoist policy-level RP count to the row level so
+        // the table sort-method + template can read it as
+        // row.restorePointCount without `_policy.` prefix.
+        restorePointCount: agg.restorePointCount || 0
+      }
+    })
   } catch (e) {
     ElMessage.error('Failed to load policies')
     console.error(e)
@@ -791,6 +1400,34 @@ const fetchNamespaces = async () => {
   }
 }
 
+// v0.8.7.4: load BSL list for the Storage Profile dropdown. Each entry
+// keeps Phase + provider so the dropdown can hint "(Unavailable)" or
+// "Azure" beside the name. Disabled when Phase != Available so a user
+// can't pick a broken target and not realize until the first run.
+const fetchStorageLocations = async () => {
+  try {
+    const res = await getStorageLocations()
+    const items = res.data.items || res.data || []
+    storageLocations.value = items.map(bsl => ({
+      name: bsl.metadata?.name || '',
+      provider: bsl.spec?.provider || '',
+      phase: bsl.status?.phase || 'Unknown',
+      isDefault: !!bsl.spec?.default,
+      // v0.8.12 LBS3: surface Object Lock state into the wizard so the
+      // BSL selector can show 🛡 next to locked options and warn when
+      // the user picks a non-locked cloud BSL.
+      objectLockEnabled: (bsl.metadata?.annotations || {})['supkube.io/object-lock'] === 'true',
+      objectLockMode: (bsl.metadata?.annotations || {})['supkube.io/object-lock-mode'] || '',
+      // bsl-role lets us hide the in-cluster Local BSL from the Cloud
+      // selector — it's not a meaningful Cloud destination.
+      bslRole: (bsl.metadata?.labels || {})['supkube.io/bsl-role'] || ''
+    })).filter(b => b.name)
+  } catch (e) {
+    console.error('Failed to load storage locations:', e)
+    storageLocations.value = []
+  }
+}
+
 // Parse Go duration suffixes (h only — Velero's TTL field is `metav1.Duration`,
 // in practice we only ever store h). Returns null if input doesn't match.
 const parseHours = (s) => {
@@ -805,34 +1442,68 @@ const parseHours = (s) => {
 const collapseToVelero = (form) => {
   const snapHours = parseHours(form.snapshot.retention) || 24
   const expHours = form.export.enabled ? (parseHours(form.export.retention) || 720) : 0
-  const ttlHours = Math.max(snapHours, expHours)
 
   // cron picking: simple heuristic — when Export is on, use export cron
   // (slower) by default for cost. If user wants tighter RPO they pick
   // matching cron explicitly via "Same as Snapshot".
   const cron = form.export.enabled ? form.export.schedule : form.snapshot.schedule
 
-  return {
+  // v0.8.7: 4-way dataPath dispatch into Velero's 3-flag triple.
+  //   csi-snapshot  → snapshotVolumes=true,  fsBackup=false, moveData=false
+  //   data-mover    → snapshotVolumes=true,  fsBackup=false, moveData=true
+  //   filesystem    → snapshotVolumes=false, fsBackup=true,  moveData=false
+  //   metadata-only → snapshotVolumes=false, fsBackup=false, moveData=false
+  const dp = form.snapshot.dataPath || 'csi-snapshot'
+  const snapshotVolumes          = dp === 'csi-snapshot' || dp === 'data-mover'
+  const defaultVolumesToFsBackup = dp === 'filesystem'
+
+  // v0.8.9: when L2 (export.enabled), tell the backend to create a
+  // PAIR of Schedules with separate retention and BSLs:
+  //   snapshot half → snapshotRetention into `snapshotTtl`, no BSL
+  //                   override (uses default BSL or whatever)
+  //   export half   → exportRetention into `exportTtl`, user-picked BSL
+  // The backend sets snapshotMoveData based on role, NOT on our payload.
+  // L1 mode (export disabled) still sends the legacy single-shape ttl
+  // / storageLocation / snapshotMoveData fields.
+  const payload = {
     name: form.name,
     schedule: cron,
+    paused: !!form.paused,
     includedNamespaces: form.includedNamespaces.length > 0 ? form.includedNamespaces : undefined,
-    ttl: `${ttlHours}h`,
-    storageLocation: form.export.storageLocation || 'default',
-    snapshotVolumes: form.snapshot.volumeMode === 'csi',
-    defaultVolumesToFsBackup: form.snapshot.volumeMode === 'filesystem',
-    // v0.7 intent annotations (consumed by v0.9 self-managed scheduler)
+    snapshotVolumes,
+    defaultVolumesToFsBackup,
+    // v0.7 intent annotations (consumed by v0.9 self-managed scheduler).
     annotations: {
       'supkube.io/snapshot-schedule': form.snapshot.schedule,
       'supkube.io/snapshot-retention': form.snapshot.retention,
       'supkube.io/export-enabled': String(form.export.enabled),
       'supkube.io/export-schedule': form.export.schedule,
       'supkube.io/export-retention': form.export.retention,
-      'supkube.io/volume-mode': form.snapshot.volumeMode
+      'supkube.io/data-path': dp,
+      'supkube.io/volume-mode': dp === 'csi-snapshot' || dp === 'data-mover' ? 'csi' : (dp === 'filesystem' ? 'filesystem' : '')
     }
   }
+  if (form.export.enabled) {
+    // L2 — dual pair
+    payload.dual = true
+    payload.snapshotTtl = `${snapHours}h`
+    payload.exportTtl = `${expHours}h`
+    payload.exportStorageLocation = form.export.storageLocation || 'default'
+    // snapshotStorageLocation left blank → uses Velero's cluster default BSL
+  } else {
+    // L1 — single schedule, legacy field set
+    payload.dual = false
+    payload.ttl = `${snapHours}h`
+    payload.storageLocation = form.export.storageLocation || 'default'
+    payload.snapshotMoveData = dp === 'data-mover'
+  }
+  return payload
 }
 
-const handleCreate = async () => {
+// handleSubmit — dispatches to create-or-edit based on editMode.
+// Single entry point keeps the drawer template trivial (one button,
+// label changes via editMode), and lets us share the validation block.
+const handleSubmit = async () => {
   if (!createForm.value.name) {
     ElMessage.warning('Please enter a policy name')
     return
@@ -842,7 +1513,9 @@ const handleCreate = async () => {
     return
   }
   // v0.7-policy-2 global block: if admin set "Block snapshot-only" in
-  // Settings and this policy has Export off, refuse to save.
+  // Settings and this policy has Export off, refuse to save. Applies to
+  // edits too — re-saving a snapshot-only policy in a cluster that's been
+  // tightened up should fail loudly.
   if (!createForm.value.export.enabled &&
       localStorage.getItem('supkube.policy.blockSnapshotOnly') === 'true') {
     ElMessageBox.alert(
@@ -854,18 +1527,66 @@ const handleCreate = async () => {
   }
   creating.value = true
   try {
-    const payload = collapseToVelero(createForm.value)
-    await createSchedule(payload)
-    const mode = createForm.value.export.enabled ? 'Snapshot + Export' : 'Snapshot-only ⚠'
-    ElMessage.success(`Policy "${createForm.value.name}" created (${mode})`)
+    const veleroPayload = collapseToVelero(createForm.value)
+    if (editMode.value) {
+      // PATCH path. We don't send `name`; we send the editable subset
+      // matching the backend PatchSchedule contract.
+      const patchBody = {
+        schedule: veleroPayload.schedule,
+        // v0.8.7.6: paused must be sent on every PATCH so On Demand
+        // and cadence-based policies can flip in both directions.
+        // (PatchSchedule backend already supports `paused`, since v0.8.5.)
+        paused: veleroPayload.paused,
+        ttl: veleroPayload.ttl,
+        includedNamespaces: veleroPayload.includedNamespaces || [],
+        storageLocation: veleroPayload.storageLocation,
+        snapshotVolumes: veleroPayload.snapshotVolumes,
+        defaultVolumesToFsBackup: veleroPayload.defaultVolumesToFsBackup,
+        // v0.8.7: thread snapshotMoveData through to the PATCH endpoint
+        snapshotMoveData: veleroPayload.snapshotMoveData,
+        annotations: veleroPayload.annotations
+      }
+      await patchSchedule(editingName.value, patchBody)
+      ElMessage.success(`Policy "${editingName.value}" updated`)
+    } else {
+      await createSchedule(veleroPayload)
+      const mode = createForm.value.export.enabled ? 'Snapshot + Export' : 'Snapshot-only ⚠'
+      ElMessage.success(`Policy "${createForm.value.name}" created (${mode})`)
+    }
     showCreateDialog.value = false
+    editMode.value = false
+    editingName.value = ''
     createForm.value = defaultForm()
     await fetchSchedules()
   } catch (e) {
-    ElMessage.error('Failed to create policy: ' + (e.response?.data?.error || e.message))
+    const verb = editMode.value ? 'update' : 'create'
+    ElMessage.error(`Failed to ${verb} policy: ` + (e.response?.data?.error || e.message))
   } finally {
     creating.value = false
   }
+}
+// Backward-compat alias: any external @click handler still works.
+const handleCreate = handleSubmit
+
+// openCreateDrawer — entry point for the "+ Create Policy" button. Resets
+// any leftover edit state so opening Create after editing doesn't carry
+// the previous policy's form values.
+const openCreateDrawer = () => {
+  editMode.value = false
+  editingName.value = ''
+  createForm.value = defaultForm()
+  // v0.8.7.4: refresh BSL list on each open so newly-created Storage
+  // Profiles show up without a page reload.
+  fetchStorageLocations()
+  showCreateDialog.value = true
+}
+
+// onDrawerClose — fires whether the drawer was closed via X, ESC, or
+// clicking outside. Cancel and Save handle reset themselves; this is the
+// safety net so the next open is always clean.
+const onDrawerClose = () => {
+  editMode.value = false
+  editingName.value = ''
 }
 
 const togglePause = async (row) => {
@@ -899,6 +1620,7 @@ const handleDelete = async (row) => {
 onMounted(() => {
   fetchSchedules()
   fetchNamespaces()
+  fetchStorageLocations()
 })
 </script>
 
@@ -937,29 +1659,118 @@ onMounted(() => {
 .filter-summary { font-size: 13px; color: #606266; }
 
 /* Table cells */
-.policy-name { font-weight: 600; color: #303133; }
+/* v0.8.10.5: Policy Name cell carries name + chip row + ns row, all
+   in one stacked column. Matches the Restore Points compression. */
+.policy-cell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sk-space-xs);
+  padding: 4px 0;
+}
+.policy-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--sk-text);
+}
+.policy-cell-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sk-space-xs);
+  align-items: center;
+}
+.policy-ns-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sk-space-xs);
+  margin-top: 2px;
+}
+/* v0.8.10.6: vertical Resources column — each namespace on its own row.
+   Per user instruction "each NS on a row, not stacked horizontally". */
+.policy-ns-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sk-space-xs);
+  align-items: flex-start;
+  padding: 4px 0;
+}
+/* Namespace chip — neutral gray; no emoji per UI_GUIDELINES §3.1. */
+.policy-ns-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--sk-bg-soft);
+  border: 1px solid var(--sk-border);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--sk-text-secondary);
+}
+/* Legacy classes kept for any remaining bindings (validation table
+   cell removed, but other surfaces still reference these). */
 .validation-cell { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; }
-.validation-valid { color: #67c23a; }
-.validation-invalid { color: #e6a23c; }
+.validation-valid { color: var(--sk-status-success); }
+.validation-invalid { color: var(--sk-status-warning); }
 .ns-chip {
-  background: #ecf5ff !important;
-  border-color: #d9ecff !important;
-  color: #409eff !important;
+  background: var(--sk-bg-soft) !important;
+  border-color: var(--sk-border) !important;
+  color: var(--sk-text-secondary) !important;
   font-size: 11px;
   font-weight: 500;
   margin-right: 4px;
 }
-.action-text { font-size: 13px; color: #303133; }
+.action-text { font-size: 13px; color: var(--sk-text-secondary); }
 .freq-cell { display: flex; flex-direction: column; gap: 2px; }
-.freq-human { font-size: 13px; color: #303133; font-weight: 500; }
+.freq-human { font-size: 13px; color: var(--sk-text-secondary); font-weight: 500; }
 .freq-cron {
   font-family: 'SF Mono', Menlo, monospace;
   font-size: 11px;
-  color: #909399;
+  color: var(--sk-text-caption);
   background: transparent;
   padding: 0;
 }
-.muted { color: #c0c4cc; font-size: 13px; }
+/* v0.8.10.5: two-line date/time stack for narrow time columns. */
+.stacked-time {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+.stacked-time .sk-body    { font-weight: 500; }
+.stacked-time .sk-caption { font-size: 11px; }
+.muted { color: var(--sk-text-placeholder); font-size: 13px; }
+
+/* v0.8.10.1: Restore Points count cell — same link semantics as the
+   Applications page's RP count cell so a user moving between the two
+   surfaces sees identical visual affordances. All colours via tokens —
+   one place to retune the entire clickable palette. */
+.rp-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.rp-count .el-icon { font-size: 14px; }
+.rp-count-link {
+  color: var(--sk-primary);
+  cursor: pointer;
+  padding: 3px 8px;
+  margin: -3px -8px;
+  border-radius: 4px;
+  transition: background 120ms ease, color 120ms ease;
+}
+.rp-count-link:hover {
+  text-decoration: underline;
+  background: var(--sk-primary-bg-hover);
+  color: var(--sk-primary-hover);
+}
+.rp-count-link:active {
+  background: var(--sk-primary-active);
+}
+.rp-count-zero {
+  color: var(--sk-text-placeholder);
+  font-weight: 400;
+  cursor: default;
+}
 
 /* Kebab */
 .more-btn { padding: 4px 8px; font-size: 18px; color: #606266; }
@@ -969,6 +1780,87 @@ onMounted(() => {
 /* Drawers */
 .view-body { padding: 0 4px; }
 .view-section { margin-bottom: 16px; }
+
+/* ════════════════════════════════════════════════════════════════════
+ * v0.8.10.2: Policy Details drawer follows UI_GUIDELINES §5 — same
+ * sk-* class set as ActionDetailDrawer + Applications drawer.
+ * View drawer ONLY (not the Edit/New drawers, which are forms).
+ * ════════════════════════════════════════════════════════════════════ */
+/* Scope the flex body override to the View drawer ONLY — applying it
+   globally to every el-drawer in this file (Edit / New / YAML) broke
+   those because their content doesn't use sk-drawer + sk-drawer-footer
+   flex children, so the body collapsed to 0 height. v0.8.10.5 fix. */
+:deep(.sk-policy-view-drawer .el-drawer__body) {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.sk-drawer {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 28px var(--sk-drawer-padding-x) var(--sk-drawer-section-spacing);
+  position: relative;
+  min-height: 0;
+}
+.sk-drawer-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--sk-text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+  z-index: 2;
+}
+.sk-drawer-close:hover {
+  background: var(--sk-bg-hover);
+  color: var(--sk-text);
+}
+.sk-drawer-header { margin-bottom: var(--sk-drawer-header-spacing); }
+.sk-drawer-subject {
+  margin-top: var(--sk-space-xs);
+  margin-bottom: var(--sk-space-md);
+  word-break: break-all;
+}
+.sk-drawer-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sk-space-sm);
+  align-items: center;
+}
+.sk-section {
+  margin-bottom: var(--sk-drawer-section-spacing);
+  padding-bottom: var(--sk-drawer-section-spacing);
+  border-bottom: 1px solid var(--sk-border);
+}
+.sk-section:last-of-type { border-bottom: 0; padding-bottom: 0; }
+.sk-section .sk-h3 { margin-bottom: var(--sk-space-md); }
+.sk-fields {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  row-gap: var(--sk-space-sm);
+  column-gap: var(--sk-space-md);
+  align-items: baseline;
+}
+.sk-field-value {
+  word-break: break-all;
+}
+.sk-drawer-footer {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--sk-space-sm);
+  padding: 12px var(--sk-drawer-padding-x);
+  background: var(--sk-bg-page);
+  border-top: 1px solid var(--sk-border);
+}
+.sk-drawer-footer-spacer { flex: 1; }
+
 /* Kasten-style New Policy drawer */
 :deep(.new-policy-drawer .el-drawer__header) {
   margin-bottom: 0;
@@ -1044,6 +1936,180 @@ onMounted(() => {
   border-color: #4f46e5;
   color: #ffffff;
 }
+/* v0.8.7: data-path pills — slightly smaller text so 4-up fits on
+   the 560px-wide drawer without wrapping. Hover gets a subtle title
+   so the tooltip is reachable even without screen-reader mode. */
+.kasten-pill.data-path-pill {
+  font-size: 13px;
+  padding: 10px 12px;
+  text-align: center;
+}
+.kasten-pill.data-path-pill:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+/* v0.8.7.5: Data Path 2-column layout makes Snapshot-only vs
+   Snapshot+Export visually distinct. The Action toggle (L1/L2)
+   above this widget determines which column is interactive. */
+.data-path-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.data-path-col {
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  padding: 12px;
+  background: #fff;
+  transition: opacity 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.data-path-col.is-active-col {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.08);
+}
+.data-path-col.is-disabled-col {
+  opacity: 0.55;
+  background: #fafafa;
+}
+.data-path-col-head {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 10px;
+}
+.data-path-col-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1d2129;
+}
+.data-path-col-sub {
+  font-size: 11px;
+  color: #909399;
+  margin-top: 2px;
+  font-family: 'SF Mono', Menlo, monospace;
+}
+.data-path-col-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.data-path-col-body .kasten-pill {
+  width: 100%;
+}
+.data-path-prereq {
+  margin: 10px 0 0 0;
+  padding: 8px 12px;
+  background: #ecf5ff;
+  border-left: 3px solid #409eff;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #1f4e8c;
+  line-height: 1.5;
+}
+/* v0.8.7.6: On Demand notice — explains the paused-schedule semantics.
+   Yellow theme (vs blue for prereqs) because it's an attention/state
+   advisory rather than a "you might need this dependency" tip. */
+.ondemand-notice {
+  margin: 10px 0 0 0;
+  padding: 8px 12px;
+  background: #fdf6e3;
+  border-left: 3px solid #e6a23c;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #7a5b00;
+  line-height: 1.5;
+}
+/* v0.8.7.4: small "default" badge next to the cluster-default BSL in
+   the Storage Profile dropdown. Velero's default=true BSL is what
+   gets used when a Backup spec omits storageLocation; signaling it
+   here helps users pick "the same as kubectl velero". */
+.bsl-default-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: #ecf5ff;
+  color: #409eff;
+  font-size: 11px;
+  font-weight: 600;
+}
+/* form-hint reused under the Storage Profile dropdown when the BSL
+   list is empty. Matches the StorageLocations.vue style. */
+.form-hint {
+  display: block;
+  font-size: 12px;
+  color: #909399;
+  line-height: 1.5;
+  margin-top: 6px;
+}
+/* v0.8.12 LBS3: Object Lock warning + OK variants of form-hint. */
+.form-hint-warn {
+  color: #d97706;
+  background: #fffbeb;
+  border-left: 3px solid #f59e0b;
+  padding: 6px 10px;
+  border-radius: 0 4px 4px 0;
+}
+.form-hint-ok {
+  color: #059669;
+  background: #f0fdf4;
+  border-left: 3px solid #10b981;
+  padding: 6px 10px;
+  border-radius: 0 4px 4px 0;
+}
+
+/* v0.8.12 LBS4: 3-2-1-1-0 score preview strip — sits above the
+   Cancel/Create buttons so it's the last thing the user reads. Same
+   chip vocabulary as the Dashboard DR Topology score so the metric
+   stays consistent across pages. */
+.policy-score-strip {
+  background: linear-gradient(90deg, #f8fafc 0%, #fff 100%);
+  border: 1px solid var(--sk-border-light, #e5e7eb);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.pss-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.pss-label {
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  color: var(--sk-text-caption, #9ca3af);
+  text-transform: uppercase;
+}
+.pss-count {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--sk-primary, #4f46e5);
+}
+.pss-hint {
+  font-size: 11px;
+  color: var(--sk-text-caption, #9ca3af);
+}
+.pss-dots {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  flex: 1;
+}
+.pss-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  cursor: help;
+}
+.pss-dot { font-size: 14px; line-height: 1; }
+.pss-item.is-ok .pss-dot { color: #10b981; }
+.pss-item.is-bad .pss-dot { color: #d1d5db; }
+.pss-item.is-bad .pss-rule { color: var(--sk-text-caption, #9ca3af); }
 .drawer-footer {
   display: flex;
   justify-content: flex-end;

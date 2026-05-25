@@ -1,0 +1,344 @@
+/*
+ * SupKube design tokens (v1)
+ * ─────────────────────────────────────────────────────────────────────
+ * Source of truth: UI_GUIDELINES.md
+ *
+ * Why this file exists:
+ *   Before v0.8.10.2 every component hard-coded its own hex values, so
+ *   "indigo for clickable" leaked into "indigo for snapshot type", and
+ *   when we wanted to retune the palette the diff touched 30+ files.
+ *   This file is the ONLY place colour + type values are defined.
+ *
+ * Rules:
+ *   - Component CSS uses var(--sk-*) — NEVER raw hex
+ *   - Don't add a new token without a corresponding rule in UI_GUIDELINES
+ *   - Dark mode overrides live in §"Dark mode" at the bottom; same
+ *     token names, different values
+ */
+
+:root {
+  /* ─── Neutral / text ──────────────────────────────────────────── */
+  --sk-text:               #1d2129;
+  --sk-text-secondary:     #303133;
+  --sk-text-muted:         #606266;
+  --sk-text-caption:       #909399;
+  --sk-text-placeholder:   #c0c4cc;
+
+  /* ─── Neutral / borders + surfaces ────────────────────────────── */
+  --sk-border:             #ebeef5;
+  --sk-border-light:       #f0f3f8;
+  --sk-bg-page:            #ffffff;
+  --sk-bg-soft:            #f9fafc;
+  --sk-bg-hover:           #f5f7fa;
+
+  /* ─── Primary / clickable (indigo) ────────────────────────────── */
+  /* Only used on interactive elements. If text is indigo but doesn't
+     respond to clicks, that's a bug per UI_GUIDELINES §2.5. */
+  --sk-primary:            #4f46e5;
+  --sk-primary-hover:      #3730a3;
+  --sk-primary-bg-hover:   #eef2ff;
+  --sk-primary-active:     #e0e7ff;
+
+  /* ─── Status colours (badges, tags) ───────────────────────────── */
+  --sk-status-running:     #409eff;
+  --sk-status-success:     #67c23a;
+  --sk-status-warning:     #e6a23c;
+  --sk-status-error:       #c45656;
+  --sk-status-muted:       #909399;
+
+  /* ─── Type colours (semantic chips) ───────────────────────────── */
+  --sk-type-snapshot:      #409eff;   /* blue   — Snapshot RP (local CSI) */
+  --sk-type-exported:      #722ed1;   /* purple — Exported RP (BSL)        */
+  --sk-type-imported:      #13c2c2;   /* teal   — Imported RP (cross-cl.)  */
+  --sk-type-metadata:      #909399;   /* gray   — metadata-only            */
+
+  /* Lighter background tints to pair with each type colour. Used by
+     chips that want a subtle backdrop instead of inverted text. */
+  --sk-type-snapshot-bg:   #ecf5ff;
+  --sk-type-exported-bg:   #f5edff;
+  --sk-type-imported-bg:   #e6fffb;
+  --sk-type-metadata-bg:   #f4f4f5;
+
+  /* ─── Spacing ─────────────────────────────────────────────────── */
+  --sk-space-xs:   4px;
+  --sk-space-sm:   8px;
+  --sk-space-md:   12px;
+  --sk-space-lg:   16px;
+  --sk-space-xl:   24px;
+  --sk-space-2xl:  32px;
+
+  /* ─── Drawer geometry ─────────────────────────────────────────── */
+  /* Single source of truth for drawer width — keeps Activity /
+     Restore Points / Applications all the same dimension. */
+  --sk-drawer-width:           560px;
+  --sk-drawer-padding-x:       24px;
+  --sk-drawer-header-spacing:  32px;
+  --sk-drawer-section-spacing: 24px;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+ * Typography classes — use these instead of inline font sizes.
+ * ════════════════════════════════════════════════════════════════════ */
+
+/* H1 — drawer/page title (small caps grey). Pairs with H2 below. */
+.sk-h1 {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--sk-text-caption);
+  line-height: 1.4;
+}
+
+/* H2 — subject name (resource name, ns name). Big and bold. */
+.sk-h2 {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--sk-text);
+  line-height: 1.3;
+}
+
+/* H3 — section header inside a drawer (uppercase tiny). */
+.sk-h3 {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--sk-text-caption);
+  line-height: 1.5;
+}
+
+/* H4 — table column header (uppercase mid). */
+.sk-h4 {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--sk-text-caption);
+  line-height: 1.5;
+}
+
+/* Body — default text. */
+.sk-body {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--sk-text-secondary);
+  line-height: 1.5;
+}
+
+/* Body strong — emphasised field values (status, numbers). */
+.sk-body-strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sk-text);
+  line-height: 1.5;
+}
+
+/* Caption — timestamps, helper text, tooltip body. */
+.sk-caption {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--sk-text-caption);
+  line-height: 1.4;
+}
+
+/* Mono — backup names, cron, kubectl commands. */
+.sk-mono {
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--sk-text);
+  line-height: 1.4;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+ * Chip / badge base classes — see UI_GUIDELINES §3.3
+ * Per-type variants live next to the components that use them so
+ * adding new chips doesn't require editing this file.
+ * ════════════════════════════════════════════════════════════════════ */
+.sk-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  letter-spacing: 0.3px;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+.sk-chip-status-running   { background: var(--sk-type-snapshot-bg); color: var(--sk-status-running); }
+.sk-chip-status-success   { background: #f0f9eb;                   color: var(--sk-status-success); }
+.sk-chip-status-warning   { background: #fdf6ec;                   color: var(--sk-status-warning); }
+.sk-chip-status-error     { background: #fef0f0;                   color: var(--sk-status-error); }
+.sk-chip-status-muted     { background: #f4f4f5;                   color: var(--sk-status-muted); }
+
+.sk-chip-type-snapshot    { background: var(--sk-type-snapshot-bg); color: var(--sk-type-snapshot); }
+.sk-chip-type-exported    { background: var(--sk-type-exported-bg); color: var(--sk-type-exported); }
+.sk-chip-type-imported    { background: var(--sk-type-imported-bg); color: var(--sk-type-imported); }
+.sk-chip-type-metadata    { background: var(--sk-type-metadata-bg); color: var(--sk-type-metadata); }
+
+/* ════════════════════════════════════════════════════════════════════
+ * Artifact breakdown shared classes (v0.8.10.3) — global so every drawer
+ * (Action Details, Application Details, Restore Point Details) shares
+ * exactly the same Workloads / Configuration / Networking accordion
+ * UI. Per UI_GUIDELINES §5.
+ *
+ * Why global vs scoped per-component:
+ *   ActionDetailDrawer + Applications drawer (+ future Policy / Restore
+ *   drawers) all need this exact look. Scoped duplication = drift the
+ *   first time someone retunes the spacing in one place.
+ * ════════════════════════════════════════════════════════════════════ */
+.sk-art-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sk-space-xl);
+  padding: 12px 14px;
+  background: var(--sk-bg-soft);
+  border: 1px solid var(--sk-border);
+  border-radius: 6px;
+  margin-bottom: var(--sk-space-md);
+}
+.sk-art-stat { display: inline-flex; align-items: baseline; gap: var(--sk-space-sm); }
+.sk-art-stat-num {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--sk-text);
+  letter-spacing: -0.02em;
+}
+.sk-art-stat-num.sk-art-stat-infra  { color: var(--sk-text-caption); }
+.sk-art-stat-num.sk-art-stat-velero { color: var(--sk-type-exported); }
+.sk-art-stat-velero-wrap { cursor: help; }
+.sk-art-stat-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--sk-text-caption);
+}
+
+.sk-art-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sk-art-group {
+  border: 1px solid var(--sk-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.sk-art-cat-infrastructure { opacity: 0.85; }
+.sk-art-group-header {
+  display: grid;
+  grid-template-columns: 1fr auto 14px;
+  align-items: center;
+  gap: var(--sk-space-md);
+  padding: 10px 14px;
+  background: var(--sk-bg-soft);
+  cursor: pointer;
+  border: none;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  user-select: none;
+  transition: background 120ms ease;
+}
+.sk-art-group-header:hover { background: var(--sk-bg-hover); }
+.sk-art-group-count {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: var(--sk-border);
+  color: var(--sk-text-muted);
+  min-width: 24px;
+  text-align: center;
+}
+.sk-art-cat-application .sk-art-group-count {
+  background: var(--sk-type-snapshot-bg);
+  color: var(--sk-type-snapshot);
+}
+.sk-art-group-chevron { color: var(--sk-text-caption); font-size: 11px; }
+.sk-art-group-items {
+  padding: 4px 14px 10px;
+  background: var(--sk-bg-page);
+}
+.sk-art-item {
+  display: grid;
+  grid-template-columns: 110px 1fr auto 28px;
+  gap: var(--sk-space-md);
+  align-items: center;
+  padding: 4px 0;
+  border-top: 1px dashed var(--sk-border-light);
+}
+.sk-art-item:first-child { border-top: 0; }
+.sk-art-item-kind {
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  color: var(--sk-text-caption);
+}
+.sk-art-item-name {
+  color: var(--sk-text);
+  font-weight: 500;
+  word-break: break-all;
+}
+.sk-art-item-ns {
+  color: var(--sk-text-caption);
+}
+.sk-art-item-yaml {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--sk-text-caption);
+  border-radius: 4px;
+  transition: background 120ms ease, color 120ms ease;
+}
+.sk-art-item-yaml:hover {
+  background: var(--sk-primary-bg-hover);
+  color: var(--sk-primary);
+}
+.sk-art-item-yaml .el-icon { font-size: 14px; }
+
+.sk-art-note {
+  margin-top: var(--sk-space-md);
+  padding: 10px 14px;
+  background: var(--sk-bg-soft);
+  border: 1px solid var(--sk-border);
+  border-radius: 4px;
+  line-height: 1.5;
+  font-size: 11px;
+  color: var(--sk-text-caption);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+ * Dark mode overrides
+ * ════════════════════════════════════════════════════════════════════ */
+html.dark {
+  --sk-text:             #e5eaf3;
+  --sk-text-secondary:   #d0d4dc;
+  --sk-text-muted:       #a6abb4;
+  --sk-text-caption:     #7c828c;
+  --sk-text-placeholder: #4f545b;
+
+  --sk-border:           #2c2f36;
+  --sk-border-light:     #3a3e45;
+  --sk-bg-page:          #141414;
+  --sk-bg-soft:          #1d1f23;
+  --sk-bg-hover:         #25282d;
+
+  /* Indigo stays indigo — it's the brand-clickable colour. We just
+     adjust the hover backdrop so it doesn't look harsh on dark. */
+  --sk-primary-bg-hover: #1a1b2e;
+  --sk-primary-active:   #25274a;
+
+  --sk-type-snapshot-bg: #1e2a3a;
+  --sk-type-exported-bg: #2a1e3a;
+  --sk-type-imported-bg: #1a2a2a;
+  --sk-type-metadata-bg: #25272a;
+}

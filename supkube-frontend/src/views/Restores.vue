@@ -69,15 +69,50 @@
             </el-descriptions-item>
           </el-descriptions>
 
-          <h4 v-if="results.validationErrors?.length" style="margin-top: 16px">Validation Errors ({{ results.validationErrors.length }})</h4>
+          <h4 v-if="results.validationErrors?.length" class="results-h">Validation Errors ({{ results.validationErrors.length }})</h4>
           <ul v-if="results.validationErrors?.length" class="result-block result-error">
             <li v-for="(e, idx) in results.validationErrors" :key="idx">{{ e }}</li>
           </ul>
 
-          <h4 v-if="results.errors" style="margin-top: 16px">Errors ({{ results.errors }})</h4>
-          <h4 v-if="results.warnings" style="margin-top: 16px">Warnings ({{ results.warnings }})</h4>
+          <!-- v0.7.11: Velero's per-resource error/warning messages live in
+               object storage. The backend pulls them via DownloadRequest and
+               embeds them under results.detailed. We render them grouped by
+               section (Velero / Cluster / Namespaces) so the user can see
+               *which* resource failed and *why*. -->
+          <template v-if="results.errors">
+            <h4 class="results-h">Errors ({{ results.errors }})</h4>
+            <div v-if="results.detailed?.errors">
+              <div v-for="group in messageGroups(results.detailed.errors)" :key="`e-${group.label}`" class="msg-group">
+                <div class="msg-group-label">{{ group.label }}</div>
+                <ul class="result-block result-error">
+                  <li v-for="(m, i) in group.messages" :key="i">{{ m }}</li>
+                </ul>
+              </div>
+            </div>
+            <div v-else-if="results.detailedError" class="result-block result-error">
+              <strong>Could not fetch detail:</strong> {{ results.detailedError }}
+            </div>
+            <div v-else class="result-block result-loading">Loading error detail…</div>
+          </template>
+
+          <template v-if="results.warnings">
+            <h4 class="results-h">Warnings ({{ results.warnings }})</h4>
+            <div v-if="results.detailed?.warnings">
+              <div v-for="group in messageGroups(results.detailed.warnings)" :key="`w-${group.label}`" class="msg-group">
+                <div class="msg-group-label">{{ group.label }}</div>
+                <ul class="result-block result-warning">
+                  <li v-for="(m, i) in group.messages" :key="i">{{ m }}</li>
+                </ul>
+              </div>
+            </div>
+            <div v-else-if="results.detailedError" class="result-block result-warning">
+              <strong>Could not fetch detail:</strong> {{ results.detailedError }}
+            </div>
+            <div v-else class="result-block result-loading">Loading warning detail…</div>
+          </template>
+
           <p v-if="!results.validationErrors?.length && !results.errors && !results.warnings && !results.failureReason" class="result-empty">
-            No errors or warnings reported. Full log file viewer is coming in v0.6.
+            No errors or warnings reported.
           </p>
         </template>
       </div>
@@ -337,6 +372,32 @@ watch(() => createForm.value.backupName, (newVal) => {
   fetchResourcePreview(newVal)
 })
 
+// v0.7.11: flatten the Velero results structure into labeled groups for
+// rendering. Input shape (from BSL):
+//   { velero: [...], cluster: [...], namespaces: { foo: [...], bar: [...] } }
+// Output: [ { label: "Velero engine", messages: [...] },
+//           { label: "Cluster-scoped", messages: [...] },
+//           { label: "Namespace: foo", messages: [...] }, ... ]
+// Empty groups are skipped so we don't render empty headers.
+const messageGroups = (section) => {
+  if (!section) return []
+  const groups = []
+  if (section.velero?.length) {
+    groups.push({ label: 'Velero engine', messages: section.velero })
+  }
+  if (section.cluster?.length) {
+    groups.push({ label: 'Cluster-scoped', messages: section.cluster })
+  }
+  if (section.namespaces) {
+    for (const [ns, msgs] of Object.entries(section.namespaces)) {
+      if (msgs && msgs.length) {
+        groups.push({ label: `Namespace: ${ns}`, messages: msgs })
+      }
+    }
+  }
+  return groups
+}
+
 const startPolling = () => {
   stopPolling()
   pollTimer = setInterval(fetchRestores, 5000)
@@ -396,8 +457,46 @@ onUnmounted(() => {
   border-color: #fbc4c4;
   color: #5b2929;
 }
+.result-warning {
+  background: #fdf6ec;
+  border-color: #f5dab1;
+  color: #67430b;
+}
+.result-loading {
+  background: #f4f5f9;
+  border-color: #dcdfe6;
+  color: var(--sk-text-caption);
+  font-style: italic;
+}
 .result-empty {
-  color: #909399;
+  color: var(--sk-text-caption);
   font-size: 13px;
+}
+.results-h {
+  margin: 18px 0 6px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--sk-text);
+}
+.msg-group {
+  margin-bottom: 10px;
+}
+.msg-group-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sk-text-muted);
+  margin: 4px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.msg-group ul.result-block {
+  margin: 4px 0;
+  padding-left: 28px;
+}
+.msg-group ul.result-block li {
+  margin: 3px 0;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.55;
 }
 </style>

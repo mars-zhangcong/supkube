@@ -37,6 +37,89 @@ spec:
                 configMapKeyRef:
                   name: {{ include "supkube.fullname" . }}-config
                   key: logLevel
+            # v0.8.5 auth config. When auth.enabled=false the backend skips
+            # token validation (demo-only — anyone with the URL is admin).
+            - name: AUTH_ENABLED
+              value: {{ .Values.auth.enabled | quote }}
+            - name: OIDC_ISSUER_URL
+              # Browser-facing issuer — must match the `iss` claim Dex/IdP
+              # stamps into JWTs. Derived from dex.issuer when embedded Dex
+              # is on; falls back to externally-configured oidc.issuerURL.
+              value: {{ if .Values.auth.dex.enabled }}{{ .Values.auth.dex.issuer | quote }}{{ else }}{{ .Values.auth.oidc.issuerURL | quote }}{{ end }}
+            - name: OIDC_DISCOVERY_URL
+              # In-cluster URL where the backend fetches /.well-known/...
+              # For embedded Dex this is the Service DNS (browser URL would
+              # be localhost:30888 which is unreachable from inside pods).
+              # For external IdPs the discovery URL == issuer URL.
+              value: {{ if .Values.auth.dex.enabled }}{{ printf "http://%s-dex:5556/dex" (include "supkube.fullname" .) | quote }}{{ else }}{{ .Values.auth.oidc.issuerURL | quote }}{{ end }}
+            - name: OIDC_CLIENT_ID
+              value: {{ .Values.auth.oidc.clientID | quote }}
+            - name: OIDC_CLIENT_SECRET
+              {{- if .Values.auth.oidc.clientSecretRef.name }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.auth.oidc.clientSecretRef.name }}
+                  key: {{ .Values.auth.oidc.clientSecretRef.key }}
+              {{- else }}
+              value: {{ if .Values.auth.dex.enabled }}{{ .Values.auth.dex.clientSecret | quote }}{{ else }}{{ .Values.auth.oidc.clientSecret | quote }}{{ end }}
+              {{- end }}
+            - name: OIDC_USERNAME_CLAIM
+              value: {{ .Values.auth.oidc.usernameClaim | quote }}
+            - name: OIDC_GROUPS_CLAIM
+              value: {{ .Values.auth.oidc.groupsClaim | quote }}
+            # Where the SPA lives, used to construct redirect URLs.
+            - name: AUTH_PUBLIC_URL
+              value: {{ .Values.auth.dex.publicURL | quote }}
+            - name: AUTH_DEX_ENABLED
+              value: {{ .Values.auth.dex.enabled | quote }}
+            # v0.8.5 step 2: provider list for the login screen. Each item
+            # gets one "Login with X" button. We render Dex's local password
+            # connector (when staticPasswords are configured) and one entry
+            # per upstream connector. The IDs MUST match the IDs in Dex's
+            # config — they're used as `connector_id` in the OIDC auth URL.
+            #
+            # We pre-build the list in Helm and quote-emit it as a single
+            # JSON string so the resulting Deployment YAML stays valid even
+            # if a connector name contains special chars.
+            {{- $providers := list -}}
+            {{- if and .Values.auth.dex.enabled .Values.auth.dex.staticPasswords -}}
+              {{- $providers = append $providers (dict "id" "local" "name" "Username & Password" "type" "password") -}}
+            {{- end -}}
+            {{- range .Values.auth.dex.connectors -}}
+              {{- $name := default (printf "Login with %s" .id) .name -}}
+              {{- $providers = append $providers (dict "id" .id "name" $name "type" .type) -}}
+            {{- end }}
+            - name: AUTH_PROVIDERS_JSON
+              value: {{ toJson $providers | quote }}
+            # v0.8.5 step 3: RBAC. When enabled=false the role resolver
+            # assigns admin to everyone and the role-check middleware
+            # becomes a no-op (backward compat with step-2 deployments).
+            - name: RBAC_ENABLED
+              value: {{ .Values.auth.rbac.enabled | quote }}
+            - name: RBAC_DEFAULT_ROLE
+              value: {{ .Values.auth.rbac.defaultRole | default "viewer" | quote }}
+            - name: RBAC_BINDINGS_JSON
+              value: {{ toJson (default list .Values.auth.rbac.bindings) | quote }}
+            # v0.8.5 step 6: static API tokens. When the list is empty
+            # this env var is "[]" and the backend's token path stays
+            # cold — no risk to OIDC users.
+            {{- if and .Values.auth.staticTokens .Values.auth.staticTokens.enabled }}
+            - name: AUTH_STATIC_TOKENS_JSON
+              value: {{ toJson (default list .Values.auth.staticTokens.tokens) | quote }}
+            {{- end }}
+            # v0.8.5 step 6: Basic Auth via htpasswd. We just point the
+            # backend at the mounted file; volume + volumeMount below
+            # actually surface the Secret.
+            {{- if and .Values.auth.basic .Values.auth.basic.enabled .Values.auth.basic.secretName }}
+            - name: AUTH_HTPASSWD_PATH
+              value: /etc/supkube/htpasswd
+            {{- end }}
+          {{- if and .Values.auth.basic .Values.auth.basic.enabled .Values.auth.basic.secretName }}
+          volumeMounts:
+            - name: htpasswd
+              mountPath: /etc/supkube
+              readOnly: true
+          {{- end }}
           livenessProbe:
             httpGet:
               path: /api/v1/status
@@ -51,3 +134,14 @@ spec:
             periodSeconds: 10
           resources:
             {{- toYaml .Values.backend.resources | nindent 12 }}
+      {{- if and .Values.auth.basic .Values.auth.basic.enabled .Values.auth.basic.secretName }}
+      # v0.8.5 step 6: mount the htpasswd Secret. The Secret is expected
+      # to have a single key named "htpasswd" containing the file body.
+      volumes:
+        - name: htpasswd
+          secret:
+            secretName: {{ .Values.auth.basic.secretName }}
+            items:
+              - key: htpasswd
+                path: htpasswd
+      {{- end }}

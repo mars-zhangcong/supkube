@@ -1,0 +1,90 @@
+{{- if .Values.auth.dex.enabled }}
+# Dex configuration (v0.8.5)
+# ─────────────────────────
+# Why we have Dex at all:
+# SupKube's backend speaks one auth protocol (OIDC). Different customers use
+# different IdPs — Keycloak, Okta, Azure AD, GitHub, on-prem LDAP. Dex sits
+# between them as an OIDC-to-* adapter: SupKube only ever validates a Dex
+# JWT, and adding a new IdP = adding a connector here, not touching backend
+# code. This is the Kasten pattern (and ArgoCD's), proven across 6 IdPs.
+#
+# In the demo (auth.dex.enabled=true with no upstream connectors), Dex acts
+# as a self-contained identity provider with a static password file. Good
+# enough to validate the whole login → token → API call flow without an
+# external IdP. Once a customer wires an upstream OIDC/LDAP connector, the
+# static password can be turned off.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "supkube.fullname" . }}-dex
+  labels:
+    {{- include "supkube.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dex
+data:
+  config.yaml: |
+    # The issuer URL is what browsers see — must match what's in JWTs.
+    # We proxy /dex/* through the SupKube frontend nginx so there's a
+    # single user-facing URL/port (issuer == public hostname).
+    issuer: {{ .Values.auth.dex.issuer | quote }}
+
+    # Storage: in-memory is fine for stateless Dex. Sessions live in
+    # the browser; tokens are signed JWTs that Dex doesn't track once
+    # issued. Restarting Dex doesn't log anyone out (until token expires).
+    # For multi-replica HA we'd switch to "kubernetes" CRD storage.
+    storage:
+      type: memory
+
+    # Where Dex listens internally. Nginx upstream points here.
+    web:
+      http: 0.0.0.0:5556
+
+    # Static clients = applications allowed to use this Dex instance.
+    # SupKube is the only one. The redirectURI must EXACTLY match what
+    # the SPA sends in the OIDC auth URL — including the path.
+    staticClients:
+      - id: supkube
+        name: SupKube
+        secret: {{ .Values.auth.dex.clientSecret | default "supkube-demo-secret" | quote }}
+        redirectURIs:
+          - {{ printf "%s/auth/callback" .Values.auth.dex.publicURL | quote }}
+
+    # Static passwords = demo users for environments without an upstream
+    # IdP. The password below is bcrypt of "admin"; users can override via
+    # auth.dex.staticPasswords in values.yaml.
+    {{- if .Values.auth.dex.staticPasswords }}
+    enablePasswordDB: true
+    staticPasswords:
+      {{- range .Values.auth.dex.staticPasswords }}
+      - email: {{ .email | quote }}
+        # bcrypt hash, NOT plaintext. Generate with `htpasswd -bnBC 10 "" pw`.
+        hash: {{ .hash | quote }}
+        username: {{ .username | quote }}
+        userID: {{ .userID | quote }}
+      {{- end }}
+    {{- end }}
+
+    # Upstream connectors. Empty in demo, populated in production via
+    # auth.dex.connectors. Dex understands oidc, github, gitlab, ldap,
+    # saml, microsoft, google, linkedin, oauth, openshift, bitbucket-cloud
+    # connectors out of the box.
+    {{- if .Values.auth.dex.connectors }}
+    connectors:
+      {{- toYaml .Values.auth.dex.connectors | nindent 6 }}
+    {{- end }}
+
+    # Token expiry. 8h is a reasonable session length; refresh tokens
+    # extend that up to 24h by default.
+    expiry:
+      idTokens: {{ .Values.auth.dex.idTokenExpiry | default "8h" | quote }}
+      signingKeys: "6h"
+      refreshTokens:
+        reuseInterval: "3s"
+        validIfNotUsedFor: {{ .Values.auth.dex.refreshTokenInactivity | default "24h" | quote }}
+        absoluteLifetime: {{ .Values.auth.dex.refreshTokenLifetime | default "7d" | quote }}
+
+    # OAuth2 settings — we want refresh tokens so the user doesn't get
+    # bounced out mid-session.
+    oauth2:
+      skipApprovalScreen: true
+      responseTypes: ["code"]
+{{- end }}

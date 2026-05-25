@@ -2,21 +2,26 @@
 
 export default {
   app: {
-    title: 'SupKube — Kubernetes 数据保护'
+    title: 'SupKube — Kubernetes 数据保护',
+    titleTail: '— Kubernetes 数据保护'
   },
   nav: {
-    dashboard: '概览',
-    applications: '应用',
-    restorePoints: '还原点',
-    restores: '恢复',
-    policies: '策略',
+    // v0.9.0.2 客户要求的菜单中文文案
+    dashboard: '系统概览',
+    applications: '应用列表',
+    restorePoints: '数据还原',
+    activity: '活动查看',
+    restores: '恢复', // legacy — kept for any unmigrated references
+    policies: '策略制定',
+    transformSets: '变换处理',
     storage: '存储位置',
     snapshotLocations: '快照位置',
     advisor: '备份顾问',
-    settings: '设置'
+    settings: '系统设置'
   },
   common: {
     cancel: '取消',
+    close: '关闭',
     save: '保存',
     create: '创建',
     delete: '删除',
@@ -44,7 +49,31 @@ export default {
     confirm: '确认',
     success: '成功',
     error: '错误',
-    warning: '警告'
+    warning: '警告',
+    export: '导出',
+    comingSoon: 'v0.8 推出',
+    filters: '筛选',
+    clearFilters: '清除筛选',
+    noPermission: '您的角色不允许此操作',
+    // v0.9.0.1 — 文本块通用 modal
+    copy: '复制',
+    copied: '已复制到剪贴板',
+    copyFailed: '复制失败，请手动选中文本复制。'
+  },
+  auth: {
+    logout: '退出登录'
+  },
+  login: {
+    loading: '正在加载登录方式…',
+    loadFailed: '无法连接到认证服务',
+    redirecting: '正在跳转到 {name}…',
+    exchanging: '正在完成登录…',
+    success: '登录成功',
+    callbackFailed: '登录回调失败',
+    expired: '会话已过期，请重新登录。',
+    demoMode: '认证已禁用（演示模式）。无需登录即可继续。',
+    continue: '进入 SupKube',
+    noProviders: '尚未配置任何认证提供方。'
   },
   phase: {
     Completed: '已完成',
@@ -88,7 +117,9 @@ export default {
   applications: {
     title: '应用',
     desc: '查看应用详情或执行操作。',
-    workloads: '工作负载',
+    workloads: '工作负载',     // 旧 key（详情抽屉里还用）
+    components: '组件',         // v0.8.5: 列表表头改用
+    restorePoints: '还原点',    // v0.8.5: 新增列
     labels: '标签',
     lastBackup: '最近备份',
     noRestorePoint: '无还原点',
@@ -97,7 +128,16 @@ export default {
     showFewer: '收起标签',
     snapshot: '快照',
     backup: '备份',
-    createPolicy: '创建策略'
+    createPolicy: '创建策略',
+    // v0.8.9.2: 一键 Snapshot 对话框
+    snapshotDialogTitle: '为 "{ns}" 创建即时快照',
+    snapshotDialogBody: '将立即在本集群创建一个 CSI 卷快照作为 24 小时回滚点。不上传到对象存储，与定时策略无关。',
+    snapshotCommentLabel: '备注（可选，便于事后追溯）',
+    snapshotCommentPlaceholder: '例：上线 v1.2.3 前',
+    snapshotConfirm: '立即快照',
+    snapshotStarted: '"{ns}" 的快照已触发 — 备份名：{name}',
+    snapshotFailed: '快照失败：{msg}',
+    snapshotProtectedNs: '不允许对受保护命名空间执行快照（kube-system / velero / supkube 等）。'
   },
   restorePoints: {
     title: '还原点',
@@ -119,6 +159,9 @@ export default {
     createdAt: '创建时间',
     expiresAt: '过期时间',
     manual: '（手动）',
+    // v0.8.9.2: 一键 App-Snapshot 徽章
+    manualSnapshot: '即时快照',
+    manualSnapshotBy: '由 {user} 在应用页一键创建',
     deleteTitle: '删除还原点',
     deleteConfirmBody: '删除还原点 <code>{name}</code>？Velero 将级联删除以下资源：',
     deleteBullet1: '关联 Storage Profile（对象存储）中的备份 tarball 与元数据',
@@ -126,12 +169,264 @@ export default {
     deleteBullet3: 'Filesystem 模式下的 PodVolumeBackup（Restic/Kopia）',
     deleteBullet4: 'Backup CR 自身',
     deleteIrreversible: '该操作不可恢复，删除后数据无法找回。',
-    deleteStarted: '"{name}" 的级联删除已启动 — Velero 正在处理 DeleteBackupRequest。完成后该行将消失（通常 30 秒内）。'
+    deleteStarted: '"{name}" 的级联删除已启动 — Velero 正在处理 DeleteBackupRequest。完成后该行将消失（通常 30 秒内）。',
+    intentRestoreTitle: '从备份历史中挑选一个还原点恢复 "{ns}"',
+    intentRestoreDesc: '下面是该应用所有的还原点。在任意一行点击 ⋮ → 恢复，即可打开恢复对话框。',
+    // v0.8.9 Role pills (TYPE column on Restore Points)
+    // v0.8.12 LBS2: 快照/已导出 → 本地/云端
+    roleSnapshot: '本地',
+    roleExported: '云端',
+    roleMetadata: '仅元数据',
+    roleUnknown: '未知',
+    // v0.8.10 Type 列三态互斥（取代旧 Type + Source + Data Path 三列）
+    typeSnapshot: '本地',
+    typeExported: '云端',
+    typeImported: '已导入',
+    typeMetadata: '仅元数据',
+    typeUnknown: '未知',
+    tooltipLocal: '本集群',
+    tooltipImported: '从其他集群同步而来',
+    // v0.8.10 Policy 列：手动一次性快照统一文案
+    instantSnapshot: '即时快照',
+    instantSnapshotGeneric: '管理员手动创建（非定时策略）',
+    // v0.8.10 G：Snapshot RP 的 Profile 列 tooltip
+    profileSnapshotTooltip: '快照存储在本集群 CSI，无导出 Storage Profile。元数据 tarball 保存在默认 BSL。',
+    // v0.8.6 备份组成
+    dataPath: '数据路径',
+    size: '大小',
+    volume: '卷',
+    volumes: '卷',
+    dataPathLabel: {
+      'csi-snapshot':  'CSI 快照',
+      'data-mover':    'Data Mover',
+      'filesystem':    '文件系统',
+      'metadata-only': '仅元数据',
+      'unknown':       '未知'
+    },
+    dataPathHelp: {
+      'csi-snapshot':  'CSI 卷快照保存在集群本地（CoW），跨集群恢复需要 Storage Profile 同步或启用 Data Mover',
+      'data-mover':    'CSI 快照经 Kopia 搬运到对象存储；可跨集群恢复，体积按去重后字节计算',
+      'filesystem':    'Restic/Kopia 走文件系统读取；仓库级去重；卷大小为实际字节',
+      'metadata-only': '仅备份了 K8s YAML（无 PV 数据）；恢复后需要应用自己重新填充数据',
+      'unknown':       '无法判断数据路径'
+    },
+    // v0.8.11 #24: Application Items 稳定列
+    applicationItems: '应用组件',
+    // v0.8.11.2: 嵌在 Namespace 单元格 chip 里的短标签
+    applicationItemsChip: '个组件',
+    applicationItemsTooltip: '本次备份里"真正属于应用"的 K8s 资源数量。过滤掉了 K8s Events、snapshot.storage.k8s.io 自身 CR、Helm 内部 Secret 这些 Velero 顺手抓但客户不关心的东西。同一 app 跨次运行数值稳定。',
+    sizeTooltip: {
+      // v0.8.10.4 actual / reserved 格式
+      actual:        '实际数据量：{size}',
+      actualUnavailable: '不可用（CSI 快照已被 Velero v1.18 自动删除）',
+      reserved:      '预留容量（源 PVC requests.storage 总和）：{size}',
+      // legacy 键保留兼容
+      volume:        '卷数据：{size}（{count} 个卷，按 PVC 声明容量计算）',
+      tarball:       '资源 tarball：{size}',
+      tarballError:  '资源 tarball 大小不可用：{reason}',
+      unknown:       '该还原点暂无可读取的大小信息'
+    }
   },
   restores: {
     title: '恢复',
     fromBackup: '来源备份',
     create: '创建恢复'
+  },
+  // v0.8.6 备份详情新版"备份组成"面板
+  backupDetail: {
+    composition: {
+      title: '备份组成',
+      hint: '该还原点包含的数据路径、卷数据和资源清单 tarball',
+      volumeData: '卷数据',
+      volumeBreakdown: '共 {count} 个卷（按声明容量统计）',
+      volumeEmpty: '本次备份未包含任何 PV 数据',
+      csiCaveat: 'CSI 快照的"大小"是 PVC 声明容量，不是实际占用。要看精确的去重后字节，需启用 Data Mover 或文件系统备份。',
+      tarball: '资源清单 (tar.gz)',
+      tarballHelp: 'K8s YAML 对象的归档，存放在 Storage Profile 关联的对象存储里'
+    }
+  },
+  // v0.8.2 变换集
+  transformSets: {
+    title: '变换集',
+    desc: '变换集是 Velero 在恢复时应用的一组 JSONPath 补丁。它们解决跨命名空间或跨集群恢复时的结构性冲突（NodePort、clusterIP、Ingress host、镜像 registry 等）。内置模板覆盖最常见的场景；你可以克隆后定制。',
+    create: '新建变换集',
+    createTitle: '新建变换集',
+    editTitle: '编辑变换集：{name}',
+    viewTitle: '查看变换集：{name}',
+    filterPlaceholder: '按名称或描述筛选',
+    count: '{n} / {total} 个变换集',
+    empty: '暂无变换集。内置模板会在几秒内出现 — 如果没有请刷新。',
+    builtin: '内置',
+    clone: '克隆',
+    noDesc: '（无描述）',
+    description: '描述',
+    descriptionPlaceholder: '这个变换集是做什么的，应该在什么情况下使用？',
+    ruleCount: '{n} 条规则',
+    patches: '补丁',
+    rules: '规则',
+    addRule: '添加规则',
+    addPatch: '添加补丁',
+    groupResource: '组 / 资源',
+    namespaces: '命名空间',
+    allNamespaces: '所有命名空间（留空）',
+    resourceNameRegex: '资源名正则',
+    resourceNameRegexHint: '可选。例如 ^my-app-.*$',
+    pathPlaceholder: '/spec/ports/0/nodePort',
+    valuePlaceholder: '值（字符串 / 数字 / JSON）',
+    yamlPreview: '以 YAML 查看',
+    savedToast: '已保存变换集 "{name}"',
+    createdToast: '已创建变换集 "{name}"',
+    deletedToast: '已删除变换集 "{name}"',
+    deleteTitle: '删除变换集',
+    deleteConfirm: '确认删除变换集 "{name}"？当前正在引用它的恢复任务在重新指向其它变换集前都将无法通过校验。'
+  },
+  // v0.8.0 Activity 页面 — 统一动作流
+  activity: {
+    title: '活动',
+    desc: '本集群所有执行过的动作 — 备份、恢复，以及（v0.9 之后）导出。点击任意行查看完整的阶段进度。',
+    actionDurationsTitle: '动作耗时',
+    legendRunning: '运行中',
+    legendCompleted: '已完成',
+    legendFailed: '失败',
+    actionsHeader: '动作',
+    allTypes: '所有类型',
+    allStatuses: '所有状态',
+    filterPlaceholder: '按名称、命名空间、策略筛选…',
+    empty: '暂无动作。从其它页面触发一次备份或恢复，结果会显示在这里。',
+    phases: '阶段',
+    errors: '个错误',
+    warnings: '个警告',
+    kpi: {
+      total: '动作总数',
+      completed: '已完成',
+      failed: '失败',
+      skipped: '已跳过',
+      avgDuration: '平均耗时',
+      liveArtifacts: '存活组件',
+      retiredArtifacts: '已退役组件'
+    },
+    status: {
+      running: '运行中',
+      completed: '已完成',
+      failed: '失败',
+      partial: '部分失败',
+      skipped: '已跳过',
+      unknown: '未知'
+    },
+    detail: {
+      title: '动作详情',
+      // v0.8.10.2 各实体抽屉 H1 标题
+      titleRestorePoint: '还原点详情',
+      titleApplication: '应用详情',
+      titlePolicy: '策略详情',
+      detailsSection: '基本信息',
+      empty: '未选择动作。',
+      type: '类型',
+      status: '状态',
+      phases: '阶段',
+      protectedObject: '保护对象',
+      policy: '策略',
+      restorePoint: '还原点',
+      targetNamespace: '目标命名空间',
+      artifacts: '组件',
+      artifactName: '组件名称',
+      artifactQty: '数量',
+      start: '开始时间',
+      end: '结束时间',
+      duration: '耗时',
+      health: '健康',
+      viewYaml: '查看 Action YAML',
+      hideYaml: '收起 YAML',
+      errorsHeader: '错误 ({n})',
+      warningsHeader: '警告 ({n})',
+      loadingDetail: '正在从对象存储加载详情…',
+      fetchErrorPrefix: '无法获取详情',
+      noBackupErrors: 'Backup CR 报告了错误但暂未找到对应的 DataUpload / PodVolumeBackup 失败消息。错误信息可能在 BSL 的 <backup>-results.gz 里 — v0.9 计划通过 DownloadRequest 拉取。',
+      // v0.8.10 方案 B 双策略配对字段
+      // v0.8.12 LBS2: 快照/导出 → 本地/云端
+      roleSnapshot: '本地',
+      roleExport: '云端',
+      pairedWith: '配对 Backup',
+      pairedTooltip: '这条 Backup 是一次双策略运行的"一半"。本地半把数据写到集群内 MinIO BSL（快速恢复）；云端半把同样的数据写到云端 Storage Profile（异地灾备）。两半串行触发——本地先、云端约 30 秒后。点击配对的 Backup 可以查看另一半。',
+      policyRunAt: '策略运行时刻',
+      policyRunAtTooltip: '这是双策略一次运行共享的"逻辑时间点"，等于快照半的创建时间。注意：导出半的真实数据其实是约 30 秒之后才拍的（Velero v1.18 限制 —— 详见用户手册 §6.x）。Velero 上游 preserveSnapshotsAfterUpload 修复后，这个差距会压到 0。',
+      // v0.8.10.1 组件分组明细
+      applicationItems: '应用组件',
+      infrastructureItems: '基础设施',
+      veleroTotalItems: 'Velero 计数',
+      veleroCountTooltip: 'Velero 原始 progress.totalItems 计数。包含拍快照过程中产生的 Kubernetes 事件 + snapshot.storage.k8s.io 自身 CR —— 这些只是 CSI 操作副产品，不代表应用真实数据。SupKube "应用组件" 列已经过滤掉这些，跨次运行更稳定。',
+      viewYamlItem: '查看 YAML'
+    }
+  },
+  restoreDrawer: {
+    title: '从备份恢复',
+    backToDetails: '返回详情',
+    // v0.9.0 MC3: 跨集群恢复（仅当 ≥2 集群已注册时显示）
+    targetClusterTitle: '目标集群',
+    targetClusterDesc: '恢复到哪个集群。"this-cluster" 是原地恢复（默认）；选其他已注册集群则执行跨集群恢复——备份元数据必须先通过共享 BSL 同步。',
+    crossClusterBanner: '已选择跨集群恢复。目标集群的 Velero 会先从共享 BSL 同步备份元数据（约 60s），然后开始恢复。目标集群必须配置了相同的 BSL。',
+    appNameTitle: '目标应用 / 命名空间',
+    appNameDesc: '选择要恢复到的命名空间。选中命名空间中的所有资源将被恢复的应用覆盖。',
+    selectNs: '请选择命名空间',
+    originalNs: '原始命名空间',
+    createNewNs: '新建命名空间',
+    newNsLabel: '新命名空间',
+    newNsPlaceholder: 'my-restored-ns',
+    newNsRequired: '请输入命名空间名称',
+    newNsCreated: '命名空间 "{name}" 创建成功',
+    overwriteTitle: '就地恢复将清空原有命名空间',
+    overwriteDesc: 'SupKube 将先删除命名空间 "{ns}" 以及其中的所有资源，然后开始恢复。Velero 默认会跳过已存在的资源——不先清理就等于什么都没做。',
+    overwriteConfirm: '我已了解 — 删除并重建该命名空间',
+    optionsTitle: '可选恢复设置',
+    restoreName: '恢复任务名称',
+    existingPolicy: '当目标资源已存在时',
+    policySkip: '跳过已存在资源',
+    policySkipHint: '最安全，但如果目标命名空间已经包含同名对象，恢复会变为空操作。',
+    policyUpdate: '更新已存在资源',
+    policyUpdateHint: '会覆盖 ConfigMap / Secret 等可变对象。注意：PVC 数据不会被更新，因为 PV 已绑定。',
+    specTitle: '组件清单',
+    specRestoring: '将恢复 {selected} / {total} 个组件',
+    selectAllArtifacts: '全选',
+    deselectAllArtifacts: '取消全选',
+    viewYaml: '查看 YAML',
+    noArtifacts: '该命名空间下没有可恢复的组件。',
+    artifactsLoadError: '加载组件清单失败',
+    submitted: '恢复任务 "{name}" 已提交 — Velero 正在处理',
+    // v0.8.2 Transform Set 集成
+    transformSet: '变换集',
+    transformSetNone: '（无 — 原样恢复）',
+    transformSetManage: '管理…',
+    transformSetBuiltinBadge: '内置',
+    fixApplied: '已由 {name} 修复',
+    fixCreatedToast: '已创建变换集 "{name}" 并自动选择用于本次恢复',
+    // v0.7.12 Pre-flight
+    preflightTitle: '冲突预检 (Pre-flight)',
+    preflightRerun: '重新检查',
+    preflightDeepCheck: '深度检查（镜像 registry DNS）',
+    preflightDeepHint: '增加约 8 秒，按需启用',
+    preflightChecking: '正在扫描目标集群冲突…',
+    preflightError: '预检失败',
+    preflightClean: '未检测到冲突',
+    preflightCleanDesc: '当前目标命名空间可以直接接收此备份。',
+    preflightZeroConflicts: '0 个冲突',
+    preflightBlockerCount: '{n} 个阻断',
+    preflightWarningCount: '{n} 个警告',
+    preflightMixed: '{blockers} 个阻断、{warnings} 个警告',
+    suggestedFix: '推荐修复（预览）',
+    applyFix: '一键修复',
+    ignoreBlockers: '我已了解 — 忽略阻断仍要继续',
+    conflictKind: {
+      NodePortCollision: 'NodePort 已被占用',
+      ClusterIPCollision: 'clusterIP 已被占用',
+      LoadBalancerIPCollision: 'LoadBalancer IP 已被占用',
+      IngressHostCollision: 'Ingress host 已被使用',
+      PVBinding: 'PVC 绑定了固定 PV',
+      StorageClassMissing: '目标集群缺少 StorageClass',
+      ImageRegistryUnreachable: '镜像 registry 不可达',
+      ServiceAccountMissing: 'ServiceAccount 缺失',
+      NodeSelectorMissing: 'NodeSelector 标签缺失',
+      PriorityClassMissing: 'PriorityClass 缺失'
+    }
   },
   policies: {
     title: '策略',
@@ -143,9 +438,12 @@ export default {
     resources: '资源',
     namespaceTooltip: '命名空间：{name}',
     action: '动作',
-    actionSnapshot: 'L1 快照',
-    actionSnapshotExport: 'L2 快照 + 导出',
+    // v0.8.12 LBS2: 快照/导出 → 本地/云端。代码 key 不变（向后兼容），仅显示文案改。
+    actionSnapshot: 'L1 本地',
+    actionSnapshotExport: 'L2 本地 + 云端',
     frequency: '频率',
+    onDemand: '按需触发',
+    restorePoints: '还原点',
     lastRunTime: '最近执行时间',
     lastRunStatus: '最近执行状态',
     paused: '已暂停',
@@ -160,6 +458,9 @@ export default {
     revalidateFail: '策略配置异常 — 请检查 schedule 和资源选择器',
     editYaml: '编辑 YAML',
     editComingSoon: '完整编辑表单计划在 v0.8 上线，先显示 YAML 查看器。',
+    editPolicy: '编辑策略: {name}',
+    editFetchFailed: '无法获取该策略的最新规约，将基于列表中的副本进行编辑。',
+    nameImmutable: '策略名称不可修改 — 重命名会被 Velero 视为新策略，且备份历史无法迁移',
     yamlReadonlyHint: '预览版 YAML 仅可查看。如需修改请用 kubectl，或等 v0.8 发布。',
     runOnce: '立即执行一次',
     runOnceConfirmTitle: '立即执行策略？',
@@ -172,31 +473,220 @@ export default {
     actionHelp: '此策略被执行时应当采取的动作',
     backupFrequency: '备份频率',
     frequencyCustom: '自定义',
+    frequencyOnDemand: '仅按需',
+    onDemandNotice: '策略已暂停 — 不会按时刻自动触发。仅当你在策略行点击"立即执行一次"时才会跑一次备份。',
     volumeMode: '卷模式',
     volumeModeHelp: 'CSI 模式要求命名空间中的 PVC 使用支持快照的 StorageClass',
+    // v0.8.7: 4-way 数据路径
+    dataPath: '数据路径',
+    dataPathHelp: '决定卷数据如何被保护，左右两组对应上面 L1/L2 的 Action 选择。',
+    dataPathSection: {
+      snapshotOnly: '仅本地备份',
+      snapshotOnlySub: 'L1 — 集群内 MinIO 快速恢复',
+      snapshotExport: '本地 + 云端备份',
+      snapshotExportSub: 'L2 — 本地快速 + 异地灾备'
+    },
+    dataPathChoice: {
+      csi: 'CSI 快照',
+      mover: 'Data Mover',
+      fs: '文件系统',
+      meta: '仅元数据'
+    },
+    dataPathTip: {
+      csi: '存储层 CoW，集群本地。快照不离开集群，跨集群恢复需要 Storage Profile 同步或换 Data Mover。',
+      mover: 'CSI 快照 + Kopia 上传到 Storage Profile（对象存储）。可跨集群恢复，去重压缩。需 node-agent。',
+      fs: 'Restic / Kopia 走文件系统读取。可跨集群恢复，去重压缩。需 node-agent。CSI 不可用时退路。',
+      meta: '只备份 K8s YAML，不动 PV 数据。恢复后应用要自己重灌数据。'
+    },
+    dataPathPrereq: '需要 node-agent DaemonSet 已部署（helm install velero --set deployNodeAgent=true）。详见用户手册 §16。',
     resourcesHelp: '要包含到备份中的命名空间。留空表示全部命名空间。',
     namespacesPlaceholder: '选择或输入命名空间',
     csiCheck: 'CSI 兼容性检查',
     csiBlocker: '请切换到 Filesystem 模式，或把列出的 PVC 迁移到支持 CSI 快照的 StorageClass。',
     schedule: '调度',
-    snapshotSchedule: '快照调度',
-    snapshotRetention: '快照保留',
-    exportSchedule: '导出调度',
-    exportRetention: '导出保留',
-    storageProfile: '存储位置',
+    // v0.8.12 LBS2: 快照/导出 → 本地/云端
+    snapshotSchedule: '本地备份调度',
+    snapshotRetention: '本地保留',
+    exportSchedule: '云端备份调度',
+    exportRetention: '云端保留',
+    storageProfile: '云端存储位置',
+    storageProfilePlaceholder: '选择一个云端存储位置（Storage Profile）',
+    storageProfileEmpty: '尚未配置云端 Storage Profile，请先在"存储位置"页添加一个 BSL。',
     includedNamespaces: '包含的命名空间',
-    snapshot: '快照',
-    export: '导出到对象存储',
+    snapshot: '本地备份',
+    export: '云端备份',
     alwaysOn: '始终启用',
     enable: '启用',
-    snapshotOnlyWarn: '没有"导出"动作时，该策略只生成本地快照——不是持久备份。',
-    disableExportTitle: '禁用导出？',
-    disableExportBody: '仅有快照不是备份。确定继续吗？',
-    disableExportConfirm: '是的，仅快照',
-    disableExportCancel: '保留导出',
+    snapshotOnlyWarn: '没有"云端"动作时，该策略只在集群内保留一份——集群整体损坏时无法恢复。要做灾备必须同时有本地 + 云端。',
+    // v0.8.12 LBS3: Object Lock 提示
+    noObjectLockWarn: '该云端 BSL 未启用 Object Lock。备份在保留期内仍可能被删除——勒索软件、内部人员风险无法防护。请在 bucket 层启用不可变（S3 Object Lock / Azure Immutable Blob）以满足 3-2-1-1-0。',
+    objectLockOk: 'Object Lock 已启用（{mode}）。备份在保留期内不可删。',
+    // v0.8.12 LBS4: 3-2-1-1-0 评分预览
+    scorePreviewHint: '这条策略对你集群的 3-2-1-1-0 评分有什么贡献。',
+    scoreNotes: {
+      notDual: '切换到 L2 本地 + 云端 才能满足这条。',
+      localMissing: '本地备份库未启用。前往 Settings → 存储位置 → 启用。',
+      cloudMissing: '请选一个可用的云端 BSL 才能满足这条。',
+      noCloudPicked: '请选择一个云端存储位置。',
+      cloudUnavailable: '所选云端 BSL 不可用——请检查凭据。',
+      enableLock: '在所选云端 BSL 启用 Object Lock（S3 Object Lock / Azure 不可变 Blob）以防勒索攻击。',
+      pickNs: '至少选择一个命名空间。',
+      pickName: '为策略起个名字。'
+    },
+    disableExportTitle: '跳过云端备份？',
+    disableExportBody: '仅本地的策略在集群挂掉时无法恢复。确定继续吗？',
+    disableExportConfirm: '是的，仅本地',
+    disableExportCancel: '保留云端',
     protectionLevel: '保护等级',
     pause: '暂停',
     resume: '恢复'
+  },
+  // v0.9.0 Sidebar Mode Switcher
+  clusterSwitcher: {
+    mcm: 'Multi-Cluster Manager',
+    clusters: '集群',
+    addCluster: '+ 添加集群',
+    manage: '管理集群'
+  },
+  // v0.9.0 MC1: 集群管理
+  clusters: {
+    title: '集群管理',
+    subtitle: 'SupKube 管理的所有 Kubernetes 集群——本地集群 + 用于跨集群恢复添加的远端集群。',
+    add: '添加集群',
+    primary: '主集群',
+    secondary: '次集群',
+    nodes: '节点',
+    lastChecked: '上次检查',
+    remove: '移除',
+    removeTitle: '移除集群？',
+    removeConfirm: '移除集群 "{name}"？该集群 BSL 里存的备份**不会**被删除，仅删除 SupKube 注册条目。之后可以重新添加。',
+    removeFailed: '移除失败',
+    removedToast: '集群 "{name}" 已移除',
+    createdToast: '集群 "{name}" 已添加',
+    switchedTo: '已切换到 {name}',
+    actions: {
+      switch: '切换到该集群',
+      test: '测试连接',
+      remove: '移除',
+      viewKubeconfig: '查看 Kubeconfig',
+      installVelero: '安装 Velero (helm)',
+      installSupkube: '安装 SupKube (helm)'
+    },
+    modal: {
+      kubeconfigTitle: 'Kubeconfig — {name}',
+      kubeconfigIntro: '该集群 kubeconfig 的存储位置，以及从你工作站取出它的 kubectl 命令。原始 kubeconfig 不会在浏览器里展示——复制下面命令在本地执行。',
+      installVeleroTitle: '在 {name} 安装 Velero',
+      installVeleroIntro: 'Velero v1.18（与 SupKube 内置版本一致）加 CSI / Azure / AWS 插件。在你的工作站执行，kubectl/helm 需配置到目标集群。',
+      installSupkubeTitle: '在 {name} 安装 SupKube',
+      installSupkubeIntro: '在该集群部署一个独立的 SupKube 实例（适合"每集群一个 UI"的多站点架构）。可选——跨集群恢复用中央 SupKube 一个实例即可。'
+    },
+    empty: {
+      title: '添加第二个集群以启用 Multi-Cluster Manager',
+      body: '添加第二个集群后，SupKube 即启用跨集群恢复、聚合 DR 拓扑，以及（v0.9.x+）共享策略。集群注册上传 kubeconfig——存为 supkube namespace 下的 K8s Secret。'
+    },
+    wizard: {
+      title: '添加集群',
+      step1: '基本信息',
+      step2: '连接配置',
+      step3: '验证',
+      name: '名称',
+      nameHint: '小写字母 / 数字 / "-" / "."。作为 Cluster CR 的 metadata.name。',
+      nameInvalid: '需符合 DNS-1123（小写字母、数字、短横、点）。',
+      nameReserved: '"this-cluster" 与 "_mcm" 为保留名。',
+      displayName: '显示名',
+      type: '类型',
+      typePrimary: '主集群',
+      typeSecondary: '次集群',
+      typeHint: '主集群 = 部署 SupKube 自身的集群。次集群 = 远端集群，用于跨集群操作。',
+      description: '描述',
+      kubeconfig: 'Kubeconfig',
+      chooseFile: '选择文件',
+      replaceFile: '更换文件',
+      kubeconfigHint: '上传 kubeconfig 文件。将存为 supkube namespace 的 K8s Secret——不会写入日志或遥测。',
+      fileTooLarge: 'Kubeconfig 文件超出 256 KiB 限制。',
+      context: 'Context',
+      contextPlaceholder: '（使用 current-context）',
+      contextHint: '留空 = 使用 kubeconfig 的 current-context。',
+      testButton: '测试连接',
+      k8sVersion: 'Kubernetes 版本',
+      nodeCount: '节点数',
+      veleroMissing: '未检测到 Velero。请在该集群安装 Velero v1.18+ 后再用于备份/恢复。',
+      back: '上一步',
+      next: '下一步',
+      add: '添加集群',
+      added: '集群 "{name}" 添加成功。',
+      addFailed: '添加集群失败'
+    }
+  },
+  // v0.8.13 HC4: Settings → 插件管理
+  plugins: {
+    intro: 'SupKube 可选组件——Velero（必装）、内嵌 Dex、集群内 MinIO 本地备份库。复制下方的 helm upgrade 命令到你的工作站执行即可启用/禁用。',
+    installed: '已安装',
+    notInstalled: '未安装',
+    required: '必装',
+    enableCmdLabel: '启用命令',
+    disableCmdLabel: '禁用命令',
+    copy: '复制',
+    copied: '命令已复制到剪贴板',
+    copyFailed: '无法复制，请手动选中命令复制。',
+    cmdNote: '在你的工作站对 SupKube 所在集群执行。`--reuse-values` 会保留你的其他自定义配置。',
+    empty: '后端未返回插件信息，可能版本较旧。'
+  },
+  // v0.9.0.2: 多集群管理器仪表盘（/multicluster 路由）
+  mcm: {
+    title: '多集群管理器',
+    subtitle: 'SupKube 当前管理的所有集群汇总视图。点击任意一行即可进入对应集群的仪表盘。',
+    clustersTitle: '集群列表',
+    clickHint: '点击行可切换集群上下文。',
+    fetchFailed: '加载多集群汇总失败',
+    totals: {
+      clusters: '集群',
+      apps: '应用',
+      policies: '策略',
+      restorePoints: '恢复点',
+      unhealthy: '不健康',
+      allHealthy: '全部健康'
+    },
+    col: {
+      name: '集群',
+      phase: '状态',
+      k8s: 'K8s 版本',
+      nodes: '节点',
+      apps: '应用',
+      policies: '策略',
+      rps: '恢复点',
+      lastBackup: '上次备份'
+    }
+  },
+  // v0.8.12.5: DR 拓扑视图
+  topology: {
+    title: '灾备拓扑',
+    subtitle: '一眼看清每个命名空间备份到哪里，以及集群整体的保护等级。',
+    clusters: '集群',
+    policies: '策略',
+    policiesShort: '策略',
+    restorePoints: '还原点',
+    restorePointsShort: '还原点',
+    namespacesShort: 'ns',
+    nsCovered: '个 ns',
+    nodes: '节点',
+    current: '主集群',
+    local: '本地',
+    cloud: '云端',
+    allNamespaces: '全部命名空间',
+    more: '更多',
+    lastBackup: '最近备份',
+    neverBackedUp: '尚无备份',
+    minAgo: '分钟前',
+    inactiveBSLs: '个未使用的 BSL（无策略对接）',
+    scoreTitle: '3-2-1-1-0 评分',
+    score: {
+      three: '3 份副本',
+      two: '2 种介质',
+      one: '1 份异地',
+      immutable: '1 份不可变',
+      zero: '0 错误'
+    }
   },
   storage: {
     title: '存储位置',
@@ -227,7 +717,100 @@ export default {
     language: '语言',
     theme: '主题',
     light: '浅色',
-    dark: '深色'
+    dark: '深色',
+    general: '常规',
+    myAccess: '我的权限',
+    auditLog: '审计日志',
+    clusterHygiene: '集群健康',
+    branding: '品牌定制',
+    plugins: '插件管理',
+    clusters: '集群管理',
+    // v0.8.8 集群健康 panel
+    hygiene: {
+      title: '孤儿资源清理 (Orphan GC)',
+      statusOn: '已启用',
+      statusOff: '已禁用',
+      explain1: 'Velero v1.18 的 Data Mover 路径会在备份过程中创建 deletionPolicy=Retain 的 VolumeSnapshotContent，但在父 Backup 被删除后**不会**自动回收。长期下来集群里会累积孤儿 VSC / VS / DataUpload / PodVolumeBackup —— 既污染 K8s API，也持续占用对象存储费用。',
+      explain2: 'SupKube 在后台周期扫描这些孤儿资源（默认 6 小时一次）并自动删除。每次删除都会产生一条 Activity 事件，可以在"活动"页查看。',
+      enabled: '自动清理',
+      enabledOn: '后台定时扫描已开启 — 出现孤儿会被自动删除。',
+      enabledOff: '后台定时扫描已关闭 — 仅当你点"立即清理"才会扫。',
+      interval: '扫描周期',
+      intervalHint: '每隔这段时间后台跑一次扫描',
+      intervalOpt: {
+        '1h': '每小时',
+        '6h': '每 6 小时（推荐）',
+        '12h': '每 12 小时',
+        '24h': '每 24 小时'
+      },
+      manual: '手动触发',
+      runNow: '立即清理',
+      runNowHint: '不管自动是否开启都能用 — 跑完会在活动页留一条记录',
+      lastRun: '最近一次扫描',
+      ran: '运行于',
+      noRunYet: '尚未运行过扫描 — 启用自动清理或点上方"立即清理"',
+      saved: '设置已保存',
+      saveFailed: '保存失败',
+      loadFailed: '加载设置失败',
+      runDone: '清理完成',
+      runFailed: '清理失败'
+    }
+  },
+  // v0.8.5 step 3.5: 我的权限
+  myAccess: {
+    currentUserTitle: '当前用户',
+    email: '邮箱',
+    username: '用户名',
+    groups: '所属用户组',
+    noGroups: '（无）',
+    myRoleTitle: '我的角色',
+    rbacDisabled: 'RBAC 已禁用 — 所有已认证用户都是 admin。生产部署应在 values.yaml 启用 auth.rbac.enabled。',
+    allowedNamespaces: '允许访问的命名空间',
+    editorNoNamespaces: '你被绑定为 editor 但没有任何命名空间范围 — 无法进行任何写操作。请联系管理员往你的 binding 添加命名空间。',
+    capabilitiesTitle: '此角色能做什么',
+    cap: {
+      adminAll:        '全集群完整访问（备份、恢复、策略、存储位置、变换集、审计日志、RBAC 查看）',
+      editorBackup:    '创建/删除备份（仅限你的命名空间）',
+      editorRestore:   '创建/删除恢复（仅限你的命名空间）',
+      editorPolicy:    '创建/编辑/删除策略（仅限你的命名空间）',
+      editorPreflight: '运行冲突预检 + 一键修复',
+      adminStorage:    '管理存储位置 + 快照位置',
+      adminTS:         '管理变换集',
+      adminNs:         '创建/删除命名空间',
+      adminAudit:      '查看审计日志',
+      viewerRead:      '只读浏览（全集群）',
+      unknownRole:     '未分配角色 — 请联系管理员。'
+    },
+    allBindingsTitle: '集群所有 Role Bindings',
+    allBindingsSource: '（只读，通过 Helm values 配置）',
+    noBindings: '尚未配置任何 binding。请编辑 values.yaml 中的 auth.rbac.bindings，然后跑 helm upgrade --reset-values。',
+    bindingType: '类型',
+    bindingSubject: '主体',
+    bindingRole: '角色',
+    bindingNamespaces: '命名空间',
+    editHint: '修改 binding，请编辑 values.yaml 中的',
+    editHintCont: '字段，然后跑 helm upgrade --reset-values。'
+  },
+  // v0.8.5 step 4: 审计日志
+  audit: {
+    retentionTitle: '保留期提示',
+    retentionDesc: '此处审计记录源自 K8s Events（默认 TTL 1 小时）。长期保留请把 Events 接到 Loki/EFK/Splunk —— 后端会同时把相同记录写到 stdout 供日志管道收集。',
+    filterUser: '按用户筛选',
+    filterResult: '结果',
+    filterResource: '资源',
+    filterLimit: '上限',
+    count: '{n} 条记录',
+    empty: '暂无审计记录。所有写操作（创建/更新/删除）会记录在这里。',
+    timestamp: '时间',
+    user: '用户',
+    result: '结果',
+    action: '动作',
+    resource: '资源',
+    resourceName: '资源名',
+    namespace: '命名空间',
+    method: '方法',
+    statusCode: '状态码',
+    sourceIP: '源 IP'
   },
   advisor: {
     title: '备份顾问',
@@ -264,6 +847,36 @@ export default {
       monthly: '每月 1 次（每月 1 日）',
       custom: '自定义：{cron}',
       none: '不备份'
+    }
+  },
+  // v0.8.11: 品牌定制
+  branding: {
+    intro: {
+      title: '产品品牌定制',
+      body: '修改产品名、侧边栏 Logo、浏览器 Tab favicon，让 SupKube 匹配你的组织。配置存储在集群范围 ConfigMap，所有用户立刻看到新标识，无需刷新。'
+    },
+    productName: '产品名',
+    productNamePlaceholder: '例如：AcmeBackup',
+    productNameHint: '显示在侧边栏顶部和浏览器 tab 标题。',
+    logo: '侧边栏 Logo',
+    logoHint: '推荐原图尺寸 220 × 230 px（侧边栏渲染时缩放到 24 px 高）。SVG / PNG / JPEG / WebP，单文件不超过 100 KB。',
+    favicon: '浏览器 Tab 图标',
+    faviconHint: '推荐尺寸 64 × 64 px（浏览器会自动缩放）。SVG / PNG / ICO，单文件不超过 100 KB。',
+    colorScheme: '主题色',
+    colorHint: '设置全站链接、主按钮、可交互高亮的强调色。集群范围生效，所有用户立即看到新颜色。',
+    colorReset: '恢复默认（Indigo）',
+    preview: '预览',
+    chooseFile: '选择文件…',
+    reset: '清除',
+    livePreview: '实时预览',
+    save: '保存修改',
+    discard: '放弃修改',
+    saveSuccess: '品牌已更新 —— 所有在线用户会立刻看到新标识。',
+    errors: {
+      tooLarge:   '文件过大（{kb} KB），上限 100 KB',
+      readFailed: '文件读取失败：{msg}',
+      saveFailed: '保存失败：{msg}',
+      loadFailed: '读取当前品牌配置失败：{msg}'
     }
   }
 }
