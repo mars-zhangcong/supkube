@@ -1,6 +1,6 @@
 # SupKube 项目状态快照
 
-> 最后更新：**2026-05-26**（v0.9.1.0-alpha 发布后）
+> 最后更新：**2026-05-26**（v0.9.1.2-alpha 发布后）
 > 用途：休息一段时间后回来，5 分钟内回到项目状态。详细 roadmap 看 [ROADMAP.md](ROADMAP.md)。
 
 ## 一句话现状
@@ -24,10 +24,10 @@
 
 | 组件 | 版本 | 制品位置 |
 |---|---|---|
-| Backend image | `0.9.1.0-alpha` | `supkube.azurecr.io/backend:0.9.1.0-alpha` (multi-arch amd64+arm64) |
-| Frontend image | `0.9.1.0-alpha` | `supkube.azurecr.io/frontend:0.9.1.0-alpha` (multi-arch) |
-| Helm chart | `0.9.1-alpha.0` (SemVer) / appVersion `0.9.1.0-alpha` | `charts.supkube.com/supkube-0.9.1-alpha.0.tgz` |
-| Git tag | `v0.9.1.0-alpha` | `28a5ab4` on `origin/v0.7.9-alpha` |
+| Backend image | `0.9.1.2-alpha` | `supkube.azurecr.io/backend:0.9.1.2-alpha` (multi-arch amd64+arm64) |
+| Frontend image | `0.9.1.2-alpha` | `supkube.azurecr.io/frontend:0.9.1.2-alpha` (multi-arch) |
+| Helm chart | `0.9.1-alpha.0` (SemVer) / appVersion `0.9.1.2-alpha` | `charts.supkube.com/supkube-0.9.1-alpha.0.tgz` |
+| Git tag | `v0.9.1.2-alpha` | `28a5ab4` on `origin/v0.7.9-alpha` |
 
 ## 客户安装命令（标准开场）
 
@@ -83,8 +83,8 @@ supkube/
 
 AKS aks-jumborca-dev (kubectl --context aks-jumborca-dev):
   Namespace: supkube
-    - supkube-backend  : supkube.azurecr.io/backend:0.9.1.0-alpha    Running ✓
-    - supkube-frontend : supkube.azurecr.io/frontend:0.9.1.0-alpha   Running ✓
+    - supkube-backend  : supkube.azurecr.io/backend:0.9.1.2-alpha    Running ✓
+    - supkube-frontend : supkube.azurecr.io/frontend:0.9.1.2-alpha   Running ✓
     - supkube-dex      : dexidp/dex:v2.39.1                          Running ✓
     - Helm release     : revision 4, chart 0.9.1-alpha.0, eula.accept=true
     - ConfigMap supkube-eula: accepted=true, email=ops@example.com, company="Example Inc"
@@ -112,7 +112,7 @@ AKS aks-jumborca-test:
 1. **EULA gate (v0.9.1.0+)**: 所有 `helm install/upgrade` 必须 `--set eula.accept=true`，否则 template render 阶段直接 fail。这是 by design，不是 bug。
 
 2. **Chart version vs SupKube version**：
-   - SupKube 用 4 段 `0.9.1.0-alpha`（image tag + appVersion）
+   - SupKube 用 4 段 `0.9.1.2-alpha`（image tag + appVersion）
    - Helm chart 用 SemVer `0.9.1-alpha.0`（自动翻译）
    - 客户的 `--version` 参数用 **chart 版**
    - 翻译规则在 `hack/publish-release.sh` 的 `chart_version_from()`

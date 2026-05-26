@@ -1,7 +1,7 @@
 # SupKube Roadmap
 
 > Last updated: **2026-05-26**
-> Current released version: **v0.9.1.0-alpha** （部署在 docker-desktop + aks-jumborca-dev，可公开 `helm install`）
+> Current released version: **v0.9.1.2-alpha** （部署在 docker-desktop + aks-jumborca-dev，可公开 `helm install`）
 > Public distribution: **https://charts.supkube.com/** （ACR + Azure Blob + Cloudflare Worker）
 > Reference product: [Kasten K10 by Veeam](https://docs.kasten.io)
 
@@ -9,9 +9,111 @@
 
 ## TL;DR
 
-1. **MVP 已 ship**: 备份 / 恢复 / 多集群跨集群恢复 / 3-2-1-1-0 / Object Lock / 多架构 / Helm 分发 / Preflight + EULA 全部到位。
+1. **MVP 已 ship**: 备份 / 恢复 / 多集群跨集群恢复 / 3-2-1-1-0 / Object Lock / 多架构 / Helm 分发 / Preflight + EULA / UI 重构 全部到位。
 2. **客户能装上**: `helm repo add supkube https://charts.supkube.com/` → `helm install` 在任何 amd64/arm64 K8s 集群跑通；ACR 匿名拉镜像；charts.supkube.com 走 Cloudflare Worker 反代 Azure Blob。
 3. **当前阶段**: 从"功能堆砌"转到"商业化 + 合规 + 售前支持工具链"。下个 sprint = **v0.8.14 Log Viewer + Upload to Support**。
+4. **导航**：用下面的"优先级矩阵"决定下一步做什么；用"已完成 Sprint 列表"看历史；用 [PRODUCT-TIERS.md](PRODUCT-TIERS.md) 解释商业模型。
+
+---
+
+## 🧭 优先级矩阵（重要-紧急 × 产品价值 × 客户要求 × 市场预期）
+
+> 评分制度：**产品价值** (PV) × **客户要求** (CR) × **市场预期** (ME)，各 1-5 分。总分 = PV + CR + ME（满 15）。象限按下面的边界划分；象限内按总分降序。
+>
+> 决策原则：**P0 必须做完才能上下一阶段商业**；P1 安排到三月内的 sprint；P2 顺手在 P0/P1 间隙做；P3 等触发条件出现。
+
+```
+                                  紧急 (Urgent)
+                                       ▲
+                                       │
+        ┌──────────────────────────────┼──────────────────────────────┐
+        │                              │                              │
+        │  P0 重要紧急 (Do Now)        │  P2 紧急不重要 (Quick Wins)  │
+        │  ──────────────────────      │  ─────────────────────────   │
+        │  · v0.8.14 Log Viewer        │  · CI/CD GitHub Actions      │
+        │  · v0.9.2 License Manager    │  · Backend version 注入收尾  │
+        │  · v0.9.1.3 Storage Class    │  · DOCSITE (VitePress 起步)  │
+        │    Mgmt 集群管理 tab         │  · v0.9.0.5 #68 Force-Delete │
+        │                              │                              │
+重要 ◀──┼──────────────────────────────┼──────────────────────────────┼──▶ 不重要
+        │                              │                              │
+        │  P1 重要不紧急 (Schedule)    │  P3 不紧急不重要 (Wait)      │
+        │  ──────────────────────      │  ─────────────────────────   │
+        │  · v0.9.6 BPMN 灾备演练 ★    │  · v0.9.7 KubeVirt VM        │
+        │  · v0.9.4 EntraID + Vault    │  · Sentinel webhook          │
+        │  · v0.9.5 Kyverno            │  · Case API 完整集成         │
+        │  · v0.9.3 文件浏览           │  · TELEMETRY 数据收集        │
+        │  · v0.9.8 MCP Server ↑       │  · OCI 镜像备份 (ghcr/quay)  │
+        │  · v0.9.10 Catalog Service   │                              │
+        │  · v0.8.15 Backup integrity  │                              │
+        │  · v0.8.16 Swagger API       │                              │
+        │  · v0.9.11 Config Backup     │                              │
+        │                              │                              │
+        └──────────────────────────────┼──────────────────────────────┘
+                                       │
+                                       ▼
+                                 不紧急 (Not Urgent)
+
+  ★ = Premium tier 独创卖点
+  ↑ = 本次 review 升优先级（原 v0.9.8 → 提到 P1 因 Veeam Intelligence 落地证明 AI 已成标配）
+```
+
+### P0 — 重要紧急（必须在 v1.0 GA 前完成）
+
+| Item | PV | CR | ME | 总 | 工程量 | Sprint | 当前状态 |
+|---|---|---|---|---|---|---|---|
+| **Log Viewer + Upload to Support** | 5 | 5 | 5 | **15** | 5d | v0.8.14 | 🟢 进行中 (#79) |
+| **License Manager 前端** | 5 | 5 | 4 | **14** | 3d | v0.9.2 | 🔲 (#63) |
+| **Storage Class Mgmt 集群管理 tab** | 4 | 5 | 4 | **13** | 1d | v0.9.1.3 | 🔲 客户已提 |
+| **#68 Force-Delete 卡住的 Backup** | 3 | 4 | 3 | **10** | 0.5d | v0.9.0.5 | 🔲 (#68) |
+
+**为何 P0**：以上 4 项**任何一个未完成都直接卡商业化路径**。Log Viewer 是客户出问题排障的唯一手段；License Manager 是收钱前提；Storage Class Mgmt 是客户提的；Force-Delete 是真实故障数据可能踩到的点。
+
+### P1 — 重要不紧急（三月内做完，按总分排序）
+
+| Item | PV | CR | ME | 总 | 工程量 | Sprint | 当前状态 |
+|---|---|---|---|---|---|---|---|
+| **BPMN 应用级恢复演练 ★** | 5 | 3 | 5 | **13** | 7d | v0.9.6 | 🔲 Premium 独创 |
+| **EntraID + Vault (合规 P1)** | 4 | 4 | 5 | **13** | 5d | v0.9.4 | 🔲 标书必备 |
+| **Kyverno (合规 P2)** | 4 | 4 | 4 | **12** | 3d | v0.9.5 | 🔲 |
+| **细粒度文件浏览 + 恢复** | 4 | 4 | 4 | **12** | 5d | v0.9.3 | 🔲 |
+| **MCP Server (AI 集成) ↑** | 4 | 3 | 5 | **12** | 4d | v0.9.8 | 🔲 升优先级 |
+| **Catalog Service + Fleet Lifecycle** | 5 | 4 | 3 | **12** | 8d | v0.9.10 | 🔲 客户战略需求 |
+| **Backup integrity check** | 3 | 3 | 4 | **10** | 2d | v0.8.15 | 🔲 |
+| **Swagger REST API** | 3 | 3 | 4 | **10** | 2d | v0.8.16 | 🔲 |
+| **Configuration Backup (dogfooding)** | 4 | 2 | 3 | **9** | 5d | v0.9.11 | 🔲 |
+
+**P1 排序逻辑**：
+- **BPMN v0.9.6** 仍是最高 P1 — 这是 Premium 独创卖点，长期看决定旗舰 SKU 能不能定价上去。
+- **EntraID + Vault v0.9.4** 排在前面是因为**标书必备**——金融/政企客户没这个直接 disqualify。
+- **MCP Server ↑** 从原 v0.9.8 P3 升到 P1：Veeam Intelligence 已在 VBR 落地，AI 已成 backup 产品标配。
+- **Catalog Service v0.9.10** 来自客户战略需求（统一管理 install + preflight + debug），架构早定避免后期重写。
+
+### P2 — 紧急不重要（顺手做，不阻塞主线）
+
+| Item | PV | CR | ME | 总 | 工程量 | 触发条件 |
+|---|---|---|---|---|---|---|
+| **CI/CD GitHub Actions 自动 publish** | 2 | 1 | 3 | **6** | 2d | publish-release.sh 跑稳 3 轮 |
+| **Backend hardcoded version 收尾** | 1 | 1 | 1 | **3** | 0.5h | 任何 sprint 顺手做 |
+| **DOCSITE (VitePress) 起步** | 3 | 1 | 3 | **7** | 3d | 客户 onboarding 量起来时 |
+
+### P3 — 不紧急不重要（触发条件出现再做）
+
+| Item | PV | CR | ME | 总 | 触发条件 |
+|---|---|---|---|---|---|
+| **v0.9.7 KubeVirt VM 备份** | 4 | 1 | 2 | 7 | 客户真用 KubeVirt 时 |
+| **Microsoft Sentinel webhook** | 2 | 1 | 2 | 5 | 客户启用 Sentinel SIEM |
+| **完整 Case API 集成** | 2 | 1 | 1 | 4 | Mars 提供 Case API spec |
+| **TELEMETRY 匿名遥测** | 3 | 0 | 1 | 4 | 需要数据驱动决策时 |
+| **OCI 镜像备份 (ghcr/quay 二级)** | 1 | 1 | 1 | 3 | Azure 出问题时备份方案 |
+
+### 评分校准说明
+
+| 维度 | 1 分 | 3 分 | 5 分 |
+|---|---|---|---|
+| **产品价值 (PV)** | 边缘特性 / 偶尔用 | Foundation 层正常完整 | Premium 独有或差异化关键 |
+| **客户要求 (CR)** | 没人提过 | 1-2 个客户问过 | 多个客户 / 当前 demo 客户明确要求 |
+| **市场预期 (ME)** | 客户不期待 | 行业有这能力 | Kasten / Veeam 已落地，不做就掉队 |
 
 ---
 
@@ -228,6 +330,7 @@ GET    /api/v1/license/usage-history → [{ month, peakNodeCount }]
 
 | Sprint | 完成日期 | 主要内容 | Git tag |
 |---|---|---|---|
+| **v0.9.1.2** | 2026-05-26 | **UI 重构**：Sidebar 10→7 (Observability hub 合并 Activity/Advisor/Audit/Log Viewer)；备份顾问→可观测性，数据还原→应用还原；缩进对齐第三修 (CSS Grid)；存储位置 + 快照位置 退出侧边栏 (集群管理 tab 化 v0.9.1.3 做)；+ PRODUCT-TIERS.md (~430 行 商业模型) + hack/DEMO-cross-cluster-restore.md (~550 行 客户演示指南) | `v0.9.1.2-alpha` |
 | **v0.9.1.0** | 2026-05-26 | **Install UX**：preflight.sh (10 项 cluster 检查) + EULA gate + USER_MANUAL §23 Install Reference + image.registry airgap override | `v0.9.1.0-alpha` |
 | **v0.9.0.4** | 2026-05-26 | **Multi-arch**：docker buildx amd64+arm64 manifest list；Dockerfile TARGETARCH；客户零参数适配 ARM64 集群 | `v0.9.0.4-alpha` |
 | **v0.9.0.3** | 2026-05-25/26 | **制品分发闭环**：ACR (Standard SKU + anonymous pull) + Azure Blob Static Website + Cloudflare Worker (`charts.supkube.com`) + hack/publish-release.sh + 相对 URL index.yaml；SemVer 翻译 | `v0.9.0.3-alpha` |
