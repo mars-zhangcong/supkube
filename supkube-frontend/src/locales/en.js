@@ -41,7 +41,7 @@ export default {
     },
     logViewer: {
       comingTitle: 'Log Viewer — coming in v0.8.14',
-      comingBody: 'Stream backend / frontend / Velero / Dex logs with faceted filters and one-click "Upload to Support". Replaces the carpet-bombing of kubectl logs commands.',
+      comingBody: 'Stream backend / frontend / Velero / Dex logs with faceted filters and one-click "Download Logs" as a debug tarball. Replaces the carpet-bombing of kubectl logs commands.',
       bullet1: 'Faceted filtering: component, severity, pod, time range',
       bullet2: 'Live tail with pause / resume',
       bullet3: 'Per-Action log views (jump from Backup/Restore drawer)',

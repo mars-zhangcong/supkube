@@ -11,7 +11,7 @@
 
 1. **MVP 已 ship**: 备份 / 恢复 / 多集群跨集群恢复 / 3-2-1-1-0 / Object Lock / 多架构 / Helm 分发 / Preflight + EULA / UI 重构 全部到位。
 2. **客户能装上**: `helm repo add supkube https://charts.supkube.com/` → `helm install` 在任何 amd64/arm64 K8s 集群跑通；ACR 匿名拉镜像；charts.supkube.com 走 Cloudflare Worker 反代 Azure Blob。
-3. **当前阶段**: 从"功能堆砌"转到"商业化 + 合规 + 售前支持工具链"。下个 sprint = **v0.8.14 Log Viewer + Upload to Support**。
+3. **当前阶段**: 从"功能堆砌"转到"商业化 + 合规 + 售前支持工具链"。当前 sprint = **v0.8.14 Log Viewer + Download Logs + AirGapped 真支持**。
 4. **导航**：用下面的"优先级矩阵"决定下一步做什么；用"已完成 Sprint 列表"看历史；用 [PRODUCT-TIERS.md](PRODUCT-TIERS.md) 解释商业模型。
 
 ---
@@ -62,12 +62,14 @@
 
 | Item | PV | CR | ME | 总 | 工程量 | Sprint | 当前状态 |
 |---|---|---|---|---|---|---|---|
-| **Log Viewer + Upload to Support** | 5 | 5 | 5 | **15** | 5d | v0.8.14 | 🟢 进行中 (#79) |
+| **Log Viewer + Download Logs + AirGap 真支持** | 5 | 5 | 5 | **15** | 7d | v0.8.14 | 🟢 进行中 (#79) |
 | **License Manager 前端** | 5 | 5 | 4 | **14** | 3d | v0.9.2 | 🔲 (#63) |
 | **Storage Class Mgmt 集群管理 tab** | 4 | 5 | 4 | **13** | 1d | v0.9.1.3 | 🔲 客户已提 |
 | **#68 Force-Delete 卡住的 Backup** | 3 | 4 | 3 | **10** | 0.5d | v0.9.0.5 | 🔲 (#68) |
 
 **为何 P0**：以上 4 项**任何一个未完成都直接卡商业化路径**。Log Viewer 是客户出问题排障的唯一手段；License Manager 是收钱前提；Storage Class Mgmt 是客户提的；Force-Delete 是真实故障数据可能踩到的点。
+
+**v0.8.14 scope 扩张说明 (2026-05-26 客户反馈后)**：原 5d Log Viewer 扩到 7d，新增 LV4 改名（Upload to Support → Download Logs）+ LV8 真 AirGap 支持。详见 §v0.8.14 sprint 表。原因：本地化 + AirGapped 客户群（中国/日本中型企业）是同一群人，他们既不能上传 log（无公网出口）也不能拉公网镜像（防火墙）。两件事在同一 sprint 一起做，叙事完整。
 
 ### P1 — 重要不紧急（三月内做完，按总分排序）
 
@@ -175,18 +177,29 @@
 
 ---
 
-## v0.8.14 — Log Viewer + Upload to Support （下个 sprint，~3 天）
+## v0.8.14 — Log Viewer + Download Logs + AirGapped 真支持 （进行中 sprint，~7 天）
 
-**决策**：MVP 售前优先项。客户出问题时**自助排障 + 一键推 log 包给我们**是商业化前提。
+**决策**（2026-05-26 客户反馈后扩张）：MVP 售前优先项。**本地化 + AirGapped 客户群是同一群人**——他们既不能上传 log（无公网出口）也不能拉公网镜像（防火墙）。两件事在同一 sprint 一起做，叙事完整。
 
 | 子任务 | 估算 | 内容 |
 |---|---|---|
-| **LV1** | 1.0d | 后端 `GET /api/v1/logs` 流式接口 (kubectl logs 包装) + component 选择器 + since/tail 参数 + admin-only |
-| **LV2** | 1.0d | 前端 LogViewer.vue 页面：组件下拉 + 时间窗 + tail + 实时跟随 + 关键词高亮 + 下载 |
-| **LV3** | 0.5d | Action Detail Drawer / Restore Drawer 加 "View Logs" 链接直跳过滤好的日志页 |
-| **LV4** | 0.5d | "Upload to Support" 弹窗 — 一键打 log bundle (backend+frontend+dex + 所选 action 元数据)；调用 EULA 里填的 email 默认；后续可接 Case API |
+| **LV1** | 1.5d | 后端 `GET /api/v1/logs` SSE 流式接口；**覆盖 Velero ns** (deploy/velero + ds/node-agent) + kube-system snapshot-controller；server-side facet count；`/api/v1/backups/:name/velero-logs` 走 Velero DownloadRequest 协议 |
+| **LV2** | 1.5d | 前端 LogViewer.vue Datadog 风：facet 侧栏 (Component/Severity/Pod 带 counts) + 彩色 severity 徽章 + 时间窗 + Live tail (⏸▶) + 行展开 + 关键词高亮 |
+| **LV3** | 0.5d | Action Detail / Restore Drawer 加 "View Logs" 链接，跳过滤好的 backup-specific log 视图 |
+| **LV4** | 0.5d | **Download Logs** Modal (改名 from "Upload to Support") — Settings → System Information 页 + 内容 checkbox + 时间窗 + anonymize PII + 下载 tarball / 复制 CLI 命令 |
+| **LV5** | 0.5d | Settings → Support Contact tab — admin 配置紧急联系热线 + 邮箱 + 在线支持 URL，存 `cm/supkube-support-contact`；写入 debug bundle 的 README 给客户内部 ticket 流程用 |
+| **LV6** | 0.5d | `hack/supkube_debug.sh` (~150 行 bash) 仿 k10_debug.sh；charts.supkube.com 托管；publish-release.sh 集成自动同步 |
+| **LV7** | 0.5d | Runbook patterns MVP (5-10 条 yaml-defined 规则 + 前端 fuzzy match) — Premium 知识库的种子 |
+| **LV8** 🆕 | 1.5d | **AirGapped install 真支持**：`global.airgapped.repository`（替代 v0.9.1.0 假支持的 image.registry）+ `_helpers.tpl` supkube.image helper + 改所有 deployment templates 用 helper + Velero subchart 镜像 override + USER_MANUAL §24 完整离线安装指南 + 端到端验证 hack/airgap-bundle.sh |
 
-**对标 Kasten**: Settings → Logs + "Generate Diagnostic Report"。
+**对标 Kasten**:
+- Settings → Logs + "Generate Diagnostic Report" → 我们的 Download Logs Modal
+- `k10_debug.sh` curl-bash → 我们的 `supkube_debug.sh`
+- `global.airgapped.repository` Helm value → 我们直接复用同名（命名对齐，客户切换零成本）
+
+**关键改名 (统一)**:
+- "Upload to Support" → **"Download Logs"** (airgap 客户无法 upload；统一命名)
+- `image.registry` (假字段) → `global.airgapped.repository` (真支持；Velero subchart 也透传)
 
 ---
 

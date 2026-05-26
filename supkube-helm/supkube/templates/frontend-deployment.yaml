@@ -23,7 +23,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: "{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"
+          image: {{ include "supkube.image" (dict "root" $ "repository" .Values.frontend.image.repository "tag" .Values.frontend.image.tag) | quote }}
           imagePullPolicy: {{ .Values.frontend.image.pullPolicy }}
           ports:
             - name: http

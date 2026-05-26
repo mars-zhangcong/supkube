@@ -159,7 +159,7 @@ spec:
     spec:
       containers:
         - name: minio
-          image: "{{ .Values.localStore.image.repository }}:{{ .Values.localStore.image.tag }}"
+          image: {{ include "supkube.image" (dict "root" $ "repository" .Values.localStore.image.repository "tag" .Values.localStore.image.tag) | quote }}
           imagePullPolicy: {{ .Values.localStore.image.pullPolicy }}
           args:
             - server
@@ -294,8 +294,9 @@ spec:
           # The MinIO Client image; matches the MinIO server version where
           # possible. We don't pin to the literal `latest` because Quay
           # sometimes serves stale layers; pinning gives reproducible
-          # rollouts.
-          image: quay.io/minio/mc:RELEASE.2025-04-16T18-13-26Z
+          # rollouts. Goes through supkube.image helper for airgap support
+          # (v0.8.14 LV8) — mirrored as <airgap>/mc:<tag>.
+          image: {{ include "supkube.image" (dict "root" $ "repository" "quay.io/minio/mc" "tag" "RELEASE.2025-04-16T18-13-26Z") | quote }}
           env:
             # ORDER MATTERS: K8s `$(VAR)` substitution only resolves vars
             # defined EARLIER in the list. MINIO_USER/MINIO_PASSWORD must

@@ -133,12 +133,16 @@ AKS aks-jumborca-test:
 
 ## 下次起手的 3 个候选方向
 
-### A. v0.8.14 Log Viewer + Upload to Support（next sprint，~3 天）✅ 已选
-商业化路径必修。客户出问题能自助排障 + 一键推 log 包给我们。
-- LV1: 后端 /api/v1/logs 流式 (kubectl logs 包装)
-- LV2: 前端 LogViewer.vue + 关键词高亮 + 实时跟随
+### A. v0.8.14 Log Viewer + Download Logs + AirGapped 真支持（进行中，7 天）✅ 已选
+商业化路径必修。客户出问题能自助排障 + **离线/内网客户能装**。
+- LV1: 后端 /api/v1/logs SSE 流（含 Velero ns）
+- LV2: 前端 LogViewer.vue Datadog 风（facet + severity + live tail）
 - LV3: Action Detail / Restore drawer 加 "View Logs" 跳转
-- LV4: "Upload to Support" 弹窗 → log bundle → EULA email
+- LV4: **Download Logs** Modal (改名 from Upload to Support) → tarball
+- LV5: Settings → Support Contact tab
+- LV6: hack/supkube_debug.sh (curl-bash 仿 k10_debug.sh)
+- LV7: Runbook patterns MVP (Premium 知识库种子)
+- LV8: **AirGapped install 真支持** (`global.airgapped.repository`)
 
 ### B. v0.8.15 备份数据校验（~2 天）
 checksum + Kopia repo validate；定期 deep check；Health Score 加权重。

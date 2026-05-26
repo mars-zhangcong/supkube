@@ -28,23 +28,50 @@ eula:
 # DR/multi-cluster/audit features.
 license:
   key: ""
-# Image registry override (airgap support).
+# v0.8.14 LV8 — AirGapped install support (Kasten-style global.airgapped.repository).
 #
-# When set, ALL SupKube + sub-chart images are pulled from <registry>/<repo>:<tag>
-# instead of supkube.azurecr.io. Use when the customer's cluster can't
-# reach public registries; mirror our images to their internal registry
-# (Harbor, Nexus, Quay) and point this here.
+# When customer's cluster can't reach public registries (Azure ACR / Docker
+# Hub / Quay), mirror all needed images to their internal registry (Harbor /
+# Nexus / Quay) and set global.airgapped.repository to that registry's path.
 #
-# Empty (default) = pull directly from supkube.azurecr.io (public anon).
-# Example for airgap:
-#   --set image.registry=harbor.internal.corp.example.com/supkube-mirror
+# Example for airgap install:
+#   helm install supkube ./supkube-X.Y.Z.tgz \
+#     --set global.airgapped.repository=harbor.internal.corp/supkube-mirror \
+#     --set eula.accept=true ...
 #
-# Note: this prefix replaces the registry portion ONLY; image names + tags
-# (backend / frontend / dex / minio / velero) keep their existing values.
-# So `harbor.internal.corp.example.com/supkube-mirror/backend:0.9.1.0-alpha`
-# is the resulting image after override.
-image:
-  registry: ""
+# What this does internally
+# ─────────────────────────
+# When set, EVERY SupKube chart-owned image (backend / frontend / dex /
+# local-store / minio-mc) is rewritten as:
+#
+#   <global.airgapped.repository>/<last-path-component>:<tag>
+#
+# So `supkube.azurecr.io/backend:0.9.1.2-alpha` becomes
+# `harbor.internal.corp/supkube-mirror/backend:0.9.1.2-alpha`.
+# The rewrite is done by the supkube.image.fullname helper in _helpers.tpl
+# — every image reference in the chart goes through it.
+#
+# Velero subchart caveat
+# ──────────────────────
+# Helm subcharts (we bundle Velero) get their OWN values namespace and don't
+# inherit `global.*` for image fields by convention. Airgap install MUST
+# also pass:
+#   --set velero.image.repository=<mirror>/velero
+#   --set velero.image.tag=v1.18.0
+#   --set 'velero.initContainers[0].image=<mirror>/velero-plugin-for-csi:v0.7.0'
+#   ... (one per plugin)
+#
+# See USER_MANUAL §24 for the full overlay pattern (values.airgap.yaml).
+#
+# Backward compat
+# ───────────────
+# v0.9.1.0 had a `image.registry` field that was a documentation lie — the
+# chart templates never read it. It's removed in v0.8.14. Anyone using the
+# old field gets a friendly fail in eula-check template (TODO: add deprecation
+# warning).
+global:
+  airgapped:
+    repository: ""
 # v0.9.0.3: image repositories point at supkube.azurecr.io (anonymous-pull
 # enabled, public). For local dev on docker-desktop the publish script also
 # tags every build as "supkube/<name>:<version>" so historical `kubectl set

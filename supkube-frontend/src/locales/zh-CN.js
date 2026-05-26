@@ -35,7 +35,7 @@ export default {
     },
     logViewer: {
       comingTitle: '日志查看器 — v0.8.14 即将上线',
-      comingBody: 'Backend / Frontend / Velero / Dex 日志一站可查，按组件/严重程度/Pod/时间窗筛选，"一键打包推送支持"。告别 kubectl logs 满屏滚动。',
+      comingBody: 'Backend / Frontend / Velero / Dex 日志一站可查，按组件/严重程度/Pod/时间窗筛选，"一键打包下载"。告别 kubectl logs 满屏滚动。',
       bullet1: '分面过滤：组件 / 严重程度 / Pod / 时间窗',
       bullet2: '实时跟随（Live tail）+ 暂停 / 继续',
       bullet3: '按 Action 跳转日志（备份/恢复抽屉直接跳过滤好的视图）',

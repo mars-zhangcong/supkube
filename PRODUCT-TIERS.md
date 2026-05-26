@@ -76,7 +76,8 @@ Premium     · 旗舰 / 灾备规划 · + BCM / BIA / RA / 自动化恢复编排
 | Audit Log (全 admin 操作落 K8s Event + 可查页) | ✅ | v0.8.5 |
 | Cluster Hygiene / Orphan GC (孤儿 VSC/PVB/DataUpload 自动清理) | ✅ | v0.8.8 |
 | Backup Advisor (智能评估每个 application 备份必要性) | ✅ | v0.7.5 |
-| Log Viewer + Upload to Support (Datadog 风) | 🔲 v0.8.14 | 当前 sprint |
+| Log Viewer + Download Logs (Datadog 风) | 🔲 v0.8.14 | 当前 sprint |
+| AirGapped install 真支持 (`global.airgapped.repository`) | 🔲 v0.8.14 LV8 | 当前 sprint（**Foundation 层**——离线/内网客户的基本权利） |
 | `supkube_debug.sh` 一键 debug bundle | 🔲 v0.8.14 | 当前 sprint |
 | Settings → Support Contact + System Information 页 | 🔲 v0.8.14 | 当前 sprint |
 | License Manager 前端 (Kasten 1:1 复刻) | 🔲 v0.9.2 | |
@@ -353,7 +354,8 @@ installtasks.supkube.io     ← Activity 历史 (v0.9.10)
 
 下一个里程碑 = 客户 demo 闭环：
 - ✅ 客户能装 (v0.9.1.0 preflight + EULA + Install Reference)
-- 🔲 客户出问题能自助排障 (v0.8.14 Log Viewer + Upload to Support)
+- 🔲 客户出问题能自助排障 (v0.8.14 Log Viewer + Download Logs + supkube_debug.sh)
+- 🔲 客户能离线/内网装 (v0.8.14 LV8 真 AirGapped 支持)
 - 🔲 客户能买 (v0.9.2 License Manager 前端 + mock license 验证)
 
 之后即可上 demo 客户。

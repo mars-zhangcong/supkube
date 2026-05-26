@@ -29,7 +29,7 @@ spec:
       serviceAccountName: {{ include "supkube.fullname" . }}
       containers:
         - name: dex
-          image: "{{ .Values.auth.dex.image.repository }}:{{ .Values.auth.dex.image.tag }}"
+          image: {{ include "supkube.image" (dict "root" $ "repository" .Values.auth.dex.image.repository "tag" .Values.auth.dex.image.tag) | quote }}
           imagePullPolicy: {{ .Values.auth.dex.image.pullPolicy }}
           command: ["/usr/local/bin/dex"]
           args: ["serve", "/etc/dex/config.yaml"]
