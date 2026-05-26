@@ -6,18 +6,41 @@ export default {
     titleTail: '— Kubernetes 数据保护'
   },
   nav: {
-    // v0.9.0.2 客户要求的菜单中文文案
+    // v0.9.1.2 菜单重构（Mars 2026-05-26 评审）：
+    //   侧边栏 10 → 7 项；"可观测性" hub 合并 备份顾问+活动查看+审计日志+日志查看器；
+    //   存储位置 + 快照位置 移入 系统设置 → 集群管理 → 存储类管理。
     dashboard: '系统概览',
+    observability: '可观测性',             // v0.9.1.2 hub（前身: 备份顾问）
     applications: '应用列表',
-    restorePoints: '数据还原',
-    activity: '活动查看',
-    restores: '恢复', // legacy — kept for any unmigrated references
+    restorePoints: '应用还原',             // v0.9.1.2 改名（前身: 数据还原）
     policies: '策略制定',
     transformSets: '变换处理',
-    storage: '存储位置',
-    snapshotLocations: '快照位置',
-    advisor: '备份顾问',
-    settings: '系统设置'
+    settings: '系统设置',
+
+    // 已退役的侧边栏项 — 因为面包屑 / 抽屉标题 / 深链书签仍引用，所以保留文案。
+    // 路由都还在；只是侧边栏入口收掉。
+    activity: '活动查看',
+    restores: '恢复',                       // legacy — v0.8.0 之前的页面
+    storage: '存储位置',                    // 已移入 系统设置 → 集群管理
+    snapshotLocations: '快照位置',          // 已移入 系统设置 → 集群管理
+    advisor: '备份顾问'                     // 已移入 可观测性 → 备份顾问 tab
+  },
+  observability: {
+    subtitle: '一站看清备份运行情况——活动、顾问建议、审计轨迹、日志全在这里。',
+    tabs: {
+      activity: '活动查看',
+      advisor: '备份顾问',
+      audit: '审计日志',
+      logs: '日志查看器'
+    },
+    logViewer: {
+      comingTitle: '日志查看器 — v0.8.14 即将上线',
+      comingBody: 'Backend / Frontend / Velero / Dex 日志一站可查，按组件/严重程度/Pod/时间窗筛选，"一键打包推送支持"。告别 kubectl logs 满屏滚动。',
+      bullet1: '分面过滤：组件 / 严重程度 / Pod / 时间窗',
+      bullet2: '实时跟随（Live tail）+ 暂停 / 继续',
+      bullet3: '按 Action 跳转日志（备份/恢复抽屉直接跳过滤好的视图）',
+      bullet4: '已知错误模式自动建议修复（Runbook hint）'
+    }
   },
   common: {
     cancel: '取消',

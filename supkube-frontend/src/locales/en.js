@@ -10,17 +10,43 @@ export default {
     titleTail: '— Kubernetes Data Protection'
   },
   nav: {
+    // v0.9.1.2 menu restructure (Mars 2026-05-26 review):
+    //   Sidebar 10 → 7 entries; Observability hub (Advisor + Activity +
+    //   Audit Log + Log Viewer) replaces 3 separate entries; Storage +
+    //   Snapshot Locations move into Settings → Cluster Management.
     dashboard: 'Dashboard',
+    observability: 'Observability',           // v0.9.1.2 hub (was 'Backup Advisor')
     applications: 'Applications',
-    restorePoints: 'Restore Points',
-    activity: 'Activity',
-    restores: 'Restores', // legacy — kept for any unmigrated references
+    restorePoints: 'App Restore',             // v0.9.1.2 renamed from 'Restore Points'
     policies: 'Policies',
     transformSets: 'Transform Sets',
-    storage: 'Storage',
-    snapshotLocations: 'Snapshot Locations',
-    advisor: 'Backup Advisor',
-    settings: 'Settings'
+    settings: 'Settings',
+
+    // Retired sidebar entries — kept here because they still appear in
+    // breadcrumbs, drawer titles, and deep-link bookmarks. The routes are
+    // alive; only the sidebar surface was removed.
+    activity: 'Activity',
+    restores: 'Restores',                     // legacy — pre-v0.8.0 page
+    storage: 'Storage',                       // moved to Settings → Cluster Management
+    snapshotLocations: 'Snapshot Locations',  // moved to Settings → Cluster Management
+    advisor: 'Backup Advisor'                 // moved to Observability → Advisor tab
+  },
+  observability: {
+    subtitle: 'See what\'s happening across your backup estate — activity, advisor recommendations, audit trail, and logs in one place.',
+    tabs: {
+      activity: 'Activity',
+      advisor: 'Backup Advisor',
+      audit: 'Audit Log',
+      logs: 'Log Viewer'
+    },
+    logViewer: {
+      comingTitle: 'Log Viewer — coming in v0.8.14',
+      comingBody: 'Stream backend / frontend / Velero / Dex logs with faceted filters and one-click "Upload to Support". Replaces the carpet-bombing of kubectl logs commands.',
+      bullet1: 'Faceted filtering: component, severity, pod, time range',
+      bullet2: 'Live tail with pause / resume',
+      bullet3: 'Per-Action log views (jump from Backup/Restore drawer)',
+      bullet4: 'Runbook hints for known error patterns'
+    }
   },
   common: {
     cancel: 'Cancel',

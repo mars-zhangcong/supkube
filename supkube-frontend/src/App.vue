@@ -71,6 +71,16 @@
           </el-dropdown>
         </div>
 
+        <!-- v0.9.1.2 menu restructure (Mars 2026-05-26 review):
+             10 entries → 7. Reorder + rename:
+               - 备份顾问  → 可观测性 (hub: Advisor + Activity + Audit Log + Log Viewer)
+               - 数据还原  → 应用还原 (rename only, route stays /backups)
+               - 存储位置 + 快照位置 → moved to Settings → 集群管理 →
+                 内部 Storage Class Management tab (per-cluster scoping
+                 since BSL/VSL are cluster-local Velero resources)
+             Old routes /activity, /advisor, /storage, /snapshot-locations
+             remain valid for deep-links + admin shortcuts; only the sidebar
+             entries were retired. -->
         <el-menu
           :router="true"
           :default-active="$route.path"
@@ -82,17 +92,13 @@
             <el-icon><Monitor /></el-icon>
             <template #title>{{ t('nav.dashboard') }}</template>
           </el-menu-item>
+          <el-menu-item index="/observability">
+            <el-icon><MagicStick /></el-icon>
+            <template #title>{{ t('nav.observability') }}</template>
+          </el-menu-item>
           <el-menu-item index="/applications">
             <el-icon><Grid /></el-icon>
             <template #title>{{ t('nav.applications') }}</template>
-          </el-menu-item>
-          <el-menu-item index="/backups">
-            <el-icon><FolderOpened /></el-icon>
-            <template #title>{{ t('nav.restorePoints') }}</template>
-          </el-menu-item>
-          <el-menu-item index="/activity">
-            <el-icon><DataLine /></el-icon>
-            <template #title>{{ t('nav.activity') }}</template>
           </el-menu-item>
           <el-menu-item index="/policies">
             <el-icon><Clock /></el-icon>
@@ -102,17 +108,9 @@
             <el-icon><Tools /></el-icon>
             <template #title>{{ t('nav.transformSets') }}</template>
           </el-menu-item>
-          <el-menu-item index="/storage">
-            <el-icon><Coin /></el-icon>
-            <template #title>{{ t('nav.storage') }}</template>
-          </el-menu-item>
-          <el-menu-item index="/snapshot-locations">
-            <el-icon><Camera /></el-icon>
-            <template #title>{{ t('nav.snapshotLocations') }}</template>
-          </el-menu-item>
-          <el-menu-item index="/advisor">
-            <el-icon><MagicStick /></el-icon>
-            <template #title>{{ t('nav.advisor') }}</template>
+          <el-menu-item index="/backups">
+            <el-icon><FolderOpened /></el-icon>
+            <template #title>{{ t('nav.restorePoints') }}</template>
           </el-menu-item>
           <el-menu-item index="/settings">
             <el-icon><Setting /></el-icon>
@@ -532,35 +530,35 @@ html.dark .schedule-cron { color: #909399 !important; }
   border-bottom: 1px solid #ebeef5;
   margin-bottom: 8px;
 }
-/* v0.9.0.2 — collapsed sidebar alignment, take 2.
-   The v0.9.0.1 attempt added flex-direction:column + align-items:center on
-   .sidebar-brand.is-collapsed, but kept the brand row's auto height (60px)
-   AND the default 10px gap from .sidebar-brand. The gap stayed inherited,
-   the toggle button stayed margin:auto from leftover flex sizing, and the
-   net effect was logo and toggle landing 3-4px left of the menu midline
-   (x=32 of the 64px column). Mars's screenshot showed two icons leaning
-   left, the menu icons below them landing centered — exactly that gap.
-   Take 2: collapse the brand row to icon-only height (no padding gap),
-   then stack logo + toggle as separate centered rows with their own
-   explicit 64px wrappers — Webkit/Blink/Gecko all agree on
-   width:100%; display:flex; justify-content:center. */
+/* v0.9.1.2 — collapsed sidebar alignment, take 3 (CSS Grid).
+   Take 1 (flex column + align-items: center) and Take 2 (margin: 0 auto
+   belt-and-braces) both failed Mars's eye-test — icons still leaned left
+   of the el-menu-item column. The flex-based centering is sensitive to
+   the implicit content width of children + browser-specific text-baseline
+   rules, even when align-items: center is set.
+   Take 3 ditches flex for CSS Grid with one fixed-width column. Grid's
+   `justify-items: center` is a stricter geometric centering — children's
+   bounding boxes are forced to the center of the 64px column, no
+   baseline / line-height / inline-flex quirks. Cross-browser identical.
+
+   The 64px column matches el-aside.is-collapsed width exactly, so the
+   icons land at x=32 — same as where Element Plus renders el-menu-item
+   icons in collapsed mode (margin: 2px 8px → 48px wide menu-item with
+   justify-content: center → icon-center at 8 + 24 = 32). All icons in
+   the column share one vertical line. */
 .sidebar-brand.is-collapsed {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 64px;
+  justify-items: center;
   align-items: center;
-  justify-content: flex-start;
+  gap: 10px;
   width: 64px;
   height: auto;
   padding: 10px 0 8px;
-  gap: 10px;
 }
-.sidebar-brand.is-collapsed .sidebar-logo {
-  display: block;
-  margin: 0 auto;        /* belt-and-braces centering for older Webkit */
-}
-.sidebar-brand.is-collapsed .sidebar-toggle {
-  display: inline-flex;
-  margin: 0 auto;
+.sidebar-brand.is-collapsed > * {
+  /* Reset any margin children had from non-collapsed state; grid handles centering. */
+  margin: 0;
 }
 .sidebar-logo {
   width: 28px;
@@ -578,12 +576,15 @@ html.dark .schedule-cron { color: #909399 !important; }
 .cluster-switcher {
   margin: 0 12px 12px;
 }
-/* v0.9.0.2 — collapsed Mode Switcher.
-   Match the el-menu-item geometry below it (margin: 2px 8px → 48px wide,
-   icon centered at x=32) so the row reads as part of the icon column
-   instead of a stranded 40px-wide button leaning left. */
+/* v0.9.1.2 — collapsed Mode Switcher (take 3, CSS Grid).
+   Same alignment rationale as .sidebar-brand.is-collapsed: use a Grid
+   wrapper with one 64px column so the trigger button lands at the exact
+   center, matching x=32 of the el-menu-item icon column below. */
 .cluster-switcher.is-collapsed {
-  margin: 0 8px 8px;
+  display: grid;
+  grid-template-columns: 64px;
+  justify-items: center;
+  margin: 0 0 8px;
 }
 .cs-trigger.is-collapsed {
   justify-content: center;

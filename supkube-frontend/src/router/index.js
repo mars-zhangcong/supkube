@@ -18,8 +18,12 @@ const routes = [
   { path: '/backups/:name', name: 'BackupDetail', component: () => import('../views/BackupDetail.vue') },
   // v0.8.0: Activity replaces the Restores page. Keep /restores as a
   // redirect for any bookmarks/external links that still point at it.
+  // v0.9.1.2: Activity + Advisor + Audit Log + (future) Log Viewer folded
+  // into "Observability" hub. The standalone routes stay valid for deep
+  // links / admin shortcuts; only the sidebar entries were retired.
+  { path: '/observability', name: 'Observability', component: () => import('../views/Observability.vue') },
   { path: '/activity', name: 'Activity', component: () => import('../views/Activity.vue') },
-  { path: '/restores', redirect: '/activity?type=Restore' },
+  { path: '/restores', redirect: '/observability?tab=activity' },
   { path: '/policies', name: 'Policies', component: () => import('../views/Policies.vue') },
   { path: '/transform-sets', name: 'TransformSets', component: () => import('../views/TransformSets.vue') },
   { path: '/storage', name: 'StorageLocations', component: () => import('../views/StorageLocations.vue') },
