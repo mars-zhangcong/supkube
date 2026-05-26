@@ -345,6 +345,18 @@ if [[ -f "$PREFLIGHT_SRC" ]]; then
     "no-cache, no-store, must-revalidate, max-age=0" "text/x-shellscript"
 fi
 
+# supkube_debug.sh: customer-facing diagnostic bundle generator (v0.8.14
+# LV6). Same no-cache strategy as preflight.sh — updating the script (new
+# CR collected, new error pattern recognized) reaches the customer base on
+# the next invocation. Customer runs:
+#   curl -fsSL https://charts.supkube.com/supkube_debug.sh | bash -s -- -n supkube -o debug.tar.gz
+DEBUG_SRC="$REPO_ROOT/hack/supkube_debug.sh"
+if [[ -f "$DEBUG_SRC" ]]; then
+  echo "  Uploading supkube_debug.sh (diagnostic bundle generator)…"
+  upload_blob "supkube_debug.sh" "$DEBUG_SRC" \
+    "no-cache, no-store, must-revalidate, max-age=0" "text/x-shellscript"
+fi
+
 # ─── 9/9. Verify + print summary ─────────────────────────────────────
 echo ""
 echo "▶ [9/9] Verifying public reachability…"
