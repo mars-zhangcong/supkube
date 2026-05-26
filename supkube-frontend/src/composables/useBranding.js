@@ -20,9 +20,15 @@ import { getBranding } from '../api/velero'
 
 // Built-in defaults — kept simple. If the bundled assets later change
 // path (e.g. moved out of /public), update these in one place.
+// v0.9.1.3 fix (Mars 2026-05-26 demo): defaults were "/favicon.svg" but
+// the actual files bundled in public/ are "supkube-logo.svg" and
+// "supkube-favicon.svg" — the wrong path made fresh installs show a
+// broken-image icon in the sidebar (browser 404'd, then rendered the
+// browser's broken-image placeholder). Customer-visible first-impression
+// bug. Fixed by pointing defaults at the real bundled paths.
 const DEFAULT_PRODUCT_NAME    = 'SupKube'
-const DEFAULT_LOGO_URL        = '/favicon.svg'  // bundled built-in
-const DEFAULT_FAVICON_URL     = '/favicon.svg'  // browser tab default
+const DEFAULT_LOGO_URL        = '/supkube-logo.svg'      // bundled built-in (see supkube-frontend/public/)
+const DEFAULT_FAVICON_URL     = '/supkube-favicon.svg'   // matches index.html link rel="icon"
 const PAGE_TITLE_TAIL         = '— Kubernetes Data Protection'
 
 // One module-level state object. Imports from this file all receive

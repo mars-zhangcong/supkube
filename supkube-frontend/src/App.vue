@@ -10,7 +10,12 @@
                branding store (useBranding). Admin can change them in
                Settings → Branding; everyone sees the new values
                immediately (no per-browser localStorage). -->
-          <img :src="branding.logoUrl" :alt="branding.productName" class="sidebar-logo" />
+          <!-- v0.9.1.3: onerror handler removes the img if the URL 404s,
+               instead of showing the browser's ugly broken-image icon.
+               useBranding defaults to /supkube-logo.svg which is bundled
+               in public/; this onerror is the safety net for OEM customers
+               who set logoDataUrl to a bad path. -->
+          <img :src="branding.logoUrl" :alt="branding.productName" class="sidebar-logo" @error="$event.target.style.visibility='hidden'" />
           <span v-if="!collapsed" class="sidebar-brand-text">{{ branding.productName }}</span>
           <button
             class="sidebar-toggle"
@@ -71,16 +76,18 @@
           </el-dropdown>
         </div>
 
-        <!-- v0.9.1.2 menu restructure (Mars 2026-05-26 review):
-             10 entries → 7. Reorder + rename:
-               - 备份顾问  → 可观测性 (hub: Advisor + Activity + Audit Log + Log Viewer)
-               - 数据还原  → 应用还原 (rename only, route stays /backups)
-               - 存储位置 + 快照位置 → moved to Settings → 集群管理 →
-                 内部 Storage Class Management tab (per-cluster scoping
-                 since BSL/VSL are cluster-local Velero resources)
-             Old routes /activity, /advisor, /storage, /snapshot-locations
-             remain valid for deep-links + admin shortcuts; only the sidebar
-             entries were retired. -->
+        <!-- v0.9.1.3 menu restoration (Mars 2026-05-26 demo blocker):
+             v0.9.1.2 removed 存储位置 + 快照位置 from the sidebar planning
+             to move them into Cluster Management as tabs — but that
+             replacement page wasn't built yet, leaving customers unable
+             to add a BSL (the literal next step in any demo). Direct
+             URL /storage worked but expecting customers to type paths is
+             unacceptable.
+             Decision: restore the original entries until the proper
+             Storage Class Management page is shipped (v0.9.1.4+). Keep
+             the Observability hub as an additional entry too — it
+             provides better Activity/Advisor/Audit UX. Net: 8 entries
+             until v0.9.1.4. -->
         <el-menu
           :router="true"
           :default-active="$route.path"
@@ -111,6 +118,14 @@
           <el-menu-item index="/backups">
             <el-icon><FolderOpened /></el-icon>
             <template #title>{{ t('nav.restorePoints') }}</template>
+          </el-menu-item>
+          <el-menu-item index="/storage">
+            <el-icon><Coin /></el-icon>
+            <template #title>{{ t('nav.storage') }}</template>
+          </el-menu-item>
+          <el-menu-item index="/snapshot-locations">
+            <el-icon><Camera /></el-icon>
+            <template #title>{{ t('nav.snapshotLocations') }}</template>
           </el-menu-item>
           <el-menu-item index="/settings">
             <el-icon><Setting /></el-icon>
