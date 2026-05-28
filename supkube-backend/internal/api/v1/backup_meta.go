@@ -97,6 +97,31 @@ type SupKubeBackupMeta struct {
 	// BSL (creds missing, bucket unavailable, etc.) so the user sees
 	// "tarball size unavailable: BSL Unavailable" instead of silent zero.
 	TarballError string `json:"tarballError,omitempty"`
+
+	// Imported (v0.9.1.5) = true when this Backup was synced INTO the
+	// current cluster from a shared BSL but was NOT created here. This is
+	// the authoritative cross-cluster signal that the "Imported" chip +
+	// whole-tarball restore UX depend on.
+	//
+	// Detection (see detectImportedBackup): a scheduled Backup carries a
+	// velero.io/schedule-name label; if no Schedule with that name exists
+	// in THIS cluster's velero namespace, the owning cluster has it and we
+	// don't → imported. (Velero's BackupSyncController copies the Backup CR
+	// from object storage but never re-creates the Schedule.)
+	//
+	// IMPORTANT: do NOT rely on a velero.io/source-cluster label — Velero
+	// does not write one. It only stamps velero.io/source-cluster-k8s-
+	// gitversion/major/minor (K8s version, not cluster identity). An earlier
+	// frontend heuristic checked the non-existent label and so never lit the
+	// chip (customer pain C-001). This server-side schedule-existence check
+	// replaces it.
+	Imported bool `json:"imported"`
+
+	// Origin classifies who created the Action: "policy" (a local Schedule
+	// fired it), "manual" (user clicked Create here), or "imported" (synced
+	// from another cluster). Unified with actions.Action.Origin so the
+	// Activity page, Restore Points table, and Restore drawer all agree.
+	Origin string `json:"origin,omitempty"`
 }
 
 // Data path enum values. Returned in SupKubeBackupMeta.DataPath. The

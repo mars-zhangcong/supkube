@@ -44,6 +44,17 @@
         <el-icon><ArrowLeft /></el-icon> {{ t('restoreDrawer.backToDetails') }}
       </button>
 
+      <!-- v0.9.1.5: Imported chip — surfaces "this RP came from another
+           cluster via BSL sync" right at the top of the drawer. Without
+           this customers couldn't visually distinguish local vs imported
+           RPs, which was a real demo gap (Mars 2026-05-26). -->
+      <div v-if="isImported" class="imported-banner">
+        <el-tag type="warning" effect="plain" size="small">
+          <el-icon><Operation /></el-icon> {{ t('restoreDrawer.importedBadge') }}
+        </el-tag>
+        <span class="imported-source">{{ t('restoreDrawer.importedFrom', { cluster: importedSourceCluster }) }}</span>
+      </div>
+
       <!-- ===== v0.9.0 MC3: Target Cluster — only when ≥2 clusters registered ===== -->
       <section v-if="cluster.clusters.value.length > 1" class="section">
         <h4 class="section-title">{{ t('restoreDrawer.targetClusterTitle') }}</h4>
@@ -320,6 +331,17 @@
             <el-icon class="rotating"><Loading /></el-icon>
             {{ t('common.loading') }}
           </div>
+          <!-- v0.9.1.5: imported-RP empty state isn't an "error" — the
+               backend's artifact lister currently can't enumerate from
+               BSL tarball (see task #91); customer still gets full
+               whole-tarball restore from Velero. Show this clearly. -->
+          <div v-else-if="artifactsList.length === 0 && isImported" class="imported-asis-banner">
+            <el-icon class="imported-asis-icon"><InfoFilled /></el-icon>
+            <div>
+              <strong>{{ t('restoreDrawer.importedAsIsTitle') }}</strong>
+              <p>{{ t('restoreDrawer.importedAsIsBody') }}</p>
+            </div>
+          </div>
           <div v-else-if="artifactsList.length === 0" class="artifacts-empty">
             {{ t('restoreDrawer.noArtifacts') }}
           </div>
@@ -367,14 +389,26 @@
 
     <template #footer>
       <div class="drawer-footer">
-        <el-button
-          type="primary"
-          :loading="submitting"
-          :disabled="!canSubmit"
-          @click="handleSubmit"
+        <!-- v0.9.1.5: tooltip on disabled state. Without this customers
+             see a grey button and can't tell which field is blocking
+             them. The tooltip surfaces the specific blocker computed
+             above. -->
+        <el-tooltip
+          :content="cantSubmitReason"
+          placement="top"
+          :disabled="!cantSubmitReason"
         >
-          <el-icon><RefreshLeft /></el-icon> {{ t('common.restore') }}
-        </el-button>
+          <span>
+            <el-button
+              type="primary"
+              :loading="submitting"
+              :disabled="!canSubmit"
+              @click="handleSubmit"
+            >
+              <el-icon><RefreshLeft /></el-icon> {{ t('common.restore') }}
+            </el-button>
+          </span>
+        </el-tooltip>
         <el-button @click="visibleProxy = false">{{ t('common.cancel') }}</el-button>
       </div>
     </template>
@@ -504,10 +538,63 @@ const pfSeverityClass = computed(() => {
   return hasBlockers.value ? 'pf-summary-blocker' : 'pf-summary-warning'
 })
 
+// v0.9.1.5: detect imported RP — now AUTHORITATIVE from the backend.
+//
+// The backend (SupKubeBackupMeta.Imported) decides this by checking whether
+// the Backup's velero.io/schedule-name refers to a Schedule that exists in
+// THIS cluster. If not, the owning cluster has it and we don't → this RP was
+// synced in from a shared BSL. We trust that flag here.
+//
+// History (C-001): an earlier version of this computed checked a
+// velero.io/source-cluster label that Velero NEVER writes — so the chip
+// never lit. Velero only stamps velero.io/source-cluster-k8s-gitversion
+// (the K8s version, not a cluster name). The reliable signal lives
+// server-side (schedule existence), so detection moved there.
+//
+// For imported RPs the only viable restore mode is "whole tarball as-is":
+// our ListBackupArtifacts endpoint lists LIVE objects in the source ns to
+// enumerate contents, which returns empty when the source ns doesn't exist
+// locally. Velero restores everything in the backup regardless of our
+// client-side artifact selection.
+const isImported = computed(() => props.backup?.supkube?.imported === true)
+
+// Velero doesn't record the source cluster NAME, only its K8s version. We
+// surface that as a hint ("from a v1.32 cluster") rather than claim a name
+// we don't have.
+const importedSourceCluster = computed(() => {
+  const anns = props.backup?.metadata?.annotations || {}
+  const ver  = anns['velero.io/source-cluster-k8s-gitversion']
+  return ver ? `Kubernetes ${ver}` : t('restoreDrawer.importedUnknownSource')
+})
+
+// Reason the Restore button is disabled — shown as tooltip on hover so
+// customers can self-diagnose instead of staring at a grey button.
+const cantSubmitReason = computed(() => {
+  if (!props.backup)                         return t('restoreDrawer.disabled.noBackup')
+  if (!targetNs.value)                       return t('restoreDrawer.disabled.noTargetNs')
+  if (!restoreName.value)                    return t('restoreDrawer.disabled.noRestoreName')
+  if (isOverwriteInPlace.value && !confirmOverwrite.value)
+                                             return t('restoreDrawer.disabled.confirmOverwrite')
+  // Imported RPs: client-side artifact selection unavailable, but
+  // whole-tarball restore is fine.
+  if (includedCount.value === 0 && !isImported.value && artifactsList.value.length > 0)
+                                             return t('restoreDrawer.disabled.noArtifactsSelected')
+  if (hasBlockers.value && !ignoreBlockers.value)
+                                             return t('restoreDrawer.disabled.preflightBlockers')
+  if (preflightLoading.value)                return t('restoreDrawer.disabled.preflightRunning')
+  if (submitting.value)                      return t('restoreDrawer.disabled.submitting')
+  return ''
+})
+
 const canSubmit = computed(() => {
   if (!props.backup || !targetNs.value || !restoreName.value) return false
   if (isOverwriteInPlace.value && !confirmOverwrite.value) return false
-  if (includedCount.value === 0) return false
+  // v0.9.1.5: imported RPs may have 0 artifacts listed (backend can't
+  // enumerate without reading BSL tarball — see task #91). In that case
+  // we still allow submit — Velero restores the whole backup contents
+  // server-side. If artifactsList IS populated, require at least one
+  // selected as before.
+  if (artifactsList.value.length > 0 && includedCount.value === 0) return false
   // v0.7.12: Pre-flight blockers gate the Restore button. The user can
   // override with the "Ignore conflicts and continue" checkbox — the
   // Restore will likely fail but we don't paternalistically lock them out.
@@ -1081,6 +1168,52 @@ watch(() => props.visible, (v) => {
   text-align: center;
   color: var(--sk-text-caption);
   font-size: 13px;
+}
+/* v0.9.1.5: imported-RP top banner + as-is restore banner inside Spec section. */
+.imported-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 16px;
+  padding: 8px 12px;
+  background: var(--sk-warning-bg, #fff7e6);
+  border-left: 3px solid var(--sk-warning, #faad14);
+  border-radius: 4px;
+  font-size: 12px;
+}
+.imported-banner :deep(.el-icon) {
+  font-size: 14px;
+}
+.imported-source {
+  color: var(--sk-text-caption, #6b7280);
+  font-family: 'SF Mono', Menlo, monospace;
+  font-size: 11px;
+}
+.imported-asis-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--sk-info-bg, #f0f7ff);
+  border-left: 3px solid var(--sk-info, #1677ff);
+  border-radius: 4px;
+  font-size: 13px;
+}
+.imported-asis-icon {
+  font-size: 18px;
+  color: var(--sk-info, #1677ff);
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+.imported-asis-banner strong {
+  color: var(--sk-text, #1f2937);
+  font-weight: 600;
+}
+.imported-asis-banner p {
+  margin: 4px 0 0;
+  color: var(--sk-text-caption, #6b7280);
+  font-size: 12px;
+  line-height: 1.5;
 }
 .rotating {
   animation: spin 1s linear infinite;

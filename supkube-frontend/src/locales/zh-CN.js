@@ -382,6 +382,22 @@ export default {
     }
   },
   restoreDrawer: {
+    // v0.9.1.5 (Mars demo 2026-05-26 反馈)
+    importedBadge: '跨集群导入',
+    importedFrom: '从其他集群同步（{cluster}）',
+    importedUnknownSource: '其他集群',
+    importedAsIsTitle: '整包还原（导入 RP 暂不支持单项物件选择）',
+    importedAsIsBody: 'Velero 服务端会按 backup tarball 还原所有资源。客户端单项选择需要先读取 BSL tarball 元数据 — v0.9.1.7 上线 (任务 #91)。当前点 Submit 会整包还原。',
+    disabled: {
+      noBackup:           '没有选择 backup。',
+      noTargetNs:         '请先选目标命名空间。',
+      noRestoreName:      'Restore 名称为空。',
+      confirmOverwrite:   '请先勾选 "我理解 — 删除并重建命名空间"。',
+      noArtifactsSelected:'至少选一个物件还原。',
+      preflightBlockers:  '预检发现冲突。勾选 "忽略并继续" 覆盖。',
+      preflightRunning:   '预检进行中…',
+      submitting:         '还原提交中…'
+    },
     title: '从备份恢复',
     backToDetails: '返回详情',
     // v0.9.0 MC3: 跨集群恢复（仅当 ≥2 集群已注册时显示）
@@ -460,6 +476,9 @@ export default {
     invalid: '异常',
     resources: '资源',
     namespaceTooltip: '命名空间：{name}',
+    storageLocationCol: '存储位置',
+    bslLocalTooltip: '本地副本 → {name}',
+    bslCloudTooltip: '异地副本 → {name}',
     action: '动作',
     // v0.8.12 LBS2: 快照/导出 → 本地/云端。代码 key 不变（向后兼容），仅显示文案改。
     actionSnapshot: 'L1 本地',

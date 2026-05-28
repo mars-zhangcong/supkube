@@ -396,6 +396,28 @@ export default {
   restoreDrawer: {
     title: 'Restore From Backup',
     backToDetails: 'Back To Details',
+    // v0.9.1.5: Imported RP badge + "restore as-is" mode banner.
+    // Mars demo 2026-05-26: customers couldn't tell imported vs local
+    // RPs, and the Restore button was disabled for imported RPs because
+    // ListBackupArtifacts returns empty (source ns doesn't exist locally).
+    // These strings surface both bits clearly.
+    importedBadge: 'Imported',
+    importedFrom: 'Synced from another cluster ({cluster})',
+    importedUnknownSource: 'another cluster',
+    importedAsIsTitle: 'Whole-tarball restore (artifact-level selection unavailable for imported RPs)',
+    importedAsIsBody: 'Velero will restore every resource in the backup tarball server-side. Client-side selection requires reading the BSL tarball metadata — coming in v0.9.1.7 (task #91). For now: Submit restores everything as-is.',
+    // Tooltip strings shown on hover of a disabled Restore button so the
+    // customer can self-diagnose. Each maps to one condition in cantSubmitReason.
+    disabled: {
+      noBackup:           'No backup selected.',
+      noTargetNs:         'Select a target namespace first.',
+      noRestoreName:      'Restore name is empty.',
+      confirmOverwrite:   'Tick "I understand — delete and recreate the namespace" first.',
+      noArtifactsSelected:'Select at least one artifact to restore.',
+      preflightBlockers:  'Pre-flight detected blocking conflicts. Tick "Ignore and continue" to override.',
+      preflightRunning:   'Pre-flight check is running…',
+      submitting:         'Restore is being submitted…'
+    },
     // v0.9.0 MC3: cross-cluster restore section (only rendered when ≥2 clusters registered)
     targetClusterTitle: 'Target Cluster',
     targetClusterDesc: 'Where to restore. Pick "this-cluster" for an in-place restore (default); any other registered cluster receives a cross-cluster restore — the backup metadata must already be synced via a shared BSL.',
@@ -472,6 +494,9 @@ export default {
     invalid: 'Invalid',
     resources: 'Resources',
     namespaceTooltip: 'Namespace: {name}',
+    storageLocationCol: 'Storage Location',
+    bslLocalTooltip: 'Local copy → {name}',
+    bslCloudTooltip: 'Off-site copy → {name}',
     action: 'Action',
     // v0.8.12 LBS2: renamed Snapshot/Export → Local/Cloud.
     // Internal i18n keys keep the old names for backwards compatibility

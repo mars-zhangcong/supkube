@@ -64,10 +64,10 @@
 |---|---|---|---|---|---|---|---|
 | **Log Viewer + Download Logs + AirGap 真支持** | 5 | 5 | 5 | **15** | 7d | v0.8.14 | 🟢 进行中 (#79) |
 | **License Manager 前端** | 5 | 5 | 4 | **14** | 3d | v0.9.2 | 🔲 (#63) |
-| **Storage Class Mgmt 集群管理 tab** | 4 | 5 | 4 | **13** | 1d | v0.9.1.3 | 🔲 客户已提 |
+| **存储管理 tab (快照位置迁入集群管理；BSL 保持主菜单)** | 4 | 5 | 4 | **13** | 1d | v0.9.1.5 | 🔲 客户已提，task #86 |
 | **#68 Force-Delete 卡住的 Backup** | 3 | 4 | 3 | **10** | 0.5d | v0.9.0.5 | 🔲 (#68) |
 
-**为何 P0**：以上 4 项**任何一个未完成都直接卡商业化路径**。Log Viewer 是客户出问题排障的唯一手段；License Manager 是收钱前提；Storage Class Mgmt 是客户提的；Force-Delete 是真实故障数据可能踩到的点。
+**为何 P0**：以上 4 项**任何一个未完成都直接卡商业化路径**。Log Viewer 是客户出问题排障的唯一手段；License Manager 是收钱前提；存储管理 tab 是客户提的（架构正解：BSL 是全局共享 Storage Profile 留主菜单，VSL 是集群本地配置归集群管理）；Force-Delete 是真实故障数据可能踩到的点。
 
 **v0.8.14 scope 扩张说明 (2026-05-26 客户反馈后)**：原 5d Log Viewer 扩到 7d，新增 LV4 改名（Upload to Support → Download Logs）+ LV8 真 AirGap 支持。详见 §v0.8.14 sprint 表。原因：本地化 + AirGapped 客户群（中国/日本中型企业）是同一群人，他们既不能上传 log（无公网出口）也不能拉公网镜像（防火墙）。两件事在同一 sprint 一起做，叙事完整。
 
@@ -296,7 +296,27 @@ GET    /api/v1/license/usage-history → [{ month, peakNodeCount }]
 
 ---
 
-## v0.9.6 — 应用级恢复演练 （~7 天，独创卖点）
+## v0.9.6 — 还原时安全扫描（YARA + ClamAV 双引擎） （~9 天，Premium 杀手锏）
+
+**触发原因**：客户 2026-05-28 提需求，对标 [kasten-flr-ui](https://github.com/jdtate101/kasten-flr-ui) + [Kodu UK FLR + Malware Detection](https://blog.kodu.uk/kasten-flr-ui-file-level-recovery-malware-detection-scheduled-scanning/)。Kasten 走 ClamAV 单引擎，Veeam/Rubrik/Cohesity 都已上 YARA → SupKube 直接做**双引擎并联**，金融/政府/医疗投标硬指标。
+
+**决策**：扫描架构 = **临时还原 ns + 双引擎并行 Job + ScanResult CRD + 隔离工作流**；引擎选 **yara-x (Rust, Apache-2.0, 无 cgo) + ClamAV**；规则源 = **Yara-Rules 公共仓库内置 ransomware/ 子集 + 客户 ConfigMap 自定义规则**。详见 ADR-030。
+
+| 子任务 | 估算 | 内容 |
+|---|---|---|
+| **SCAN1** | 1.5d | 后端：新 CRD `RestoreSecurityScan`，spec = `{backupName, engines: [clamav, yara], yaraRules: [configMapRef], action: quarantine/block/warn}`；status = `{scanResults[], totalFiles, malicious, quarantined}` |
+| **SCAN2** | 2.0d | 扫描 Job 镜像：基于 `clamav/clamav:latest` + yara-x binary 静态编译；预置 Yara-Rules ransomware/ 子集 (~200 条规则)；Job 模板 = `velero restore --to-ns scan-tmp-$JOB → mount PVC → 并行 clamscan + yara-x → 汇总 JSON → 上报 status → 清理` |
+| **SCAN3** | 1.5d | 定时扫描：新 CRD `ScheduledScan`，cron + backupSelector (label/age)；controller 周期扫所有 backup，命中入 ScanResult |
+| **SCAN4** | 1.0d | 隔离工作流：扫描命中 → 自动给 Backup CR 打 `supkube.io/quarantine=true` label → Restore Wizard 选到隔离的 RP 时 hard-block + 显示扫描报告 + 双重确认 override |
+| **SCAN5** | 1.5d | 前端：新页面 `/security/scans` 列扫描历史 + 命中详情；Restore Wizard 集成 "Run security scan before restore" checkbox |
+| **SCAN6** | 1.0d | 前端：规则管理页 `/security/rules`，列 ConfigMap (label `supkube.io/yara-rules=true`)，上传 `.yar` 文件 → 自动创建 ConfigMap；YARA 规则一键导入 Yara-Rules 公共仓库子集 (ransomware / APT / webshell 分类) |
+| **SCAN7** | 0.5d | 商业分层：公共规则 → Advanced 套餐；客户私有规则 + 商业威胁情报订阅 → Premium 套餐（PRODUCT-TIERS.md 同步更新） |
+
+**与 v0.9.4/v0.9.5 企业安全栈的关系**：可视为 "**企业安全栈 Phase 3 = 数据面安全**"（Phase 1 = 身份, Phase 2 = 准入策略, Phase 3 = 数据扫描）。
+
+---
+
+## v0.9.7 — 应用级恢复演练 （~7 天，独创卖点，原 v0.9.6）
 
 **决策**：编排 = **BPMN 画布 + Activity + Kanister Blueprint** 三层。Kasten 没这能力。
 
@@ -307,15 +327,26 @@ GET    /api/v1/license/usage-history → [{ month, peakNodeCount }]
 | **RV3** | 1.5d | 执行引擎：临时 ns 部署 → 按 DAG 执行 → 每节点超时控制 → 全部完成生成 PDF 报告 → 清理临时 ns |
 | **RV4** | 1.0d | UI 报告页：执行历史 + 每次成功率 + 失败节点详情 + 下载报告 |
 
----
-
-## v0.9.7 — KubeVirt VM 备份恢复 （~8 天，按需）
-
-**触发条件**：客户真用 KubeVirt 时启动。
+> **协同**：v0.9.6 还原扫描 + v0.9.7 还原演练 = "**Verified Restore**" 完整闭环（数据干净 + 流程可用），是 Premium 套餐定价锚点。
 
 ---
 
-## v0.9.8 — MCP Server （~4 天，前瞻 + AI 集成）
+## v0.9.8 — KubeVirt VM 备份恢复 （~5 天，按需，原 v0.9.7）
+
+**触发条件**：客户真用 KubeVirt 时启动（2026-05-28 客户已暗示）。
+
+**估算下调原因**：Velero KubeVirt plugin (`kubevirt/kubevirt-velero-plugin`) 已处理 VM/VMI/DataVolume 协调 90%，我们只需 UI 适配 + 测试。
+
+| 子任务 | 估算 | 内容 |
+|---|---|---|
+| **KV1** | 1.0d | 后端：识别 KubeVirt 资源 (VirtualMachine / VirtualMachineInstance / DataVolume)；Application 列表加 "VM" 类型分类 |
+| **KV2** | 1.5d | Velero KubeVirt plugin 集成进 Helm subchart；preflight 检查 kubevirt-cdi 存在 |
+| **KV3** | 1.5d | 前端：VM 视图（独立 tab 或 Application 内分类），显示 VM 状态 / 关联 PVC / 备份频率 |
+| **KV4** | 1.0d | 测试：在 AKS + docker-desktop 双集群跑 KubeVirt VM E2E（启 VM → 备份 → 删 → 还原 → 验证 boot） |
+
+---
+
+## v0.9.9 — MCP Server （~4 天，前瞻 + AI 集成，原 v0.9.8）
 
 **目标**：Claude / OpenClaw 等 AI 助手直接调 SupKube。
 
@@ -382,7 +413,8 @@ GET    /api/v1/license/usage-history → [{ month, peakNodeCount }]
 | 制品分发架构 | v0.9.0.3 | **Azure 一栈**：ACR (Standard, anonymous pull) + Blob Static Website + Cloudflare Worker 反代；index.yaml 相对 URL → 未来切 CDN/域名零成本 |
 | 镜像架构 | v0.9.0.4 | **multi-arch buildx** (linux/amd64 + linux/arm64)；客户零 `--platform` 参数 |
 | EULA + License | v0.9.1.0 | helm template fail-fast gate + 接受后写 `cm/supkube-eula` 留存元数据；license key alpha 阶段任意字符串通过 |
-| 编排引擎 (v0.9.6) | TBD | **BPMN.io 画布 + Activity + Kanister Blueprint** 三层 |
+| 编排引擎 (v0.9.7) | TBD | **BPMN.io 画布 + Activity + Kanister Blueprint** 三层 |
+| 还原扫描引擎 (v0.9.6) | 2026-05-28 | **双引擎并联**：yara-x (Rust, Apache-2.0, 无 cgo) + ClamAV；规则源 = Yara-Rules 公共仓库 + 客户 ConfigMap；ScanResult CRD + Backup 打 `quarantine` label；扫描 Job = 临时 ns 还原 + 双引擎并行 + 上报清理。详见 ADR-030 |
 
 ---
 

@@ -180,6 +180,23 @@ echo ""
 # changes needed.
 PLATFORMS="${SUPKUBE_BUILD_PLATFORMS:-linux/amd64,linux/arm64}"
 
+# ─── 0/9. Housekeeping: prune stale buildx cache ─────────────────────
+# Why: multi-arch buildx accumulates ~7 GB of cache per publish; three
+# back-to-back publishes can wedge the SSD (we hit ENOSPC on 2026-05-27).
+# `--filter until=72h` keeps the last ~3 days of cache so same-week
+# publishes still benefit from incremental layer reuse, but anything
+# older — which is just last week's tag we've long since pushed to ACR
+# — is freed. Silent + non-fatal: if docker isn't running yet the next
+# step (`az acr login`) will surface the real error.
+# Skip with: SUPKUBE_SKIP_PRUNE=1 hack/publish-release.sh ...
+if [[ "${SUPKUBE_SKIP_PRUNE:-0}" != "1" ]]; then
+  echo "▶ [0/9] Housekeeping: pruning buildx cache older than 72h…"
+  BEFORE=$(docker system df --format '{{.Size}}' 2>/dev/null | head -1 || echo "?")
+  docker builder prune -af --filter "until=72h" >/dev/null 2>&1 || true
+  AFTER=$(docker system df --format '{{.Size}}' 2>/dev/null | head -1 || echo "?")
+  echo "  build cache: $BEFORE → $AFTER"
+fi
+
 # ─── 1/9. Setup buildx + ACR auth ────────────────────────────────────
 echo "▶ [1/9] Preparing multi-arch buildx + ACR login…"
 ACR_NAME="${ACR_LOGIN_SERVER%%.*}"  # strip ".azurecr.io" → just the registry name

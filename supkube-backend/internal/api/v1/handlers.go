@@ -141,6 +141,10 @@ func ListBackups(c *gin.Context) {
 	// over the unique namespace set; same categorisation as the drawer's
 	// artifact-breakdown.
 	appItemsMeta := applicationItemsBatch(c.Request.Context(), backupList.Items)
+	// v0.9.1.5: one Schedule list for the whole page → per-row imported
+	// detection is a map lookup. Drives the "Imported" chip on Restore
+	// Points + the whole-tarball restore UX in the Restore drawer (C-001).
+	localSchedules := localScheduleSet(c.Request.Context(), cl)
 
 	items := make([]map[string]interface{}, 0, len(backupList.Items))
 	for i := range backupList.Items {
@@ -154,6 +158,8 @@ func ListBackups(c *gin.Context) {
 		}
 		meta.ReservedBytes = reservedMeta[b.Name]
 		meta.ApplicationItems = appItemsMeta[b.Name]
+		meta.Imported = detectImportedBackup(b, localSchedules)
+		meta.Origin = detectBackupOrigin(b, localSchedules)
 		// Tarball size from BSL is cached per-BSL with 60s TTL so a
 		// page render is O(BSL count) external calls, not O(backup count).
 		size, errStr := getBackupTarballSize(c.Request.Context(), cl, b)
@@ -317,6 +323,7 @@ func GetBackup(c *gin.Context) {
 	volCount, volBytes := collectVolumeMetadata(c.Request.Context(), cl, name)
 	tarballBytes, tarballErr := getBackupTarballSize(c.Request.Context(), cl, backup)
 	reservedBytes := reservedBytesForBackup(c.Request.Context(), cl, backup)
+	localSchedules := localScheduleSet(c.Request.Context(), cl)
 	meta := SupKubeBackupMeta{
 		DataPath:      classifyDataPath(backup),
 		VolumeCount:   volCount,
@@ -324,6 +331,8 @@ func GetBackup(c *gin.Context) {
 		ReservedBytes: reservedBytes,
 		TarballBytes:  tarballBytes,
 		TarballError:  tarballErr,
+		Imported:      detectImportedBackup(backup, localSchedules),
+		Origin:        detectBackupOrigin(backup, localSchedules),
 	}
 	c.JSON(http.StatusOK, enrichBackupForResponse(backup, meta))
 }

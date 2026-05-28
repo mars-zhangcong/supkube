@@ -220,8 +220,11 @@ func ListActions(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "list backups: " + err.Error()})
 			return
 		}
+		// One Schedule list for the whole page → imported detection per row
+		// is a map lookup, not an API call.
+		localSchedules := localScheduleSet(context.Background(), cl)
 		for i := range backupList.Items {
-			actions = append(actions, backupToAction(&backupList.Items[i]))
+			actions = append(actions, backupToAction(&backupList.Items[i], localSchedules))
 		}
 	}
 
@@ -303,7 +306,7 @@ func GetAction(c *gin.Context) {
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{
-			"action": backupToAction(b),
+			"action": backupToAction(b, localScheduleSet(context.Background(), cl)),
 			"raw":    b,
 		})
 	case ActionTypeRestore:
@@ -323,7 +326,7 @@ func GetAction(c *gin.Context) {
 
 // ─── Backup CR → Action ─────────────────────────────────────────────────
 
-func backupToAction(b *velerov1.Backup) Action {
+func backupToAction(b *velerov1.Backup, localSchedules map[string]bool) Action {
 	a := Action{
 		ID:      b.Name,
 		Type:    ActionTypeBackup,
@@ -333,7 +336,7 @@ func backupToAction(b *velerov1.Backup) Action {
 		Warnings: b.Status.Warnings,
 		RawKind: "Backup",
 		RawName: b.Name,
-		Origin:  detectBackupOrigin(b),
+		Origin:  detectBackupOrigin(b, localSchedules),
 	}
 
 	// Timing — Velero populates StartTimestamp once the controller picks
@@ -415,14 +418,58 @@ func backupToAction(b *velerov1.Backup) Action {
 	return a
 }
 
-func detectBackupOrigin(b *velerov1.Backup) string {
-	if b.Labels != nil && b.Labels["velero.io/schedule-name"] != "" {
+// localScheduleSet lists the Schedule CRs in the velero namespace of the
+// given cluster and returns their names as a lookup set. Used to decide
+// whether a Backup's velero.io/schedule-name refers to a Schedule that
+// lives HERE (→ local "policy") or in another cluster (→ "imported" via
+// shared-BSL sync). On list error we return an empty set; callers treat a
+// missing schedule as "imported", which is the safe degradation for the
+// cross-cluster restore UX (worst case a local RP is mislabelled imported,
+// which still restores correctly as whole-tarball).
+func localScheduleSet(ctx context.Context, cl client.Client) map[string]bool {
+	set := map[string]bool{}
+	list := &velerov1.ScheduleList{}
+	if err := cl.List(ctx, list, client.InNamespace("velero")); err != nil {
+		return set
+	}
+	for i := range list.Items {
+		set[list.Items[i].Name] = true
+	}
+	return set
+}
+
+// detectImportedBackup reports whether a Backup originated in another
+// cluster (synced into this one via a shared BSL). See SupKubeBackupMeta
+// .Imported for the full rationale. localSchedules is the set of Schedule
+// names that exist in THIS cluster (from localScheduleSet).
+func detectImportedBackup(b *velerov1.Backup, localSchedules map[string]bool) bool {
+	if b.Labels != nil {
+		if sn := b.Labels["velero.io/schedule-name"]; sn != "" {
+			// Schedule-driven: imported iff the owning Schedule is absent here.
+			return !localSchedules[sn]
+		}
+	}
+	// Schedule-less (manual) backups: we can't tell origin from schedule
+	// existence. A future refinement compares velero.io/source-cluster-k8s-
+	// gitversion against our own server version, but that needs a discovery
+	// call and is unreliable when clusters share a K8s version. For now a
+	// manual backup is treated as local; cross-cluster manual RPs are rare.
+	return false
+}
+
+// detectBackupOrigin classifies a Backup as "policy" | "manual" |
+// "imported". When localSchedules is non-nil we can distinguish imported
+// (schedule-name set but Schedule absent locally) from policy (Schedule
+// present). Callers that don't have the schedule set may pass nil, in
+// which case a schedule-name label still yields "policy" (legacy behaviour).
+func detectBackupOrigin(b *velerov1.Backup, localSchedules map[string]bool) string {
+	hasSchedule := b.Labels != nil && b.Labels["velero.io/schedule-name"] != ""
+	if hasSchedule {
+		if localSchedules != nil && detectImportedBackup(b, localSchedules) {
+			return "imported"
+		}
 		return "policy"
 	}
-	// Imported detection happens client-side via cluster fingerprint
-	// (see Backups.vue setLocalFingerprint). We don't have the baseline
-	// here, so default to "manual"; UI can override based on fingerprint
-	// when rendering.
 	return "manual"
 }
 

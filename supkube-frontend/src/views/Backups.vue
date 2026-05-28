@@ -205,8 +205,8 @@
         <el-table-column :label="t('restorePoints.createdAt')" width="120" prop="metadata.creationTimestamp" sortable :sort-method="sortByCreated">
           <template #default="{ row }">
             <div class="stacked-time">
-              <div class="sk-body">{{ formatDate(row.metadata?.creationTimestamp) }}</div>
-              <div class="sk-caption">{{ formatTimeOnly(row.metadata?.creationTimestamp) }}</div>
+              <div class="sk-body">{{ formatDate(effectiveCreatedAt(row)) }}</div>
+              <div class="sk-caption">{{ formatTimeOnly(effectiveCreatedAt(row)) }}</div>
             </div>
           </template>
         </el-table-column>
@@ -490,6 +490,15 @@ function backupClusterFingerprint(row) {
 }
 
 const sourceOf = (row) => {
+  // v0.9.1.5: prefer the AUTHORITATIVE backend signal. The server checks
+  // whether the Backup's velero.io/schedule-name refers to a Schedule that
+  // exists in THIS cluster — if not, it was synced in from a shared BSL.
+  // This is reliable even when both clusters run the same K8s version (the
+  // old fingerprint heuristic below silently fails in that case — it was
+  // the root cause of C-001 "没看到 Import 标签").
+  if (row?.supkube?.imported === true) return 'Imported'
+  if (row?.supkube?.imported === false && row?.supkube?.origin) return 'Local'
+  // Fallback: K8s-version fingerprint for older backends without the flag.
   const fp = backupClusterFingerprint(row)
   if (!fp || fp === '||') return 'Local' // no annotations → assume local
   if (!currentClusterFingerprint.value) return 'Local' // baseline not set yet
@@ -674,9 +683,21 @@ const dismissIntent = () => {
   restoreIntentActive.value = false
 }
 
+// v0.9.1.9: the "Created At" of a restore point is the moment the DATA was
+// backed up, not when the Backup CR object was created. These differ for
+// IMPORTED RPs: Velero's BackupSyncController creates a fresh CR copy in
+// this cluster when it discovers the backup on a shared BSL, so
+// metadata.creationTimestamp = sync time (e.g. 04:17), which is ~minutes
+// AFTER the real backup ran on the source cluster (04:16). status
+// .startTimestamp is the real backup moment and is identical across
+// clusters. Prefer it; fall back to creationTimestamp for RPs that never
+// started (e.g. failed validation, never ran).
+const effectiveCreatedAt = (row) =>
+  row?.status?.startTimestamp || row?.metadata?.creationTimestamp
+
 const sortByCreated = (a, b) => {
-  const at = new Date(a.metadata?.creationTimestamp || 0).getTime()
-  const bt = new Date(b.metadata?.creationTimestamp || 0).getTime()
+  const at = new Date(effectiveCreatedAt(a) || 0).getTime()
+  const bt = new Date(effectiveCreatedAt(b) || 0).getTime()
   return at - bt
 }
 
@@ -708,8 +729,8 @@ const fetchBackups = async () => {
     // sort by creationTimestamp desc; falls back to backup name as tie
     // breaker so identical timestamps are still deterministic.
     items.sort((a, b) => {
-      const at = new Date(a.metadata?.creationTimestamp || 0).getTime()
-      const bt = new Date(b.metadata?.creationTimestamp || 0).getTime()
+      const at = new Date(effectiveCreatedAt(a) || 0).getTime()
+      const bt = new Date(effectiveCreatedAt(b) || 0).getTime()
       if (at !== bt) return bt - at
       return (b.metadata?.name || '').localeCompare(a.metadata?.name || '')
     })

@@ -81,6 +81,32 @@
           </template>
         </el-table-column>
 
+        <!-- v0.9.1.8: Storage Location column — shows WHERE this policy
+             backs up to. For L2 dual policies the cloud (export-half) BSL
+             is the off-site target the user cares about; the local
+             (snapshot-half) BSL is shown as the upstream hop. L1 shows its
+             single BSL. (Mars demo 2026-05-28 request.) -->
+        <el-table-column :label="t('policies.storageLocationCol').toUpperCase()" width="200">
+          <template #default="{ row }">
+            <div class="policy-bsl-col">
+              <template v-if="storageLocationOf(row).dual">
+                <el-tooltip :content="t('policies.bslLocalTooltip', { name: storageLocationOf(row).local })" placement="top" :show-after="200">
+                  <span class="policy-bsl-chip bsl-local">{{ storageLocationOf(row).local }}</span>
+                </el-tooltip>
+                <span class="bsl-arrow">→</span>
+                <el-tooltip :content="t('policies.bslCloudTooltip', { name: storageLocationOf(row).cloud })" placement="top" :show-after="200">
+                  <span class="policy-bsl-chip bsl-cloud">{{ storageLocationOf(row).cloud }}</span>
+                </el-tooltip>
+              </template>
+              <template v-else>
+                <el-tooltip :content="t('policies.bslCloudTooltip', { name: storageLocationOf(row).local })" placement="top" :show-after="200">
+                  <span class="policy-bsl-chip bsl-cloud">{{ storageLocationOf(row).local }}</span>
+                </el-tooltip>
+              </template>
+            </div>
+          </template>
+        </el-table-column>
+
         <el-table-column :label="t('policies.frequency').toUpperCase()" width="140">
           <template #default="{ row }">
             <div class="freq-cell">
@@ -683,6 +709,23 @@ const resourceNamespaces = (row) => {
   return ns.length === 0 ? ['*'] : ns
 }
 
+// v0.9.1.8: where does this policy back up to? Row is the flattened
+// snapshot half + _policy.exportHalf (see fetchSchedules). For an L2 dual
+// policy the export half's BSL is the off-site cloud target; the snapshot
+// half's BSL is the local hop. L1 has only the one BSL.
+const storageLocationOf = (row) => {
+  const localBsl = row?.spec?.template?.storageLocation || 'default'
+  const exportHalf = row?._policy?.exportHalf
+  if (exportHalf) {
+    return {
+      dual: true,
+      local: localBsl,
+      cloud: exportHalf.spec?.template?.storageLocation || 'default'
+    }
+  }
+  return { dual: false, local: localBsl, cloud: null }
+}
+
 const filteredSchedules = computed(() => {
   const name = nameFilter.value.trim().toLowerCase()
   return schedules.value.filter((row) => {
@@ -820,7 +863,17 @@ const handleEdit = async (row) => {
   }
   createForm.value = hydrateFormFromSchedule(live)
   editMode.value = true
-  editingName.value = live.metadata?.name || ''
+  // v0.9.1.6 fix: GET /schedules/:name returns a PolicyAggregate
+  // ({policyName, snapshotSchedule, exportSchedule}), NOT a raw Schedule —
+  // so live.metadata.name is undefined and editingName ended up "", making
+  // the save PATCH /api/v1/schedules/ (empty name) → 404. row.metadata.name
+  // is the canonical name we fetched with, so prefer it; fall back through
+  // the aggregate fields for robustness against either response shape.
+  editingName.value = row.metadata?.name
+    || live.policyName
+    || live.snapshotSchedule?.metadata?.name
+    || live.metadata?.name
+    || ''
   // v0.8.7.4: refresh BSL list so the Storage Profile dropdown has the
   // current Available/Unavailable state of every BSL, not whatever was
   // cached when the page first loaded.
@@ -1544,7 +1597,17 @@ const handleSubmit = async () => {
         defaultVolumesToFsBackup: veleroPayload.defaultVolumesToFsBackup,
         // v0.8.7: thread snapshotMoveData through to the PATCH endpoint
         snapshotMoveData: veleroPayload.snapshotMoveData,
-        annotations: veleroPayload.annotations
+        annotations: veleroPayload.annotations,
+        // v0.9.1.8 fix: L2 dual policies emit role-specific BSL/TTL via
+        // collapseToVelero (snapshotTtl / exportTtl / exportStorageLocation),
+        // NOT the legacy flat storageLocation. The PATCH body was dropping
+        // them, so editing "云端存储位置" returned 200 but never changed the
+        // export half's BSL (backend saw all-nil → kept old value). Thread
+        // them through so the backend's role-specific apply() actually fires.
+        snapshotTtl: veleroPayload.snapshotTtl,
+        exportTtl: veleroPayload.exportTtl,
+        snapshotStorageLocation: veleroPayload.snapshotStorageLocation,
+        exportStorageLocation: veleroPayload.exportStorageLocation
       }
       await patchSchedule(editingName.value, patchBody)
       ElMessage.success(`Policy "${editingName.value}" updated`)
@@ -1705,6 +1768,33 @@ onMounted(() => {
   font-weight: 500;
   color: var(--sk-text-secondary);
 }
+/* v0.9.1.8: Storage Location column — local → cloud BSL chips. */
+.policy-bsl-col {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.policy-bsl-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  font-family: 'SF Mono', Menlo, monospace;
+  border: 1px solid var(--sk-border);
+}
+.policy-bsl-chip.bsl-local {
+  background: var(--sk-bg-soft);
+  color: var(--sk-text-caption);
+}
+.policy-bsl-chip.bsl-cloud {
+  background: var(--sk-info-soft, rgba(106,166,255,.12));
+  border-color: var(--sk-info, #6aa6ff);
+  color: var(--sk-info, #6aa6ff);
+}
+.bsl-arrow { color: var(--sk-text-caption); font-size: 11px; }
 /* Legacy classes kept for any remaining bindings (validation table
    cell removed, but other surfaces still reference these). */
 .validation-cell { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; }

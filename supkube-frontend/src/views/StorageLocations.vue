@@ -295,11 +295,14 @@
             <el-switch v-model="editForm.s3ForcePathStyle" />
             <span style="margin-left: 8px; color: #999; font-size: 12px">Enable for MinIO / SupVault</span>
           </el-form-item>
-          <el-form-item label="New Access Key">
-            <el-input v-model="editForm.accessKey" placeholder="Leave empty to keep existing" />
+          <!-- v0.9.1.5: same dynamic-label pattern as Azure section.
+               When editIdentityDirty (bucket/region/endpoint changed),
+               credentials are required and label reflects it. -->
+          <el-form-item :label="editIdentityDirty ? 'Access Key (REQUIRED — bucket changed)' : 'Update Access Key (optional)'">
+            <el-input v-model="editForm.accessKey" :placeholder="editIdentityDirty ? 'Required — new credentials' : 'Leave empty to keep existing'" />
           </el-form-item>
-          <el-form-item label="New Secret Key">
-            <el-input v-model="editForm.secretKey" type="password" placeholder="Leave empty to keep existing" show-password />
+          <el-form-item :label="editIdentityDirty ? 'Secret Key (REQUIRED — bucket changed)' : 'Update Secret Key (optional)'">
+            <el-input v-model="editForm.secretKey" type="password" :placeholder="editIdentityDirty ? 'Required — new credentials' : 'Leave empty to keep existing'" show-password />
           </el-form-item>
         </template>
 
@@ -317,14 +320,27 @@
             <el-input v-model="editForm.storageAccount" />
             <span class="form-hint">Editable. Changing this also requires a New Storage Account Key (keys are account-scoped).</span>
           </el-form-item>
-          <el-form-item label="New Storage Account Key">
+          <!-- v0.9.1.5: label was "New Storage Account Key" which Mars demo
+               showed is confusing — customers think it's only for rotating
+               and look elsewhere for the initial key input. Switch to
+               dynamic label that makes the required-vs-optional intent
+               obvious based on whether identity-bound fields changed. -->
+          <el-form-item :label="editIdentityDirty ? 'Storage Account Key (REQUIRED — new account)' : 'Update Storage Account Key (optional)'" class="storage-key-item">
             <el-input
               v-model="editForm.storageAccountKey"
               type="password"
-              :placeholder="editForm.storageAccountChanged ? 'Required — Storage Account changed' : 'Leave empty to keep existing'"
+              :placeholder="editIdentityDirty ? 'Required — paste the new account\'s key' : 'Leave empty to keep existing key'"
               show-password
+              :class="{ 'is-required-changed': editIdentityDirty }"
             />
-            <span class="form-hint">Filling this rotates the credentials Secret in place.</span>
+            <span class="form-hint">
+              <template v-if="editIdentityDirty">
+                ⚠ You changed Storage Account or Container. The old key won't work for the new account — paste the new key here.
+              </template>
+              <template v-else>
+                Optional. Leave empty to keep the existing key; fill in to rotate credentials.
+              </template>
+            </span>
           </el-form-item>
           <el-form-item label="Resource Group">
             <el-input v-model="editForm.resourceGroup" placeholder="(optional unless using AAD)" />
