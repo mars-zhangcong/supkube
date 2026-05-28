@@ -27,6 +27,10 @@ keywords:
 # bump the chart version, retest, then bump our appVersion.
 dependencies:
   - name: velero
-    version: "9.0.4"
+    # v0.9.1.10 (#102 根治): 9.0.4 (velero v1.16.0) → 12.0.1 (velero v1.18.0)。
+    # v1.16.0 的 node-agent data-mover micro-service watcher 在多节点 AKS 上
+    # 静默 hang（停在 "Preparing data download"，ready=true 但不推进），跨集群
+    # 还原卡死。v1.18.0 修复，docker-desktop 实测稳定。详见 ADR + audit 2026-05-28。
+    version: "12.0.1"
     repository: "https://vmware-tanzu.github.io/helm-charts"
     condition: velero.enabled

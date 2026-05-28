@@ -182,22 +182,27 @@ velero:
     # default BSL with bogus credentials.
     backupStorageLocation: []
     volumeSnapshotLocation: []
-  # Plugins. Includes CSI (always), AWS (S3-compatible), Azure (Blob).
-  # GCP plugin is a v0.9 add — we don't preload it because the image is
-  # large and most customers don't need it.
+  # Plugins. AWS (S3-compatible) + Azure (Blob). GCP plugin is a v0.9 add —
+  # we don't preload it because the image is large and most customers don't
+  # need it.
+  #
+  # ⚠️ NO velero-plugin-for-csi here on purpose (v0.9.1.10, #102):
+  # Velero v1.14+ has the CSI plugin BUILT IN. Loading the standalone
+  # velero-plugin-for-csi alongside v1.18 causes a DUPLICATE controller
+  # registration → velero pod CrashLoopBackOff. (Hit this during the
+  # 2026-05-28 AKS demo.) CSI snapshots work out of the box via the
+  # EnableCSI feature flag in `configuration.features` below.
+  #
+  # Plugin versions track Velero ~4 minors behind: velero v1.18 → plugin
+  # v1.14.1 (verified against upstream release notes 2026-05-19).
   initContainers:
-    - name: velero-plugin-for-csi
-      image: velero/velero-plugin-for-csi:v0.7.0
-      volumeMounts:
-        - mountPath: /target
-          name: plugins
     - name: velero-plugin-for-aws
-      image: velero/velero-plugin-for-aws:v1.10.0
+      image: velero/velero-plugin-for-aws:v1.14.1
       volumeMounts:
         - mountPath: /target
           name: plugins
     - name: velero-plugin-for-microsoft-azure
-      image: velero/velero-plugin-for-microsoft-azure:v1.10.0
+      image: velero/velero-plugin-for-microsoft-azure:v1.14.1
       volumeMounts:
         - mountPath: /target
           name: plugins

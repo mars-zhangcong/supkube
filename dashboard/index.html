@@ -221,14 +221,15 @@
 <!-- ============== OVERVIEW ============== -->
 <section class="view active" data-view="overview">
   <div class="kpi-grid">
-    <div class="kpi"><div class="label">Current Release</div><div class="value">v0.9.1.5</div><div class="sub">alpha · 2026-05-28 publish 待发</div></div>
+    <div class="kpi"><div class="label">Current Release</div><div class="value">v0.9.1.9</div><div class="sub">alpha · 已发布 + commit 56c052c</div></div>
+    <div class="kpi green"><div class="label">★ 今日新增</div><div class="value" id="kpi-today">—</div><div class="sub">2026-05-28 发现/产出</div></div>
     <div class="kpi red"><div class="label">P0 Open</div><div class="value" id="kpi-p0">—</div><div class="sub">阻塞客户使用</div></div>
     <div class="kpi orange"><div class="label">P1 Open</div><div class="value" id="kpi-p1">—</div><div class="sub">严重体验缺陷</div></div>
     <div class="kpi yellow"><div class="label">P2 Open</div><div class="value" id="kpi-p2">—</div><div class="sub">架构债务</div></div>
     <div class="kpi blue"><div class="label">In Progress</div><div class="value" id="kpi-inprog">—</div></div>
-    <div class="kpi green"><div class="label">Done (90d)</div><div class="value" id="kpi-done">—</div></div>
+    <div class="kpi green"><div class="label">Done</div><div class="value" id="kpi-done">—</div></div>
     <div class="kpi"><div class="label">Sprint 容量</div><div class="value" id="kpi-cap">—</div><div class="sub">人天剩余</div></div>
-    <div class="kpi"><div class="label">客户痛点</div><div class="value" id="kpi-pain">7</div><div class="sub">demo 反馈</div></div>
+    <div class="kpi"><div class="label">客户痛点</div><div class="value" id="kpi-pain">—</div><div class="sub">demo 反馈</div></div>
   </div>
 
   <h2 style="font-size: 15px; color: var(--fg-2); margin-top: 30px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">本周行动 (2026-05-28 ~ 2026-06-03)</h2>
@@ -262,6 +263,7 @@
         <th data-sort="category">Category</th>
         <th data-sort="estimate_days">Est</th>
         <th data-sort="owner">Owner</th>
+        <th data-sort="discovered">发现日期</th>
         <th>Tags</th>
       </tr>
     </thead>
@@ -309,87 +311,114 @@
 const SNAPSHOT_DATE = "2026-05-28";
 
 const DECISIONS = [
-  { id: "D-01", text: "改用 DevOps + K8s-native 流程，告别瀑布；每日站会盘点" },
-  { id: "D-02", text: "项目管理 = Plane（自托管 K8s）；知识库 = Wiki.js（自托管 K8s）" },
-  { id: "D-03", text: "还原扫描 = YARA + ClamAV 双引擎（不走 Kasten 单引擎路线）；插入 v0.9.6；详见 ADR-030" },
-  { id: "D-04", text: "KubeVirt VM 备份估算从 8d 下调到 5d；插入 v0.9.8（Velero KubeVirt plugin 已处理 90%）" },
-  { id: "D-05", text: "v0.9.6 安全扫描 + v0.9.7 还原演练 = 'Verified Restore' 完整闭环，Premium 套餐定价锚点" },
-  { id: "D-06", text: "建项目仪表板 HTML（Kanban + List + Gantt 三视图）作为日常复盘工具；远期切 Plane" }
+  { id: "D-01", date: "2026-05-28", text: "改用 DevOps + K8s-native 流程，告别瀑布；每日站会盘点" },
+  { id: "D-02", date: "2026-05-28", text: "项目管理 = Plane（自托管 K8s）；知识库 = Wiki.js（自托管 K8s）" },
+  { id: "D-03", date: "2026-05-28", text: "还原扫描 = YARA + ClamAV 双引擎（不走 Kasten 单引擎路线）；插入 v0.9.6；详见 ADR-030" },
+  { id: "D-04", date: "2026-05-28", text: "KubeVirt VM 备份估算从 8d 下调到 5d；插入 v0.9.8（Velero KubeVirt plugin 已处理 90%）" },
+  { id: "D-05", date: "2026-05-28", text: "v0.9.6 安全扫描 + v0.9.7 还原演练 = 'Verified Restore' 完整闭环，Premium 套餐定价锚点" },
+  { id: "D-06", date: "2026-05-28", text: "建项目仪表板 HTML（Kanban + List + Gantt 三视图）作为日常复盘工具；远期切 Plane" },
+  { id: "D-07", date: "2026-05-28", text: "跨集群存储障碍统一方案 = CSI 一键适配（自动建 SC+VSC+binding mode + UI 显示用到的 Transform Set）→ task #104 ⭐" },
+  { id: "D-08", date: "2026-05-28", text: "主分支 v0.7.9-alpha → main 重命名完成；GitHub default branch 待手动切" },
+  { id: "D-09", date: "2026-05-28", text: "✅ 双向灾备闭环验证成功：本地↔云端数据零丢失回流（postgres 4→6 行往返）" },
+  { id: "D-10", date: "2026-05-28", text: "node-agent hang 根治优先方向 = 换官方 velero release（去掉 v1.16.0-dirty build）" }
 ];
 
 const WEEKLY = [
-  { p: "P0", text: "commit + push 当前所有未提交改动（hotfix + ROADMAP + ADR-030 + AUDIT）", due: "今日" },
-  { p: "P0", text: "publish 0.9.1.5-alpha（demo hotfix）", due: "明日" },
-  { p: "P0", text: "部署 Plane + Wiki.js 到 AKS", due: "本周内" },
-  { p: "P0", text: "把现有任务 + 客户痛点 + P0~P3 全部导入 Plane", due: "Plane 上线后" },
+  { p: "P0", text: "commit + push 今天所有改动（已完成 ✅ commit 56c052c + tag v0.9.1.9-alpha）", due: "✅ 今日" },
+  { p: "P0", text: "GitHub 网页改 default branch 为 main（gh CLI 未装）", due: "明日" },
+  { p: "P0", text: "部署 Plane + Wiki.js 到 aks-tools 集群", due: "本周内" },
+  { p: "P0", text: "把 108 个 task + 客户痛点 + P0~P3 全部导入 Plane", due: "Plane 上线后" },
+  { p: "P0", text: "回收 demo 临时资源：AKS adminer LoadBalancer 公网 IP 20.247.232.202", due: "明日" },
+  { p: "P1", text: "启动 #104 CSI 一键适配 sprint（跨集群落地关键）", due: "下周" },
   { p: "P1", text: "启动 v0.9.1.3-VELERO-BUNDLED sprint (P0-1 根治)", due: "下周" },
-  { p: "P1", text: "写 CHANGELOG.md（0.9.0 起）", due: "本周内" },
   { p: "P2", text: "评估 GitHub Actions CI（最小化 build + lint）", due: "月底" }
 ];
 
 const CUSTOMER_PAIN = [
-  { id: "C-001", quote: "没有看到 Import 的标签", link: "P0-5 + Imported chip UI", status: "hotfix 待发" },
-  { id: "C-002", quote: "没有了以前的一键适配检查...举个例子，Storage Class 已经不一样了", link: "P1-1 + P1-5", status: "task #89" },
-  { id: "C-003", quote: "没有创建新的 import 还原点的地方...请你借鉴一下 Kasten", link: "Export/Import 指纹模型", status: "task #88" },
-  { id: "C-004", quote: "点击不了 Restore", link: "Restore button 无 tooltip", status: "hotfix 待发" },
-  { id: "C-005", quote: "我们的客户也不想脱离这个页面", link: "跨集群自动 SC mapping", status: "task #89" },
-  { id: "C-006", quote: "KubeVirt VM 备份能力", link: "新需求", status: "v0.9.8 / task #93" },
-  { id: "C-007", quote: "还原时安全扫描", link: "新需求", status: "v0.9.6 / task #92 (YARA + ClamAV)" },
-  { id: "C-008", quote: "Activity 点开没有详细步骤与用时（对标 Arcami）", link: "Action Details 时间线 + 耗时", status: "v0.9.x / task #96 (3d)" },
-  { id: "C-009", quote: "Data Usage Report 没有，Dashboard 也没展现（对标 Kasten K10）", link: "Prometheus + Dashboard 卡 + Dedup 率", status: "v0.9.x / task #97 (6d)" },
-  { id: "C-010", quote: "Multi-Cluster 下拉切换后 Dashboard / 数据视图不变化", link: "currentClusterId 不联动", status: "P0 demo blocker / task #98 (1.5d)" }
+  { id: "C-001", date: "2026-05-28", quote: "没有看到 Import 的标签", link: "imported chip 后端 schedule 检测", status: "✅ 0.9.1.6 已修" },
+  { id: "C-002", date: "2026-05-28", quote: "没有了以前的一键适配检查...举个例子，Storage Class 已经不一样了", link: "CSI 一键适配", status: "task #104 ⭐" },
+  { id: "C-003", date: "2026-05-28", quote: "没有创建新的 import 还原点的地方...请你借鉴一下 Kasten", link: "Export/Import 指纹模型", status: "task #88" },
+  { id: "C-004", date: "2026-05-28", quote: "点击不了 Restore", link: "Restore button 无 tooltip", status: "✅ 0.9.1.5 已修" },
+  { id: "C-005", date: "2026-05-28", quote: "我们的客户也不想脱离这个页面", link: "跨集群自动 SC mapping", status: "task #104" },
+  { id: "C-006", date: "2026-05-28", quote: "KubeVirt VM 备份能力", link: "新需求", status: "v0.9.8 / task #93" },
+  { id: "C-007", date: "2026-05-28", quote: "还原时安全扫描", link: "新需求", status: "v0.9.6 / task #92 (YARA + ClamAV)" },
+  { id: "C-008", date: "2026-05-28", quote: "Activity 点开没有详细步骤与用时（对标 Arcami）", link: "Action Details 时间线 + 耗时", status: "task #96 (3d)" },
+  { id: "C-009", date: "2026-05-28", quote: "Data Usage Report 没有，Dashboard 也没展现（对标 Kasten K10）", link: "Prometheus + Dashboard 卡 + Dedup 率", status: "task #97 (6d)" },
+  { id: "C-010", date: "2026-05-28", quote: "Multi-Cluster 下拉切换后 Dashboard / 数据视图不变化", link: "currentClusterId 不联动", status: "task #98 (1.5d)" },
+  { id: "C-011", date: "2026-05-28", quote: "还原一直卡在 Restoring，目前 Demo 卡住了", link: "node-agent data path hang", status: "task #102 (重启 node-agent 已临时解)" },
+  { id: "C-012", date: "2026-05-28", quote: "3 Error 什么也看不到", link: "Restore 详细错误 + warning 解读", status: "task #103" },
+  { id: "C-013", date: "2026-05-28", quote: "再一次定义 Restore 什么都没发生，没有新 Task，试了 2 次", link: "发起 restore 前端零反馈", status: "task #105 (实际成功了, UI 无反馈)" },
+  { id: "C-014", date: "2026-05-28", quote: "Azure 云上 This Cluster 对客户一点意义也没有", link: "改用集群名替代 This Cluster", status: "task #107 范畴" },
+  { id: "C-015", date: "2026-05-28", quote: "Log Viewer 让客户看到不同组件的报错点", link: "Log Viewer 组件分类 + error 高亮", status: "task #103" },
+  { id: "C-016", date: "2026-05-28", quote: "应用点击 Backup 应跳 Policy 而非 Restore Point", link: "应用列表导航语义", status: "task #108" },
+  { id: "C-017", date: "2026-05-28", quote: "No VolumeSnapshotClass 应有一键适配，并显示用到哪个 Transform Set", link: "CSI 一键适配透明化", status: "task #104 ⭐" },
+  { id: "C-018", date: "2026-05-28", quote: "应该有 Restore Advisor — 这个 RP 还原成功率多少？成本（时间/云费用）", link: "还原成功率 + 成本评分", status: "task #106 (差异化)" }
 ];
 
 const TASKS = [
-  // ── P0 demo blockers ────────────────────────────────────────────────
-  { id: "P0-1", version: "v0.9.1.3", title: "Velero 真自带（CRD + plugin + 镜像入 ACR）", status: "todo", priority: "P0", category: "Infra", estimate_days: 3, owner: "claude", start_week: 23, end_week: 24, tags: ["customer-pain", "velero-bundle"] },
-  { id: "P0-2", version: "v0.9.1.4", title: "Dex issuer URL 硬编码 localhost 修复（动态注入 ingress host）", status: "todo", priority: "P0", category: "Backend", estimate_days: 1.5, owner: "claude", start_week: 23, end_week: 23, tags: ["customer-pain", "auth"] },
-  { id: "P0-3", version: "v0.9.1.4", title: "AKS / 公有云 NodePort 默认改 LoadBalancer-aware", status: "todo", priority: "P0", category: "Infra", estimate_days: 0.5, owner: "claude", start_week: 23, end_week: 23, tags: ["customer-pain"] },
-  { id: "P0-4", version: "v0.9.1.4", title: "CRD ownership 冲突自动 adopt", status: "todo", priority: "P0", category: "Infra", estimate_days: 1, owner: "claude", start_week: 23, end_week: 23, tags: ["customer-pain"] },
-  { id: "P0-5", version: "v0.9.1.6", title: "跨集群 Imported RP 后端 ListBackupArtifacts 修复", status: "in_progress", priority: "P0", category: "Backend", estimate_days: 2, owner: "claude", start_week: 22, end_week: 23, tags: ["customer-pain", "task-91"] },
+  // ── P0 demo blockers (上午盘点) ─────────────────────────────────────
+  { id: "P0-1", version: "v0.9.1.3", title: "Velero 真自带（CRD + plugin + 镜像入 ACR）", status: "todo", priority: "P0", category: "Infra", estimate_days: 3, owner: "claude", start_week: 23, end_week: 24, discovered: "2026-05-28", tags: ["customer-pain", "velero-bundle"] },
+  { id: "P0-2", version: "v0.9.1.4", title: "Dex issuer URL 硬编码 localhost 修复（动态注入 ingress host）", status: "todo", priority: "P0", category: "Backend", estimate_days: 1.5, owner: "claude", start_week: 23, end_week: 23, discovered: "2026-05-28", tags: ["customer-pain", "auth"] },
+  { id: "P0-3", version: "v0.9.1.4", title: "AKS / 公有云 NodePort 默认改 LoadBalancer-aware", status: "todo", priority: "P0", category: "Infra", estimate_days: 0.5, owner: "claude", start_week: 23, end_week: 23, discovered: "2026-05-28", tags: ["customer-pain"] },
+  { id: "P0-4", version: "v0.9.1.4", title: "CRD ownership 冲突自动 adopt", status: "todo", priority: "P0", category: "Infra", estimate_days: 1, owner: "claude", start_week: 23, end_week: 23, discovered: "2026-05-28", tags: ["customer-pain"] },
+  { id: "P0-5", version: "v0.9.1.6", title: "跨集群 Imported RP 后端 ListBackupArtifacts 修复", status: "in_progress", priority: "P0", category: "Backend", estimate_days: 2, owner: "claude", start_week: 22, end_week: 23, discovered: "2026-05-28", tags: ["customer-pain", "task-91"] },
+  { id: "P0-6", version: "v0.9.1.5", title: "Multi-Cluster 下拉切换不联动 Dashboard (demo blocker)", status: "todo", priority: "P0", category: "Bug", estimate_days: 1.5, owner: "claude", start_week: 22, end_week: 22, discovered: "2026-05-28", tags: ["customer-pain", "task-98", "C-010"] },
 
   // ── P1 体验缺陷 ──────────────────────────────────────────────────────
-  { id: "P1-1", version: "v0.9.1.7", title: "Restore Wizard 嵌入一键预检 + 修复（SC mapping）", status: "todo", priority: "P1", category: "Frontend", estimate_days: 2, owner: "claude", start_week: 24, end_week: 24, tags: ["customer-pain", "task-89"] },
-  { id: "P1-2", version: "v0.9.1.5", title: "0.9.1.5-alpha demo hotfix publish", status: "in_review", priority: "P1", category: "Bug", estimate_days: 0.5, owner: "claude", start_week: 22, end_week: 22, tags: ["hotfix"] },
-  { id: "P1-3", version: "v0.9.1.5", title: "集群管理 / 存储管理 tab（只迁 VSL）", status: "todo", priority: "P1", category: "Frontend", estimate_days: 1, owner: "claude", start_week: 23, end_week: 23, tags: ["task-86"] },
-  { id: "P1-4", version: "v0.9.1.6", title: "Kasten 风格 Export/Import 指纹模型", status: "todo", priority: "P1", category: "Backend", estimate_days: 5, owner: "claude", start_week: 24, end_week: 25, tags: ["task-88", "customer-pain"] },
-  { id: "P1-5", version: "v0.9.1.7", title: "Restore PartiallyFailed 自动 SC mapping 引导", status: "todo", priority: "P1", category: "Frontend", estimate_days: 1.5, owner: "claude", start_week: 24, end_week: 24, tags: ["task-89", "customer-pain"] },
+  { id: "P1-1", version: "v0.9.1.7", title: "Restore Wizard 嵌入一键预检 + 修复（SC mapping）", status: "todo", priority: "P1", category: "Frontend", estimate_days: 2, owner: "claude", start_week: 24, end_week: 24, discovered: "2026-05-28", tags: ["customer-pain", "task-89"] },
+  { id: "P1-2", version: "v0.9.1.5", title: "0.9.1.5-alpha demo hotfix publish", status: "done", priority: "P1", category: "Bug", estimate_days: 0.5, owner: "claude", start_week: 22, end_week: 22, discovered: "2026-05-28", tags: ["hotfix"] },
+  { id: "P1-3", version: "v0.9.1.5", title: "集群管理 / 存储管理 tab（只迁 VSL）", status: "todo", priority: "P1", category: "Frontend", estimate_days: 1, owner: "claude", start_week: 23, end_week: 23, discovered: "2026-05-28", tags: ["task-86"] },
+  { id: "P1-4", version: "v0.9.1.6", title: "Kasten 风格 Export/Import 指纹模型", status: "todo", priority: "P1", category: "Backend", estimate_days: 5, owner: "claude", start_week: 24, end_week: 25, discovered: "2026-05-28", tags: ["task-88", "customer-pain"] },
+  { id: "P1-5", version: "v0.9.1.7", title: "Restore PartiallyFailed 自动 SC mapping 引导", status: "todo", priority: "P1", category: "Frontend", estimate_days: 1.5, owner: "claude", start_week: 24, end_week: 24, discovered: "2026-05-28", tags: ["task-89", "customer-pain"] },
 
   // ── P2 architecture debt ────────────────────────────────────────────
-  { id: "P2-1", version: "v1.0-GA", title: "GitHub Actions CI（build + lint + test）", status: "todo", priority: "P2", category: "Infra", estimate_days: 3, owner: "tbd", start_week: 28, end_week: 28, tags: ["ci"] },
-  { id: "P2-2", version: "v1.0-GA", title: "E2E 测试自动化（TC-* 测试用例）", status: "todo", priority: "P2", category: "Infra", estimate_days: 5, owner: "tbd", start_week: 29, end_week: 30, tags: ["e2e"] },
-  { id: "P2-3", version: "v0.9.x", title: "客户端遥测（安装/使用上报）", status: "todo", priority: "P2", category: "Backend", estimate_days: 3, owner: "tbd", start_week: 30, end_week: 30, tags: ["telemetry"] },
-  { id: "P2-4", version: "v0.9.x", title: "Wiki.js 文档站（USER_MANUAL 8000+ 行拆分）", status: "todo", priority: "P2", category: "Docs", estimate_days: 2, owner: "mars", start_week: 23, end_week: 24, tags: ["wiki"] },
-  { id: "P2-5", version: "v1.0-GA", title: "License key 真校验（HMAC / Ed25519）", status: "todo", priority: "P2", category: "Backend", estimate_days: 2, owner: "tbd", start_week: 32, end_week: 32, tags: ["license"] },
-  { id: "P2-6", version: "v0.9.1.5", title: "CHANGELOG.md（0.9.0 起所有发布）", status: "todo", priority: "P2", category: "Docs", estimate_days: 0.5, owner: "claude", start_week: 22, end_week: 22, tags: ["docs"] },
+  { id: "P2-1", version: "v1.0-GA", title: "GitHub Actions CI（build + lint + test）", status: "todo", priority: "P2", category: "Infra", estimate_days: 3, owner: "tbd", start_week: 28, end_week: 28, discovered: "2026-05-28", tags: ["ci"] },
+  { id: "P2-2", version: "v1.0-GA", title: "E2E 测试自动化（TC-* 测试用例）", status: "todo", priority: "P2", category: "Infra", estimate_days: 5, owner: "tbd", start_week: 29, end_week: 30, discovered: "2026-05-28", tags: ["e2e"] },
+  { id: "P2-3", version: "v0.9.x", title: "客户端遥测（安装/使用上报）", status: "todo", priority: "P2", category: "Backend", estimate_days: 3, owner: "tbd", start_week: 30, end_week: 30, discovered: "2026-05-28", tags: ["telemetry"] },
+  { id: "P2-4", version: "v0.9.x", title: "Wiki.js 文档站（USER_MANUAL 8000+ 行拆分）", status: "todo", priority: "P2", category: "Docs", estimate_days: 2, owner: "mars", start_week: 23, end_week: 24, discovered: "2026-05-28", tags: ["wiki"] },
+  { id: "P2-5", version: "v1.0-GA", title: "License key 真校验（HMAC / Ed25519）", status: "todo", priority: "P2", category: "Backend", estimate_days: 2, owner: "tbd", start_week: 32, end_week: 32, discovered: "2026-05-28", tags: ["license"] },
+  { id: "P2-6", version: "v0.9.1.5", title: "CHANGELOG.md（0.9.0 起所有发布）", status: "todo", priority: "P2", category: "Docs", estimate_days: 0.5, owner: "claude", start_week: 22, end_week: 22, discovered: "2026-05-28", tags: ["docs"] },
 
   // ── P3 long-term / commercial ───────────────────────────────────────
-  { id: "P3-1", version: "post-GA", title: "商业化收费机制（License Manager backend）", status: "todo", priority: "P3", category: "Backend", estimate_days: 10, owner: "tbd", start_week: 35, end_week: 37, tags: ["business"] },
-  { id: "P3-2", version: "post-GA", title: "产品官网 supkube.com", status: "todo", priority: "P3", category: "Docs", estimate_days: 5, owner: "tbd", start_week: 34, end_week: 35, tags: ["marketing"] },
-  { id: "P3-3", version: "post-GA", title: "品牌视觉资产（Logo / Favicon / 设计系统）", status: "todo", priority: "P3", category: "Frontend", estimate_days: 3, owner: "tbd", start_week: 34, end_week: 34, tags: ["brand"] },
-  { id: "P3-4", version: "v0.9.9", title: "MCP Server (AI 集成)", status: "todo", priority: "P3", category: "Backend", estimate_days: 4, owner: "tbd", start_week: 33, end_week: 33, tags: ["ai", "mcp"] },
+  { id: "P3-1", version: "post-GA", title: "商业化收费机制（License Manager backend）", status: "todo", priority: "P3", category: "Backend", estimate_days: 10, owner: "tbd", start_week: 35, end_week: 37, discovered: "2026-05-28", tags: ["business"] },
+  { id: "P3-2", version: "post-GA", title: "产品官网 supkube.com", status: "todo", priority: "P3", category: "Docs", estimate_days: 5, owner: "tbd", start_week: 34, end_week: 35, discovered: "2026-05-28", tags: ["marketing"] },
+  { id: "P3-3", version: "post-GA", title: "品牌视觉资产（Logo / Favicon / 设计系统）", status: "todo", priority: "P3", category: "Frontend", estimate_days: 3, owner: "tbd", start_week: 34, end_week: 34, discovered: "2026-05-28", tags: ["brand"] },
+  { id: "P3-4", version: "v0.9.9", title: "MCP Server (AI 集成)", status: "todo", priority: "P3", category: "Backend", estimate_days: 4, owner: "tbd", start_week: 33, end_week: 33, discovered: "2026-05-28", tags: ["ai", "mcp"] },
 
   // ── 已规划 sprint (planned features) ─────────────────────────────────
-  { id: "S-79", version: "v0.8.14", title: "Log Viewer + Download Logs + AirGapped 真支持", status: "in_progress", priority: "P1", category: "Feature", estimate_days: 7, owner: "claude", start_week: 22, end_week: 23, tags: ["sprint"] },
-  { id: "S-84", version: "v0.9.1.3", title: "Velero bundled + 镜像入 ACR + CSI 自动", status: "todo", priority: "P0", category: "Infra", estimate_days: 3, owner: "claude", start_week: 23, end_week: 24, tags: ["sprint", "duplicate-of-P0-1"] },
-  { id: "S-92", version: "v0.9.6", title: "还原时安全扫描 YARA + ClamAV 双引擎", status: "todo", priority: "P1", category: "Feature", estimate_days: 9, owner: "tbd", start_week: 27, end_week: 28, tags: ["sprint", "premium", "yara", "clamav"] },
-  { id: "S-93", version: "v0.9.8", title: "KubeVirt VM 备份恢复", status: "todo", priority: "P2", category: "Feature", estimate_days: 5, owner: "tbd", start_week: 30, end_week: 31, tags: ["sprint", "kubevirt"] },
-  { id: "S-97", version: "v0.9.7", title: "应用级恢复演练 (BPMN + Kanister)", status: "todo", priority: "P2", category: "Feature", estimate_days: 7, owner: "tbd", start_week: 29, end_week: 30, tags: ["sprint", "premium"] },
-  { id: "S-98", version: "v0.9.4", title: "企业安全栈 Phase 1: EntraID + Vault", status: "todo", priority: "P2", category: "Backend", estimate_days: 5, owner: "tbd", start_week: 25, end_week: 26, tags: ["sprint", "security"] },
-  { id: "S-99", version: "v0.9.5", title: "企业安全栈 Phase 2: Kyverno", status: "todo", priority: "P2", category: "Backend", estimate_days: 3, owner: "tbd", start_week: 26, end_week: 26, tags: ["sprint", "security"] },
+  { id: "S-79", version: "v0.8.14", title: "Log Viewer + Download Logs + AirGapped 真支持", status: "in_progress", priority: "P1", category: "Feature", estimate_days: 7, owner: "claude", start_week: 22, end_week: 23, discovered: "2026-05-24", tags: ["sprint"] },
+  { id: "S-84", version: "v0.9.1.3", title: "Velero bundled + 镜像入 ACR + CSI 自动", status: "todo", priority: "P0", category: "Infra", estimate_days: 3, owner: "claude", start_week: 23, end_week: 24, discovered: "2026-05-28", tags: ["sprint", "duplicate-of-P0-1"] },
+  { id: "S-92", version: "v0.9.6", title: "还原时安全扫描 YARA + ClamAV 双引擎", status: "todo", priority: "P1", category: "Feature", estimate_days: 9, owner: "tbd", start_week: 27, end_week: 28, discovered: "2026-05-28", tags: ["sprint", "premium", "yara", "clamav"] },
+  { id: "S-93", version: "v0.9.8", title: "KubeVirt VM 备份恢复", status: "todo", priority: "P2", category: "Feature", estimate_days: 5, owner: "tbd", start_week: 30, end_week: 31, discovered: "2026-05-28", tags: ["sprint", "kubevirt"] },
+  { id: "S-97", version: "v0.9.7", title: "应用级恢复演练 (BPMN + Kanister)", status: "todo", priority: "P2", category: "Feature", estimate_days: 7, owner: "tbd", start_week: 29, end_week: 30, discovered: "2026-05-28", tags: ["sprint", "premium"] },
+  { id: "S-98", version: "v0.9.4", title: "企业安全栈 Phase 1: EntraID + Vault", status: "todo", priority: "P2", category: "Backend", estimate_days: 5, owner: "tbd", start_week: 25, end_week: 26, discovered: "2026-05-28", tags: ["sprint", "security"] },
+  { id: "S-99", version: "v0.9.5", title: "企业安全栈 Phase 2: Kyverno", status: "todo", priority: "P2", category: "Backend", estimate_days: 3, owner: "tbd", start_week: 26, end_week: 26, discovered: "2026-05-28", tags: ["sprint", "security"] },
 
-  // ── 已完成里程碑 ─────────────────────────────────────────────────────
-  { id: "M-A", version: "v0.9.1.2", title: "UI 重构 (Sidebar 10→7 + Observability hub)", status: "done", priority: "P1", category: "Frontend", estimate_days: 3, owner: "claude", start_week: 21, end_week: 21, tags: ["milestone"] },
-  { id: "M-B", version: "v0.9.1.0", title: "Install UX (preflight + EULA + USER_MANUAL §23)", status: "done", priority: "P1", category: "Infra", estimate_days: 2, owner: "claude", start_week: 21, end_week: 21, tags: ["milestone"] },
-  { id: "M-C", version: "v0.9.0.4", title: "Multi-arch (amd64 + arm64)", status: "done", priority: "P1", category: "Infra", estimate_days: 1, owner: "claude", start_week: 21, end_week: 21, tags: ["milestone"] },
-  { id: "M-D", version: "v0.9.0.3", title: "制品分发闭环 (ACR + Azure Blob + Cloudflare)", status: "done", priority: "P0", category: "Infra", estimate_days: 2, owner: "claude", start_week: 21, end_week: 21, tags: ["milestone"] },
-  { id: "M-E", version: "v0.9.0-MC", title: "Multi-Cluster Manager + 跨集群恢复 Wizard", status: "done", priority: "P0", category: "Feature", estimate_days: 7, owner: "claude", start_week: 20, end_week: 21, tags: ["milestone", "kasten-style"] },
+  // ── 2026-05-28 下午 demo 第二次执行：新发现 (★ 全部今日) ──────────────
+  { id: "T-101", version: "v0.9.x", title: "Policies.vue 全量审计 PolicyAggregate 契约 (防同源 bug)", status: "todo", priority: "P1", category: "Frontend", estimate_days: 2, owner: "claude", start_week: 24, end_week: 24, discovered: "2026-05-28", tags: ["task-101", "tech-debt", "demo-pm"] },
+  { id: "T-102", version: "v0.9.x", title: "node-agent data path hang 检测 + 自愈 (demo 卡死真凶)", status: "todo", priority: "P0", category: "Backend", estimate_days: 4, owner: "claude", start_week: 26, end_week: 27, discovered: "2026-05-28", tags: ["task-102", "customer-pain", "demo-pm", "C-011"] },
+  { id: "T-103", version: "v0.9.x", title: "Restore 详细错误/warning 可见 + 解读 + Log Viewer 组件分类", status: "todo", priority: "P0", category: "Backend", estimate_days: 3, owner: "claude", start_week: 26, end_week: 26, discovered: "2026-05-28", tags: ["task-103", "customer-pain", "demo-pm", "C-012", "C-015"] },
+  { id: "T-104", version: "v0.9.x", title: "★ CSI 一键适配 (自动配 SC+VSC+binding mode + 显示 Transform Set)", status: "todo", priority: "P0", category: "Feature", estimate_days: 5, owner: "claude", start_week: 26, end_week: 27, discovered: "2026-05-28", tags: ["task-104", "customer-pain", "demo-pm", "killer-feature", "C-002", "C-017"] },
+  { id: "T-105", version: "v0.9.1.x", title: "发起 Restore 后前端零反馈 (toast + 跳转 + 刷新)", status: "todo", priority: "P0", category: "Frontend", estimate_days: 1, owner: "claude", start_week: 24, end_week: 24, discovered: "2026-05-28", tags: ["task-105", "customer-pain", "demo-pm", "C-013"] },
+  { id: "T-106", version: "v0.9.x", title: "还原任务中心 + Restore Advisor (成功率/成本评分)", status: "todo", priority: "P1", category: "Feature", estimate_days: 8, owner: "tbd", start_week: 28, end_week: 29, discovered: "2026-05-28", tags: ["task-106", "differentiator", "demo-pm", "C-018"] },
+  { id: "T-107", version: "v0.9.1.x", title: "UI 建 backup 自动选 BSL + 云集群默认 L1 (default not found)", status: "todo", priority: "P1", category: "Frontend", estimate_days: 1.5, owner: "claude", start_week: 24, end_week: 24, discovered: "2026-05-28", tags: ["task-107", "customer-pain", "demo-pm", "C-014", "C-015"] },
+  { id: "T-108", version: "v0.9.1.x", title: "应用列表'最近备份'跳 Policy 而非 Restore Point", status: "todo", priority: "P2", category: "Frontend", estimate_days: 0.5, owner: "claude", start_week: 24, end_week: 24, discovered: "2026-05-28", tags: ["task-108", "customer-pain", "demo-pm", "C-016"] },
 
-  // ── 2026-05-28 demo 后追加 ──────────────────────────────────────────
-  { id: "P0-6", version: "v0.9.1.5", title: "Multi-Cluster 下拉切换不联动 Dashboard (demo blocker)", status: "todo", priority: "P0", category: "Bug", estimate_days: 1.5, owner: "claude", start_week: 22, end_week: 22, tags: ["customer-pain", "task-98", "C-010"] },
-  { id: "T-95", version: "tools", title: "Plane + Wiki.js 部署 aks-tools (DevOps 落地)", status: "todo", priority: "P0", category: "Infra", estimate_days: 2, owner: "mars", start_week: 22, end_week: 23, tags: ["devops", "task-95"] },
-  { id: "T-96", version: "v0.9.x", title: "Activity 步骤时间线 + 耗时 (对标 Arcami)", status: "todo", priority: "P1", category: "Feature", estimate_days: 3, owner: "claude", start_week: 25, end_week: 25, tags: ["customer-pain", "task-96", "C-008"] },
-  { id: "T-97", version: "v0.9.x", title: "Data Usage Report + Prometheus + Dashboard 卡", status: "todo", priority: "P1", category: "Feature", estimate_days: 6, owner: "claude", start_week: 25, end_week: 26, tags: ["customer-pain", "task-97", "C-009", "prometheus"] }
+  // ── 2026-05-28 下午：已完成 (demo hotfix + 双向灾备验证) ──────────────
+  { id: "M-F", version: "v0.9.1.6", title: "Imported RP 检测改后端 schedule 存在性 (修 C-001)", status: "done", priority: "P0", category: "Backend", estimate_days: 0.5, owner: "claude", start_week: 22, end_week: 22, discovered: "2026-05-28", tags: ["milestone", "hotfix", "demo-pm", "C-001"] },
+  { id: "M-G", version: "v0.9.1.7", title: "编辑策略 404 修复 (PolicyAggregate 取名)", status: "done", priority: "P0", category: "Bug", estimate_days: 0.5, owner: "claude", start_week: 22, end_week: 22, discovered: "2026-05-28", tags: ["milestone", "hotfix", "demo-pm", "task-100"] },
+  { id: "M-H", version: "v0.9.1.8", title: "改云端 BSL 假成功修复 + 策略列表存储位置列", status: "done", priority: "P1", category: "Bug", estimate_days: 0.5, owner: "claude", start_week: 22, end_week: 22, discovered: "2026-05-28", tags: ["milestone", "hotfix", "demo-pm"] },
+  { id: "M-I", version: "v0.9.1.9", title: "Imported RP 创建时间用 startTimestamp (非同步时间)", status: "done", priority: "P1", category: "Bug", estimate_days: 0.5, owner: "claude", start_week: 22, end_week: 22, discovered: "2026-05-28", tags: ["milestone", "hotfix", "demo-pm"] },
+  { id: "M-J", version: "demo", title: "★ 双向灾备闭环验证 (本地↔云 postgres 6 行零丢失回流)", status: "done", priority: "P0", category: "Feature", estimate_days: 1, owner: "claude+mars", start_week: 22, end_week: 22, discovered: "2026-05-28", tags: ["milestone", "demo-pm", "DR-validated"] },
+  { id: "M-K", version: "main", title: "主分支 v0.7.9-alpha → main 重命名 + 推送", status: "done", priority: "P2", category: "Infra", estimate_days: 0.2, owner: "claude", start_week: 22, end_week: 22, discovered: "2026-05-28", tags: ["milestone", "demo-pm", "task-99"] },
+  { id: "M-AUDIT", version: "tools", title: "每日盘点 AUDIT 文档 + 项目仪表板 HTML", status: "done", priority: "P1", category: "Docs", estimate_days: 0.5, owner: "claude", start_week: 22, end_week: 22, discovered: "2026-05-28", tags: ["milestone", "demo-pm", "devops", "task-94"] },
+
+  // ── 历史已完成里程碑 (demo 前) ──────────────────────────────────────
+  { id: "M-A", version: "v0.9.1.2", title: "UI 重构 (Sidebar 10→7 + Observability hub)", status: "done", priority: "P1", category: "Frontend", estimate_days: 3, owner: "claude", start_week: 21, end_week: 21, discovered: "2026-05-26", tags: ["milestone"] },
+  { id: "M-B", version: "v0.9.1.0", title: "Install UX (preflight + EULA + USER_MANUAL §23)", status: "done", priority: "P1", category: "Infra", estimate_days: 2, owner: "claude", start_week: 21, end_week: 21, discovered: "2026-05-26", tags: ["milestone"] },
+  { id: "M-C", version: "v0.9.0.4", title: "Multi-arch (amd64 + arm64)", status: "done", priority: "P1", category: "Infra", estimate_days: 1, owner: "claude", start_week: 21, end_week: 21, discovered: "2026-05-26", tags: ["milestone"] },
+  { id: "M-D", version: "v0.9.0.3", title: "制品分发闭环 (ACR + Azure Blob + Cloudflare)", status: "done", priority: "P0", category: "Infra", estimate_days: 2, owner: "claude", start_week: 21, end_week: 21, discovered: "2026-05-25", tags: ["milestone"] },
+  { id: "M-E", version: "v0.9.0-MC", title: "Multi-Cluster Manager + 跨集群恢复 Wizard", status: "done", priority: "P0", category: "Feature", estimate_days: 7, owner: "claude", start_week: 20, end_week: 21, discovered: "2026-05-24", tags: ["milestone", "kasten-style"] }
 ];
 
 /* ====================================================================
@@ -460,10 +489,15 @@ function render() {
   $("#kpi-done").textContent = TASKS.filter(t => t.status === "done").length;
   const cap = TASKS.filter(open).reduce((a, t) => a + (t.estimate_days || 0), 0);
   $("#kpi-cap").textContent = cap.toFixed(1) + "d";
+  // 今日新增 = 今天 discovered 的 task + 今天 date 的客户痛点
+  const todayTasks = TASKS.filter(t => t.discovered === SNAPSHOT_DATE).length;
+  const todayPain = CUSTOMER_PAIN.filter(p => p.date === SNAPSHOT_DATE).length;
+  $("#kpi-today").textContent = todayTasks + todayPain;
+  $("#kpi-pain").textContent = CUSTOMER_PAIN.length;
 
   // Weekly
   $("#weekly").innerHTML = WEEKLY.map(w => `<li>${chip(w.p.toLowerCase(), w.p)} ${w.text} <span style="color:var(--fg-3);">— ${w.due}</span></li>`).join("");
-  $("#decisions").innerHTML = DECISIONS.map(d => `<li><strong style="color:var(--accent);font-family:ui-monospace,Menlo,monospace">${d.id}</strong> · ${d.text}</li>`).join("");
+  $("#decisions").innerHTML = DECISIONS.map(d => `<li>${dateBadge(d.date)} <strong style="color:var(--accent);font-family:ui-monospace,Menlo,monospace">${d.id}</strong> · ${d.text}</li>`).join("");
 
   // Kanban
   ["todo", "in_progress", "in_review", "done", "closed"].forEach(s => {
@@ -482,6 +516,7 @@ function render() {
     <td>${t.category}</td>
     <td>${t.estimate_days}d</td>
     <td>${t.owner || "—"}</td>
+    <td>${dateBadge(t.discovered)}</td>
     <td style="color:var(--fg-3);font-size:11px;">${(t.tags || []).join(", ")}</td>
   </tr>`).join("");
 
@@ -522,11 +557,19 @@ function render() {
 
   // Customer Pain
   $("#pain-grid").innerHTML = CUSTOMER_PAIN.map(p => `<div class="pain">
-    <div class="pid">${p.id}</div>
+    <div class="pid">${p.id}${p.date ? `<br>${dateBadge(p.date)}` : ""}</div>
     <div class="quote">${p.quote}</div>
     <div class="link">→ ${p.link}</div>
-    <div>${chip(/P0|hotfix/i.test(p.status) ? "p0" : /task/i.test(p.status) ? "p1" : "p2", p.status)}</div>
+    <div>${chip(/✅/.test(p.status) ? "p3" : /P0|hotfix/i.test(p.status) ? "p0" : /task/i.test(p.status) ? "p1" : "p2", p.status)}</div>
   </div>`).join("");
+}
+
+// v0.9.1.9: 发现日期徽章 — 今天(SNAPSHOT_DATE)高亮成"今日"，其余灰色日期，空显示 —
+function dateBadge(d) {
+  if (!d) return '<span style="color:var(--fg-3)">—</span>';
+  if (d === SNAPSHOT_DATE)
+    return `<span class="chip" style="background:rgba(74,210,138,.18);color:var(--done);font-weight:600">★ 今日 ${d.slice(5)}</span>`;
+  return `<span style="color:var(--fg-3);font-size:11px;font-family:ui-monospace,Menlo,monospace">${d}</span>`;
 }
 
 // Filter listeners
