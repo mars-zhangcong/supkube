@@ -505,12 +505,14 @@ const handleCommand = (command, row) => {
       runManualSnapshot(row)
       break
     case 'backup':
-      // "Backup" = "create a new Restore Point for this app via the
-      // parameterized create dialog" (the user can pick storage/TTL/
-      // fsBackup mode etc.). The Restore Points page opens the Create
-      // dialog with this app's ns preselected (v0.7.13+ — the page
-      // reads ?namespace= and prefills).
-      router.push({ path: '/backups', query: { namespace: row.namespace, intent: 'create' } })
+      // v0.9.1.10 (#108): "Backup" an application = set up a protection
+      // Policy for it (Kasten mental model), NOT a one-off ad-hoc Restore
+      // Point. Mars (2026-05-28 demo): "应用点击 Backup 应该跳转到 Policy
+      // 而不是 Restore Point". We route to the Policies page with
+      // intent=create so the Create-Policy wizard opens pre-filled with this
+      // app's namespace. (One-off backups still available via the Restore
+      // Points page's own Create button; the instant path is "Snapshot".)
+      router.push({ path: '/policies', query: { namespace: row.namespace, intent: 'create' } })
       break
     case 'restore':
       // FIX (v0.7.13): "Restore" on an Application means "pick one of this

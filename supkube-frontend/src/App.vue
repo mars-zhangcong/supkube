@@ -193,7 +193,17 @@
           </el-dropdown>
         </el-header>
         <el-main>
-          <router-view />
+          <!-- v0.9.1.10 (#98): key the routed view by the active cluster so
+               switching the Mode Switcher dropdown REMOUNTS the current page
+               → its onMounted re-fetches with the new X-Supkube-Cluster
+               header. Previously setActive() only changed the ?cluster= query
+               (router.replace, same path) so the view never remounted and the
+               user stared at stale data until the 30s poll tick ("不联动",
+               2026-05-28 demo). Normal route changes still remount as before
+               (different component type). -->
+          <router-view v-slot="{ Component }">
+            <component :is="Component" :key="cluster.active.value || 'this-cluster'" />
+          </router-view>
         </el-main>
       </el-container>
     </el-container>

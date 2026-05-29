@@ -418,12 +418,13 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import {
   ArrowLeft, ArrowUp, ArrowDown, CircleCheckFilled, CirclePlus,
   Document, Folder, InfoFilled, Loading, Operation,
   RefreshLeft, RefreshRight, WarningFilled
 } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElNotification } from 'element-plus'
 import {
   getNamespaces, createNamespace,
   getBackupArtifacts, createRestore, preflightRestore,
@@ -432,6 +433,7 @@ import {
 import { useCluster } from '../composables/useCluster'
 
 const { t } = useI18n()
+const router = useRouter()
 const cluster = useCluster()
 // v0.9.0 MC3: targetCluster defaults to "this-cluster" → existing local-restore
 // behavior. The Target Cluster section only renders when ≥2 clusters are
@@ -882,9 +884,44 @@ async function handleSubmit() {
       targetCluster: isCrossCluster.value ? targetCluster.value : undefined
     }
     await createRestore(payload)
-    ElMessage.success(t('restoreDrawer.submitted', { name: restoreName.value }))
+
+    // v0.9.1.10 (#105) — "发起 Restore 后零反馈" fix.
+    //
+    // The old flow flashed a 3-second ElMessage toast then closed the drawer,
+    // dumping the user back on the Restore Points list. The Restore CR they
+    // just created lives in the Activity stream — which they weren't looking
+    // at — so from their seat "什么都没发生". (Mars hit this in the 2026-05-28
+    // demo and couldn't tell whether a restore had been created at all.)
+    //
+    // Now:
+    //   - Local restore  → persistent notification + auto-route to the live,
+    //     restore-filtered Activity stream so progress is undeniable.
+    //   - Cross-cluster  → the Restore CR runs on the REMOTE cluster's Velero
+    //     and does NOT surface in this cluster's Activity, so navigating here
+    //     would reproduce the "nothing happened" bug. Instead we show a
+    //     persistent notice telling the user to switch clusters.
+    const submittedName = restoreName.value
     visibleProxy.value = false
-    emit('restored', restoreName.value)
+    emit('restored', submittedName)
+
+    if (isCrossCluster.value) {
+      ElNotification({
+        title: t('restoreDrawer.submittedXTitle'),
+        message: t('restoreDrawer.submittedXBody', { name: submittedName, cluster: targetCluster.value }),
+        type: 'success',
+        duration: 0,            // persistent — no local progress view to land on
+        position: 'bottom-right'
+      })
+    } else {
+      ElNotification({
+        title: t('restoreDrawer.submittedTitle'),
+        message: t('restoreDrawer.submittedBody', { name: submittedName, ns: targetNs.value }),
+        type: 'success',
+        duration: 4500,
+        position: 'bottom-right'
+      })
+      router.push({ path: '/observability', query: { tab: 'activity', type: 'Restore' } })
+    }
   } catch (e) {
     ElMessage.error(e.response?.data?.error || e.message)
   } finally {

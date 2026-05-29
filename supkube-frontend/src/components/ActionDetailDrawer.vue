@@ -255,8 +255,17 @@
             </ul>
           </div>
         </div>
-        <div v-else-if="detailedError" class="sk-msg-block sk-msg-err sk-body">
-          <span class="sk-body-strong">{{ t('activity.detail.fetchErrorPrefix') }}:</span> {{ detailedError }}
+        <div v-else-if="detailedError">
+          <div class="sk-msg-block sk-msg-err sk-body">
+            <span class="sk-body-strong">{{ t('activity.detail.fetchErrorPrefix') }}:</span> {{ detailedError }}
+          </div>
+          <!-- v0.9.1.10 (#103): never strand the user at "N errors". Tell them
+               where the messages live + the exact command to read them. -->
+          <p class="sk-caption" style="margin:10px 0 6px">{{ t('activity.detail.detailFetchFallbackHint') }}</p>
+          <div class="kubectl-block">
+            <code>{{ restoreInspectCommand }}</code>
+            <el-button size="small" text class="copy-btn" @click="copyText(restoreInspectCommand)">copy</el-button>
+          </div>
         </div>
       </section>
       <section v-if="action.type === 'Restore' && action.warnings > 0" class="sk-section">
@@ -272,8 +281,15 @@
             </ul>
           </div>
         </div>
-        <div v-else-if="detailedError" class="sk-msg-block sk-msg-warn sk-body">
-          <span class="sk-body-strong">{{ t('activity.detail.fetchErrorPrefix') }}:</span> {{ detailedError }}
+        <div v-else-if="detailedError">
+          <div class="sk-msg-block sk-msg-warn sk-body">
+            <span class="sk-body-strong">{{ t('activity.detail.fetchErrorPrefix') }}:</span> {{ detailedError }}
+          </div>
+          <p class="sk-caption" style="margin:10px 0 6px">{{ t('activity.detail.detailFetchFallbackHint') }}</p>
+          <div class="kubectl-block">
+            <code>{{ restoreInspectCommand }}</code>
+            <el-button size="small" text class="copy-btn" @click="copyText(restoreInspectCommand)">copy</el-button>
+          </div>
         </div>
       </section>
 
@@ -530,13 +546,26 @@ const kubectlCommand = computed(() => {
   const kind = (props.action.type || 'Backup').toLowerCase() // backup / restore
   return `$ kubectl -n velero get ${kind} ${props.action.id} -o yaml`
 })
-function copyKubectl() {
-  const cmd = kubectlCommand.value.replace(/^\$ /, '')
+// v0.9.1.10 (#103): the command we surface when the BSL detail fetch fails,
+// so the user can always read the per-resource error/warning messages
+// manually. `velero restore describe --details` gunzips the same results
+// blob SupKube tried (and failed) to fetch.
+const restoreInspectCommand = computed(() => {
+  if (!props.action || props.action.type !== 'Restore') return ''
+  return `velero restore describe ${props.action.id} --details`
+})
+
+// Generic clipboard copy with toast. copyKubectl delegates here.
+function copyText(text) {
+  const cmd = (text || '').replace(/^\$ /, '')
   if (!cmd) return
   navigator.clipboard.writeText(cmd).then(
     () => ElMessage.success('Copied to clipboard'),
     () => ElMessage.error('Copy failed — your browser may have blocked clipboard access')
   )
+}
+function copyKubectl() {
+  copyText(kubectlCommand.value)
 }
 
 const formatTime = (iso) => new Date(iso).toLocaleString()

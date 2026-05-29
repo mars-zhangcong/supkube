@@ -277,7 +277,19 @@
           <el-input v-model="createForm.ttl" placeholder="720h (30 days)" />
         </el-form-item>
         <el-form-item label="Storage Location (Profile)">
-          <el-input v-model="createForm.storageLocation" placeholder="default" />
+          <!-- v0.9.1.10 (#107): real BSL picker. "Auto" ('') lets the backend
+               resolve the effective BSL so the backup never fails with
+               "BSL default not found" on clusters whose BSL isn't named
+               "default" (e.g. AKS azure-blob). -->
+          <el-select v-model="createForm.storageLocation" style="width:100%" placeholder="Auto (use default storage location)">
+            <el-option label="Auto (use default storage location)" value="" />
+            <el-option
+              v-for="bsl in storageLocations"
+              :key="bsl.metadata.name"
+              :label="bsl.metadata.name + (bsl.spec?.default ? '  ★ default' : '')"
+              :value="bsl.metadata.name"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item label="Include Volumes">
           <el-switch v-model="createForm.snapshotVolumes" />
@@ -335,7 +347,7 @@ const viewingHtml = computed(() =>
   })
 )
 import { Plus, Search, Box, Monitor, MagicStick } from '@element-plus/icons-vue'
-import { getBackups, createBackup, deleteBackup, getNamespaces, getAction } from '../api/velero'
+import { getBackups, createBackup, deleteBackup, getNamespaces, getAction, getStorageLocations } from '../api/velero'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { normalizePhase, phaseTagType } from '../utils/phase'
 import RestoreDrawer from '../components/RestoreDrawer.vue'
@@ -373,6 +385,8 @@ const selectedRows = ref([])
 // flows in via :backup so the drawer can read includedNamespaces, name, etc.
 const restoreDrawerOpen = ref(false)
 const restoreTarget = ref(null)
+// v0.9.1.10 (#107): available BackupStorageLocations for the create dialog picker.
+const storageLocations = ref([])
 
 let pollTimer = null
 
@@ -382,7 +396,12 @@ const createForm = ref({
   excludedNamespaces: [],
   labelSelectorStr: '',
   ttl: '720h',
-  storageLocation: 'default',
+  // v0.9.1.10 (#107): default to '' = "Auto". Previously hardcoded to
+  // 'default', which the backend forwarded literally → Velero looked for a
+  // BSL named "default" that doesn't exist on AKS (only "azure-blob") →
+  // "BSL default not found". Empty lets the backend auto-resolve the
+  // effective BSL (default-flagged / sole / named-default).
+  storageLocation: '',
   snapshotVolumes: true,
   // v0.6: 'filesystem' = Restic/Kopia fs backup (defaultVolumesToFsBackup=true)
   //       'csi'        = CSI snapshot (snapshotVolumes=true + plain spec)
@@ -754,6 +773,18 @@ const fetchNamespaces = async () => {
   }
 }
 
+// v0.9.1.10 (#107): backing list for the Storage Location picker in the
+// create-backup dialog. Non-fatal on error — the form still works (Auto).
+const fetchStorageLocations = async () => {
+  try {
+    const res = await getStorageLocations()
+    storageLocations.value = res.data.items || []
+  } catch (e) {
+    console.error('Failed to load storage locations:', e)
+    storageLocations.value = []
+  }
+}
+
 const parseLabelSelector = (str) => {
   if (!str || !str.trim()) return undefined
   const labels = {}
@@ -793,7 +824,8 @@ const handleCreate = async () => {
       excludedNamespaces: createForm.value.excludedNamespaces.length > 0 ? createForm.value.excludedNamespaces : undefined,
       labelSelector: parseLabelSelector(createForm.value.labelSelectorStr),
       ttl: createForm.value.ttl || '720h',
-      storageLocation: createForm.value.storageLocation || 'default',
+      // v0.9.1.10 (#107): empty → omit so the backend auto-resolves the BSL.
+      storageLocation: createForm.value.storageLocation || undefined,
       snapshotVolumes: isCSI,
       defaultVolumesToFsBackup: isFS
     }
@@ -802,7 +834,7 @@ const handleCreate = async () => {
     showCreateDialog.value = false
     createForm.value = {
       name: '', includedNamespaces: [], excludedNamespaces: [], labelSelectorStr: '',
-      ttl: '720h', storageLocation: 'default', snapshotVolumes: true, volumeMode: 'filesystem'
+      ttl: '720h', storageLocation: '', snapshotVolumes: true, volumeMode: 'filesystem'
     }
     await fetchBackups()
     startPolling()
@@ -984,6 +1016,7 @@ onMounted(() => {
   }
   fetchBackups()
   fetchNamespaces()
+  fetchStorageLocations()
 })
 onUnmounted(() => {
   stopPolling()

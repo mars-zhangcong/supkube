@@ -375,6 +375,10 @@ export default {
       warningsHeader: 'Warnings ({n})',
       loadingDetail: 'Loading detail from object storage…',
       fetchErrorPrefix: 'Could not fetch detail',
+      // v0.9.1.10 (#103): when the per-resource detail fetch from object
+      // storage fails, never leave the user stranded at "N errors". Explain
+      // where the messages live and give the exact command to read them.
+      detailFetchFallbackHint: 'Velero stores per-resource messages in object storage (BSL). SupKube could not retrieve them automatically (reason above). Read them directly with:',
       // v0.8.10 Plan-B paired-policy fields
       // v0.8.10.5: dropped "half" suffix — customers found it ambiguous
       // ("half of what?"). Plain "Snapshot" / "Export" is unambiguous
@@ -449,6 +453,14 @@ export default {
     noArtifacts: 'No restorable artifacts found in this namespace.',
     artifactsLoadError: 'Failed to load artifact list',
     submitted: 'Restore "{name}" submitted — Velero is processing',
+    // v0.9.1.10 (#105): persistent, explicit submit feedback. The old 3s
+    // toast vanished and left the user on the Restore Points list with no
+    // sign anything was happening ("什么都没发生"). These messages back a
+    // persistent notification + auto-routing to the live Activity stream.
+    submittedTitle: 'Restore initiated',
+    submittedBody: 'Velero is restoring "{name}" into namespace "{ns}". Opening the live Activity stream so you can watch its progress…',
+    submittedXTitle: 'Cross-cluster restore initiated',
+    submittedXBody: 'Restore "{name}" is now running on cluster "{cluster}". Switch to that cluster and open Activity to watch its progress.',
     // v0.8.2 Transform Set integration
     transformSet: 'Transform Set',
     transformSetNone: '(none — restore as-is)',
@@ -574,6 +586,7 @@ export default {
     exportRetention: 'Cloud Retention',
     storageProfile: 'Cloud Storage Profile',
     storageProfilePlaceholder: 'Pick a Cloud Storage Profile',
+    storageProfileAuto: 'Auto — use the default cloud location',
     storageProfileEmpty: 'No Cloud Storage Profiles configured. Add one on the Storage Locations page first.',
     includedNamespaces: 'Included Namespaces',
     snapshot: 'Local Backup',

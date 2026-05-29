@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -291,7 +292,29 @@ func CreateBackup(c *gin.Context) {
 	if len(req.LabelSelector) > 0 {
 		backup.Spec.LabelSelector = &metav1.LabelSelector{MatchLabels: req.LabelSelector}
 	}
-	if req.StorageLocation != "" {
+	// v0.9.1.10 (#107): resolve the effective BackupStorageLocation.
+	//
+	// Demo failure (2026-05-28): the UI used to hardcode storageLocation:
+	// "default", and an unspecified BSL also makes Velero fall back to a BSL
+	// literally named "default". Our AKS dev clusters have only "azure-blob"
+	// — no "default" — so the Backup failed validation with the opaque
+	// "BackupStorageLocation \"default\" not found". We now:
+	//   - empty            → auto-pick (default-flagged / sole / named-default)
+	//   - specified        → validate it exists, else return an actionable 422
+	//                         (with the list of real BSLs) instead of letting
+	//                         Velero produce the cryptic failure later.
+	if req.StorageLocation == "" {
+		bslName, rerr := resolveBackupStorageLocation(context.Background(), cl)
+		if rerr != nil {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": rerr.Error()})
+			return
+		}
+		backup.Spec.StorageLocation = bslName
+	} else {
+		if rerr := assertBSLExists(context.Background(), cl, req.StorageLocation); rerr != nil {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": rerr.Error()})
+			return
+		}
 		backup.Spec.StorageLocation = req.StorageLocation
 	}
 	if err := cl.Create(context.Background(), backup); err != nil {
@@ -299,6 +322,90 @@ func CreateBackup(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusCreated, backup)
+}
+
+// resolveBackupStorageLocation picks the effective BSL when the caller didn't
+// name one. Velero's own implicit fallback is a BSL literally named "default"
+// — but many clusters don't have one (our AKS dev clusters' sole BSL is
+// "azure-blob"), so an unspecified-BSL backup fails validation. (#107.)
+//
+// Precedence:
+//  1. a BSL with spec.default == true  (Velero's notion of "the default")
+//  2. the sole BSL, when exactly one exists
+//  3. a BSL literally named "default", if present
+//  4. otherwise error — multiple BSLs, none default; the caller must choose.
+func resolveBackupStorageLocation(ctx context.Context, cl client.Client) (string, error) {
+	bslList := &velerov1.BackupStorageLocationList{}
+	if err := cl.List(ctx, bslList, client.InNamespace("velero")); err != nil {
+		return "", fmt.Errorf("listing BackupStorageLocations: %w", err)
+	}
+	return pickPreferredBSL(bslList.Items, "BackupStorageLocation")
+}
+
+// resolveExportStorageLocation picks a CLOUD (off-site) BSL for the export half
+// of an L2 policy when the caller didn't name one. It mirrors
+// resolveBackupStorageLocation but EXCLUDES the SupKube-managed in-cluster Local
+// BSL (label supkube.io/bsl-role=local), so the export copy lands off-site —
+// preserving the 3-2-1-1-0 "≥1 copy off-site" property. (#101 finding 1.)
+func resolveExportStorageLocation(ctx context.Context, cl client.Client) (string, error) {
+	bslList := &velerov1.BackupStorageLocationList{}
+	if err := cl.List(ctx, bslList, client.InNamespace("velero")); err != nil {
+		return "", fmt.Errorf("listing BackupStorageLocations: %w", err)
+	}
+	cloud := make([]velerov1.BackupStorageLocation, 0, len(bslList.Items))
+	for i := range bslList.Items {
+		if bslList.Items[i].Labels["supkube.io/bsl-role"] == "local" {
+			continue // the in-cluster Local store is never an off-site target
+		}
+		cloud = append(cloud, bslList.Items[i])
+	}
+	return pickPreferredBSL(cloud, "cloud (off-site) BackupStorageLocation")
+}
+
+// pickPreferredBSL applies SupKube's "which BSL did the caller mean" precedence
+// to a candidate set: (1) one flagged spec.default; (2) the sole candidate;
+// (3) one literally named "default" (Velero's own implicit fallback); else an
+// actionable error listing the candidates. `what` personalizes the messages.
+func pickPreferredBSL(items []velerov1.BackupStorageLocation, what string) (string, error) {
+	if len(items) == 0 {
+		return "", fmt.Errorf("no %s is configured — add one under Storage Locations first", what)
+	}
+	for i := range items {
+		if items[i].Spec.Default {
+			return items[i].Name, nil
+		}
+	}
+	if len(items) == 1 {
+		return items[0].Name, nil
+	}
+	for i := range items {
+		if items[i].Name == "default" {
+			return "default", nil
+		}
+	}
+	names := make([]string, 0, len(items))
+	for i := range items {
+		names = append(names, items[i].Name)
+	}
+	return "", fmt.Errorf("multiple %ss exist and none is marked default; specify one explicitly (available: %s)", what, strings.Join(names, ", "))
+}
+
+// assertBSLExists turns a bad storageLocation name into an actionable 422 at
+// create time, rather than the cryptic Velero validation failure minutes
+// later. Lists once and matches by name. (#107.)
+func assertBSLExists(ctx context.Context, cl client.Client, name string) error {
+	bslList := &velerov1.BackupStorageLocationList{}
+	if err := cl.List(ctx, bslList, client.InNamespace("velero")); err != nil {
+		return fmt.Errorf("listing BackupStorageLocations: %w", err)
+	}
+	names := make([]string, 0, len(bslList.Items))
+	for i := range bslList.Items {
+		if bslList.Items[i].Name == name {
+			return nil
+		}
+		names = append(names, bslList.Items[i].Name)
+	}
+	return fmt.Errorf("BackupStorageLocation %q not found (available: %s)", name, strings.Join(names, ", "))
 }
 
 // GetBackup returns a specific backup, enriched with the same `supkube`
@@ -736,7 +843,13 @@ func DeleteRestore(c *gin.Context) {
 // `detailedError` for diagnostics.
 func GetRestoreResults(c *gin.Context) {
 	name := c.Param("name")
-	cl, err := k8s.GetRuntimeClient()
+	// v0.9.1.10 (#103): header-routed, matching ListRestores. Previously this
+	// used the always-local k8s.GetRuntimeClient(), so when the user viewed a
+	// restore under a non-local cluster selector the lookup 404'd — they saw
+	// the "N errors" count (ListActions/GetAction) but got nothing when they
+	// drilled in ("3 errors 看不到", 2026-05-28 demo). Routing both reads
+	// through the same cluster keeps the count and the detail consistent.
+	cl, err := getRequestRuntimeClient(c)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -912,6 +1025,42 @@ func CreateSchedule(c *gin.Context) {
 		// L1 (or legacy): the single TTL + BSL apply to the snapshot half.
 		pr.SnapshotTTL = req.TTL
 		pr.SnapshotStorageLocation = req.StorageLocation
+	}
+
+	// v0.9.1.10 (#101 finding 1 / #107 sibling): resolve empty BSLs + validate
+	// explicit ones, so a policy never silently inherits Velero's implicit
+	// "default" BSL. On clusters whose BSL isn't named "default" (our AKS dev
+	// has only "azure-blob"), a blank half produced Backups that failed
+	// validation with "BackupStorageLocation \"default\" not found".
+	//   - snapshot half: general resolver (the local copy may legitimately be
+	//     the in-cluster MinIO, the sole BSL, or a flagged default).
+	//   - export half:  CLOUD-preferring resolver so the off-site copy never
+	//     collapses onto the Local store (keeps the 3-2-1-1-0 promise).
+	// Resolve fires ONLY when the caller left the field empty; an explicit
+	// name is validated and otherwise passed through untouched.
+	if pr.SnapshotStorageLocation == "" {
+		name, rerr := resolveBackupStorageLocation(context.Background(), cl)
+		if rerr != nil {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "snapshot storage location: " + rerr.Error()})
+			return
+		}
+		pr.SnapshotStorageLocation = name
+	} else if rerr := assertBSLExists(context.Background(), cl, pr.SnapshotStorageLocation); rerr != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "snapshot storage location: " + rerr.Error()})
+		return
+	}
+	if req.Dual {
+		if pr.ExportStorageLocation == "" {
+			name, rerr := resolveExportStorageLocation(context.Background(), cl)
+			if rerr != nil {
+				c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "export storage location: " + rerr.Error()})
+				return
+			}
+			pr.ExportStorageLocation = name
+		} else if rerr := assertBSLExists(context.Background(), cl, pr.ExportStorageLocation); rerr != nil {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "export storage location: " + rerr.Error()})
+			return
+		}
 	}
 
 	// Build + create the snapshot half. Always present.

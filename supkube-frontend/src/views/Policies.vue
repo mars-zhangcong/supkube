@@ -426,6 +426,10 @@
               :placeholder="t('policies.storageProfilePlaceholder')"
               style="width: 100%"
             >
+              <!-- v0.9.1.10 (#101 finding 1): explicit "Auto" so '' reads as
+                   a deliberate choice. Backend resolves the effective cloud
+                   BSL (flagged-default / sole / named-default). -->
+              <el-option :label="t('policies.storageProfileAuto')" value="" />
               <!-- v0.8.12 LBS3: hide the in-cluster Local BSL from this
                    Cloud-only selector (bslRole=local). The Cloud half
                    should never land in the Local store; pairing rules
@@ -627,7 +631,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Plus, Search, FolderOpened } from '@element-plus/icons-vue'
 import {
@@ -639,6 +643,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 
 const { t } = useI18n()
 const router = useRouter()
+const route = useRoute()
 
 // v0.8.10.1: jump from a Policy row's RP count to the Restore Points
 // page pre-filtered by this policy. Same UX pattern as the Applications
@@ -1156,7 +1161,12 @@ const defaultForm = () => ({
     schedulePreset: '0 0 * * *',
     schedule: '0 0 * * *',
     retention: '720h',
-    storageLocation: 'default'
+    // v0.9.1.10 (#101 finding 1): '' = "Auto (default cloud location)". Was
+    // hardcoded 'default', which the payload forwarded literally → Velero
+    // looked for a BSL named "default" that doesn't exist on AKS (only
+    // "azure-blob") → both policy halves' Backups failed. Empty lets the
+    // backend resolve the effective cloud BSL.
+    storageLocation: ''
   }
 })
 const createForm = ref(defaultForm())
@@ -1541,13 +1551,15 @@ const collapseToVelero = (form) => {
     payload.dual = true
     payload.snapshotTtl = `${snapHours}h`
     payload.exportTtl = `${expHours}h`
-    payload.exportStorageLocation = form.export.storageLocation || 'default'
-    // snapshotStorageLocation left blank → uses Velero's cluster default BSL
+    // v0.9.1.10 (#101 finding 1): empty → omit so the backend resolves the
+    // effective cloud BSL (never silently send the nonexistent "default").
+    payload.exportStorageLocation = form.export.storageLocation || undefined
+    // snapshotStorageLocation left blank → backend resolves the default BSL
   } else {
     // L1 — single schedule, legacy field set
     payload.dual = false
     payload.ttl = `${snapHours}h`
-    payload.storageLocation = form.export.storageLocation || 'default'
+    payload.storageLocation = form.export.storageLocation || undefined
     payload.snapshotMoveData = dp === 'data-mover'
   }
   return payload
@@ -1684,6 +1696,15 @@ onMounted(() => {
   fetchSchedules()
   fetchNamespaces()
   fetchStorageLocations()
+  // v0.9.1.10 (#108): deep-link from Applications → kebab "Backup". Open the
+  // Create-Policy wizard pre-filled with the app's namespace so "back up this
+  // app" lands the user directly on policy creation, not a bare list.
+  if (route.query.intent === 'create') {
+    openCreateDrawer() // resets createForm to defaults first
+    if (route.query.namespace) {
+      createForm.value.includedNamespaces = [String(route.query.namespace)]
+    }
+  }
 })
 </script>
 

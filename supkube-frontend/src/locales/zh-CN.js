@@ -364,6 +364,9 @@ export default {
       warningsHeader: '警告 ({n})',
       loadingDetail: '正在从对象存储加载详情…',
       fetchErrorPrefix: '无法获取详情',
+      // v0.9.1.10 (#103): 当从对象存储取每个资源的详情失败时，绝不能把用户
+      // 晾在"N errors"那里。说明信息在哪、并给出可直接读取的命令。
+      detailFetchFallbackHint: 'Velero 把每个资源的报错信息存在对象存储 (BSL) 里。SupKube 没能自动取回（原因见上）。可用以下命令直接查看：',
       noBackupErrors: 'Backup CR 报告了错误但暂未找到对应的 DataUpload / PodVolumeBackup 失败消息。错误信息可能在 BSL 的 <backup>-results.gz 里 — v0.9 计划通过 DownloadRequest 拉取。',
       // v0.8.10 方案 B 双策略配对字段
       // v0.8.12 LBS2: 快照/导出 → 本地/云端
@@ -431,6 +434,13 @@ export default {
     noArtifacts: '该命名空间下没有可恢复的组件。',
     artifactsLoadError: '加载组件清单失败',
     submitted: '恢复任务 "{name}" 已提交 — Velero 正在处理',
+    // v0.9.1.10 (#105): 持久、明确的提交反馈。旧的 3 秒 toast 一闪即逝，
+    // 用户被留在恢复点列表上、毫无"还原正在进行"的迹象（"什么都没发生"）。
+    // 这几条文案支撑持久通知 + 自动跳转到实时活动流。
+    submittedTitle: '还原已发起',
+    submittedBody: 'Velero 正在将 "{name}" 还原到命名空间 "{ns}"。正在打开实时活动流，你可以在那里查看进度…',
+    submittedXTitle: '跨集群还原已发起',
+    submittedXBody: '还原 "{name}" 已在集群 "{cluster}" 上启动。切换到该集群并打开"活动"即可查看进度。',
     // v0.8.2 Transform Set 集成
     transformSet: '变换集',
     transformSetNone: '（无 — 原样恢复）',
@@ -553,6 +563,7 @@ export default {
     exportRetention: '云端保留',
     storageProfile: '云端存储位置',
     storageProfilePlaceholder: '选择一个云端存储位置（Storage Profile）',
+    storageProfileAuto: '自动 —— 使用默认云端位置',
     storageProfileEmpty: '尚未配置云端 Storage Profile，请先在"存储位置"页添加一个 BSL。',
     includedNamespaces: '包含的命名空间',
     snapshot: '本地备份',
