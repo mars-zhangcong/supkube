@@ -83,6 +83,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0               # golangci-lint new-from-merge-base 需完整历史算 merge-base
 
       - uses: actions/setup-go@v5
         with:
@@ -100,11 +102,13 @@ jobs:
           fi
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v8
         with:
-          version: v1.59
+          # golangci-lint v2.x — v1.x can't parse Go 1.25 export data
+          # ("unsupported version: 2"), which made the whole run false-fail.
+          # Action v8 requires golangci-lint >= v2.1. Config: supkube-backend/.golangci.yml
+          version: v2.12
           working-directory: supkube-backend
-          args: --timeout=5m
 
       # 前端 lint 暂未启用：supkube-frontend/package.json 目前只有 build/dev/preview，
       # 无 lint/test 脚本。要启用见 CICD.md §2.1（需先加 eslint/prettier/vue-tsc）。
@@ -124,7 +128,7 @@ jobs:
         run: docker build -f docker/Dockerfile.frontend -t supkube/frontend:scan ./supkube-frontend
 
       - name: Trivy scan backend
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: supkube/backend:scan
           severity: CRITICAL,HIGH
@@ -132,7 +136,7 @@ jobs:
           exit-code: "1"
 
       - name: Trivy scan frontend
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: supkube/frontend:scan
           severity: CRITICAL,HIGH

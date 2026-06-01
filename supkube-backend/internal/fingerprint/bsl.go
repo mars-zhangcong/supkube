@@ -138,7 +138,7 @@ func (b *bslClient) getAWS(ctx context.Context, bsl *velerov1.BackupStorageLocat
 	if err != nil {
 		return nil, err
 	}
-	defer out.Body.Close()
+	defer func() { _ = out.Body.Close() }()
 	return io.ReadAll(out.Body)
 }
 
@@ -331,7 +331,7 @@ func (b *bslClient) getAzure(ctx context.Context, bsl *velerov1.BackupStorageLoc
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	return io.ReadAll(resp.Body)
 }
 

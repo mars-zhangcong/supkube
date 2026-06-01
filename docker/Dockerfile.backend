@@ -36,7 +36,10 @@ RUN echo "cachebust=$CACHEBUST target=$TARGETARCH" && \
 # Runtime stage
 FROM alpine:3.19
 
-RUN apk add --no-cache ca-certificates tzdata
+# apk upgrade first to pull the latest security patches for the pinned alpine
+# line (e.g. musl/xz CVE fixes) so the image isn't shipped with known-fixed
+# OS CVEs. Combined with add in one layer to keep the layer count down.
+RUN apk upgrade --no-cache && apk add --no-cache ca-certificates tzdata
 
 RUN adduser -D -u 1000 appuser
 USER appuser

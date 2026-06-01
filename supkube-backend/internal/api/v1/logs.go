@@ -281,11 +281,11 @@ func GetLogs(c *gin.Context) {
 		c.Writer.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		c.Writer.WriteHeader(http.StatusOK)
 		if resp.WarningNotice != "" {
-			fmt.Fprintln(c.Writer, "# "+resp.WarningNotice)
+			_, _ = fmt.Fprintln(c.Writer, "# "+resp.WarningNotice)
 		}
-		fmt.Fprintf(c.Writer, "# component=%s pods=%d generated=%s\n", resp.Component, resp.PodCount, resp.GeneratedAt.Format(time.RFC3339))
+		_, _ = fmt.Fprintf(c.Writer, "# component=%s pods=%d generated=%s\n", resp.Component, resp.PodCount, resp.GeneratedAt.Format(time.RFC3339))
 		for _, ll := range resp.Lines {
-			fmt.Fprintf(c.Writer, "%s [%s] %s/%s %s\n", ll.Timestamp, ll.Severity, ll.Component, ll.Pod, ll.Message)
+			_, _ = fmt.Fprintf(c.Writer, "%s [%s] %s/%s %s\n", ll.Timestamp, ll.Severity, ll.Component, ll.Pod, ll.Message)
 		}
 		return
 	}

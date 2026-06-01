@@ -1,0 +1,20 @@
+# golangci-lint v2 配置 —— SupKube 后端
+#
+# 策略（与 CICD.md §2 一致）：基线化旧债 + 强制新代码。
+# - default: standard = errcheck / govet / ineffassign / staticcheck / unused。
+# - new-from-merge-base: 只对"相对 main 改动过的代码"报错。存量旧 lint（约 29
+#   处，集中在历史 handler）作为技术债暂容忍，但任何新增/改动的代码必须干净。
+#   这是在存量项目上落地 linter 的行业标准做法，不是"放水"——对新代码是硬闸。
+#
+# 注意：CI 里 actions/checkout 必须 fetch-depth: 0，否则算不出 merge-base。
+# 想一次性清掉旧债时：临时把 issues.new-from-merge-base 注释掉跑全量，逐步修。
+version: "2"
+
+linters:
+  default: standard
+
+issues:
+  new-from-merge-base: origin/main
+  # 每个 linter 默认最多报 50 条、每类文本默认折叠——放开以免漏报新代码问题。
+  max-issues-per-linter: 0
+  max-same-issues: 0

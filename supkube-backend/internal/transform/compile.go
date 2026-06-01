@@ -119,14 +119,14 @@ func compile(ctx context.Context, cl client.Client, transformSetName string, par
 		}
 		raw, ok := trCM.Data[TransformRulesKey]
 		if !ok || strings.TrimSpace(raw) == "" {
-			return nil, fmt.Errorf("Transform %q missing data[%s]", ref, TransformRulesKey)
+			return nil, fmt.Errorf("transform %q missing data[%s]", ref, TransformRulesKey)
 		}
 		resolved, err := applyParams(raw, mergedParams)
 		if err != nil {
-			return nil, fmt.Errorf("Transform %q: %w", ref, err)
+			return nil, fmt.Errorf("transform %q: %w", ref, err)
 		}
 		if err := Validate(resolved); err != nil {
-			return nil, fmt.Errorf("Transform %q failed validation after param substitution: %w", ref, err)
+			return nil, fmt.Errorf("transform %q failed validation after param substitution: %w", ref, err)
 		}
 		resolvedDocs = append(resolvedDocs, resolved)
 		appliedRefs = append(appliedRefs, ref)
