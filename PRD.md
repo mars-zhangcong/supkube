@@ -2658,7 +2658,7 @@ Integrity Check:  ✅ Verified
 | **状态** | 草稿（2026-05-31） |
 | **作者** | Claude / Mars |
 | **目标版本** | v0.9.x |
-| **关联 ADR** | ADR-031（5 层韧性）/ ADR-035（结构化日志）/ **拟 ADR-037（Activity 持久化与 audit event 存储选型）** |
+| **关联 ADR** | ADR-031（5 层韧性）/ ADR-035（结构化日志）/ **拟 ADR-039（Activity 持久化与 audit event 存储选型）** ← 让号 2026-06-01：ADR-037 已分配给 PRD-011/012 统一数据采集架构（台账自洽，PRD-Review 第六份要求让号） |
 | **关联 PRD** | **PRD-006（Activity Task Detail Timeline）—— 本 PRD 是 PRD-006 的数据层基石** / PRD-005（Log Viewer v2）/ PRD-007（5 层韧性, ForceDelete 同源）|
 
 ### 1. Goal（目标）
@@ -2725,7 +2725,7 @@ type ActivityEvent struct {
 }
 ```
 
-**4.1.2 存储选型（拟 ADR-037 决定）**
+**4.1.2 存储选型（拟 ADR-039 决定）**
 
 三选一, 评审时 Mars 拍板:
 
@@ -2974,7 +2974,7 @@ POST /api/v1/maintenance/orphan-cleanup
 
 | # | 验收点 |
 |---|---|
-| 1 | 拟 ADR-037 已写, events 存储选型经 Phase 0 实测决定（含 1 万 event 写入 + list 性能数据） |
+| 1 | 拟 ADR-039 已写, events 存储选型经 Phase 0 实测决定（含 1 万 event 写入 + list 性能数据） |
 | 2 | `internal/audit/event.go` 实现 + 单测覆盖 ≥ 80% |
 | 3 | DeleteBackup 触发后 5 个阶段 event 真写入 (kubectl 可查 / store 可 grep), 顺序正确 |
 | 4 | ListActions API 返回 union(Velero CR, audit events), 老 Backup 删除后该 Task 卡仍在 |
@@ -2997,7 +2997,7 @@ POST /api/v1/maintenance/orphan-cleanup
 
 | Phase | 内容 | 估时 |
 |---|---|---|
-| **Phase 0** | 选型 events 存储 (K8s Event / CRD / 独立 store), 实测 1 万 event 性能, 写 ADR-037 | 1d |
+| **Phase 0** | 选型 events 存储 (K8s Event / CRD / 独立 store), 实测 1 万 event 性能, 写 ADR-039 | 1d |
 | **Phase 1** | `internal/audit/event.go` 实现 + ListActions API union 改造 + TTL cron | 3d |
 | **Phase 2** | DeleteBackup / ForceDeleteBackup Task 化 + DBR controller informer 联动 + 5 阶段 event 推进 | 2d |
 | **Phase 3** | GET /backups 加 deletionState 字段 + 前端 RP 列表锁定 UI + tooltip 跳 Activity | 2d |
@@ -3011,7 +3011,7 @@ POST /api/v1/maintenance/orphan-cleanup
 - **PRD-007** 5 层数据韧性 — ForceDelete 副作用问题源自 Layer 1/2 (本地快照 + BSL 上行) 边界不清, 本 PRD 治症, PRD-007 治本
 - **ADR-031** 5 层韧性原则 — Activity 持久化是"可观测"维度的基础设施
 - **ADR-035** 结构化日志 — audit event 的 ErrorCode 字段遵循 ADR-035 错误码规范
-- **拟 ADR-037** Activity 持久化与 audit event 存储选型 — 本 PRD Phase 0 产出
+- **拟 ADR-039** Activity 持久化与 audit event 存储选型 — 本 PRD Phase 0 产出（**2026-06-01 让号**：原占 ADR-037 已被 PRD-011/012 统一数据采集架构取用，本 PRD 改占 039；台账见 架构设计.md §ADR 号台账）
 - **task #106** RESTORE-TASK-CENTER + RESTORE-ADVISOR — 可合并入本 PRD（Task Center 本质就是 Activity 持久化的 UI 展现）
 - **task #148** （新立, 本 PRD 实施主任务 placeholder）
 - **现有代码引用**:
@@ -3037,7 +3037,8 @@ POST /api/v1/maintenance/orphan-cleanup
 | 日期 | 操作人 | 状态变化 | 反馈 |
 |---|---|---|---|
 | 2026-05-31 | Mars (testing 20260531.md #2) | — | 提出三件: (a) 清理 RP 应作为 Activity Task 记录有日志可查; (b) 删除中 RP 应锁定不可操作; (新增) **Activity 数据被清空 = 严重 bug**——"本身即使是还原点不在了, 也应该是给客户看到执行的历史的" |
-| 2026-05-31 | Claude | — → **草稿 (v1)** | 起草 PRD-008。**关键架构判定**: 当前 `ListActions` 从 Velero CR 派生 = 实时 view 不是持久化 audit log → Backup CR 被删 Activity 立刻消失 = Mars 反馈的根因。修复方向: 独立 audit event 流 (拟 ADR-037 选 K8s Event / CRD / 独立 store), ListActions 改 union。**定位**: 本 PRD 是 PRD-006 Activity Timeline 的数据层基石——没有 audit 持久化, PRD-006 全是空中楼阁。删除 Task 化 5 阶段 + RP 列表锁定 + Force Delete 改名/警告 + 孤儿清理 endpoint 一并解决。Q1-Q8 待 Mars 评审拍板, 重点 Q1 存储选型决定整个 Phase 0 路径。|
+| 2026-05-31 | Claude | — → **草稿 (v1)** | 起草 PRD-008。**关键架构判定**: 当前 `ListActions` 从 Velero CR 派生 = 实时 view 不是持久化 audit log → Backup CR 被删 Activity 立刻消失 = Mars 反馈的根因。修复方向: 独立 audit event 流 (拟 ADR-039 选 K8s Event / CRD / 独立 store), ListActions 改 union。**定位**: 本 PRD 是 PRD-006 Activity Timeline 的数据层基石——没有 audit 持久化, PRD-006 全是空中楼阁。删除 Task 化 5 阶段 + RP 列表锁定 + Force Delete 改名/警告 + 孤儿清理 endpoint 一并解决。Q1-Q8 待 Mars 评审拍板, 重点 Q1 存储选型决定整个 Phase 0 路径。|
+| 2026-06-01 | Claude (PRD-Review 第六份 跨文档 finding) | — | **ADR-037 让号 → ADR-039**：原 PRD-008 占 ADR-037（审计存储选型），但 2026-06-01 PRD-011/012 立项时 Agent A 把 037 分配给"统一数据采集架构"，台账内部自洽但 PRD-008 仍占旧号 = 撞号复发。按 PRD-Review 第六份 §二建议让号到 ADR-039。本 PRD 全文 6 处 037→039 替换 + 架构设计.md ADR 台账登记。|
 
 ---
 
@@ -3054,7 +3055,7 @@ POST /api/v1/maintenance/orphan-cleanup
 | **关联 ADR** | ADR-025（dual schedule pair, Snapshot/Export 双 Schedule 实现）/ ADR-026（policypair controller）/ **ADR-038（新增, ImportPolicy CRD + Controller 设计, 见架构设计.md §9）** |
 | **关联 PRD** | PRD-007 §4.3（Backup Copy 与 Snapshot Export 的关系：Layer 4 是跨云复制 Snapshot Export 后的产物, 不替代本 PRD 的 UX 重构）/ **PRD-007 §4.4（Export/Import 配对模型 + fingerprint 模块设计 = HMAC + TrustStore, 本 PRD §4.5 是其用户面 Policy 包装）**|
 | **关联文档** | USER_MANUAL.md §Policy（待同步替换 vocabulary, Phase 2 加 §Import Policy 子章节）/ ROADMAP.md "行业 vocabulary 对齐" + "跨集群 DR 流转" |
-| **反向兼容** | Phase 1 后端数据模型（Velero Schedule + `supkube.io/dual=true/false` annotation）**不变**, 仅 UI 词汇层重构, 0 迁移风险。**Phase 2 兼容路径**: 现有 60s `backupSyncPeriod` (Velero 默认全量扫所有 BSL 的兜底机制) **调到 5min** 作退后兜底, **主路径走 ImportPolicy controller**（cluster-id 过滤 + fingerprint 校验 + RPO 可调）；老集群升级无 ImportPolicy CR 时, Velero 5min sync 仍能保证 RP 最终可见（即"无 Import Policy = 退化到 Velero 默认行为, 不丢功能"）|
+| **反向兼容** | Phase 1 后端数据模型（Velero Schedule + `supkube.io/dual=true/false` annotation）**不变**, 仅 UI 词汇层重构, 0 迁移风险。**Phase 2 兼容路径 (2026-06-01 PRD-Review G2 修正)**: Velero `backupSyncPeriod` **保持默认 60s**（不调长——避免无 ImportPolicy 的 BSL 同步退化到 5min 是行为 regression）。Agent G v0.9.1.13.1 加了**直 S3 BackupLister** 复用 fingerprint BSL client, ImportPolicy controller 直接 LIST BSL 而非依赖 Velero sync, 与 Velero 60s sync **并行 race-safe**（双方都 IsAlreadyExists 跳过, 旧 NewVeleroBackupLister 保留作 fallback）。**Phase 2 风险等级**: 不再是 Phase 1 的 "0 迁移风险"——新增 CRD + RBAC + Secret + Helm + controller 复杂度, 详见 §风险评级（待 A3 补）|
 
 > **立项缘由（2026-05-31）**：Mars 在 testing20260531.md 第 4 条反馈——当前 Policy 新建用 "L1 本地 / L2 本地云端" 这套我们自创的 vocabulary, 不符合行业标准。Mars 要求改成 **Kasten K10 一致**: 默认 Action = "Snapshot", 下面有 **"Enable Backup via Snapshot Export"** 开关, 勾选后再选 Snapshot Export 的存储桶（BSL）。附 3 张截图: testing20260531/1780213569295.png（当前 SupKube L1/L2 UI）/ 1780213542977.png（Kasten 风格参考）/ 1780213613916.png（第三张参考）。
 
@@ -3241,7 +3242,7 @@ POST /api/v1/maintenance/orphan-cleanup
 
 | 维度 | Kasten K10 Import Policy | SupKube Import Policy (本 PRD) | 备注 |
 |---|---|---|---|
-| **Poll 间隔 floor** | 5 min (K10 文档 hard floor, 不可调低) | **30s** (Continuous 子模式最快档) | **SupKube 差异化卖点**——10x 更快 RPO; **trade-off**: BSL API List 调用成本 ×10 (S3 LIST 按次计费, 30s × 1 hour = 120 次/h vs Kasten 12 次/h), 客户预算敏感时改 60s/2m 即可 |
+| **Poll 间隔 floor** | 5 min (K10 文档 hard floor) | **30s** (Continuous 最快档) | **诚实表述 (2026-06-01 PRD-Review G1 修正, 撤回原"10x RPO"过度承诺)**：RPO 公式 = `source_backup_interval + import_poll_interval`——RPO 几乎总被**源备份周期主导**。源每小时备份时, import 60s vs 5min 对 ~1h 的 RPO 只差几分钟; 把 BSL LIST API 成本 ×10 不划算。**默认 60s/2min, 30s 仅当源亚分钟级备份（罕见场景, e.g. 关键 ns + 小数据集）时才有 RPO 收益**。SupKube 真实卖点 = fingerprint HMAC 防篡改 + source-cluster 过滤 + RPO 可调 + 暂停/run-once 控制, 不是"快 10 倍"。|
 | **Scheduled 模式** | ✅ cron preset | ✅ cron preset + 自由 custom | parity, Kasten 没开放完全自由 cron |
 | **fingerprint 校验** | license-bound cluster ID（K10 闭源 license server） | HMAC-SHA256 + 客户持有 shared secret（PRD-007 §4.4） | 开源友好, 不依赖 license server |
 | **拒绝/告警/关掉 三模式** | 二档（强制 / 关闭） | **三档 enforce / warn / disabled**（见 §4.5.4） | SupKube 多一档 warn, 满足单集群 dev 场景"我知道没签但先用" |
@@ -3318,6 +3319,10 @@ status:
 - `scheduled.cron` 走 robfig/cron/v3 标准 5 字段格式（分 时 日 月 周）, 不支持 6 字段含秒（与 PRD-004 §4.4 cron 解析口径对齐）
 - `fingerprintMode = disabled` 必须配套 audit `AUDIT_FINGERPRINT_DISABLED_BY_USER`（见 §4.5.4）
 - `paused = true` 时, controller 不删已 Import 的 RP, 仅停止新 poll; 恢复时从 `status.lastPollAt` 接着 poll
+
+**G3 文档化 (2026-06-01 PRD-Review)**: fingerprint enforce 模式同时充当 **"备份完成门"**——因为 fingerprint 文件由源集群在 Velero `Backup.status.phase=Completed` 时才写入 BSL（参 ADR-038 §写入时机）, **enforce 模式自然只 Import 已完成的 RP**。但 **warn / disabled 模式失去这一保护**, 会 Import 到源**正在写入、尚未完成**的半成品 tarball（Velero 增量上传中）, restore 可能失败或得到不一致数据。**UI 必须对 warn/disabled 模式 Import 的、源 fingerprint 缺失的 RP 显示 chip "⚠ 可能未完成 (源未提供完成标记)"** + 在 Restore Wizard 加二次确认。
+
+**G4 文档化 (2026-06-01 PRD-Review)**: ImportPolicy 与 SnapshotPolicy 是**两个不同 CRD**（前者 `importpolicies.supkube.io`, 后者 Velero `Schedule`）, **Action Type Save 后不可改**——选错只能删重建。**UI Save 前必须显示明确告警**: "Action Type 保存后不可更改; 如需切换 Snapshot ↔ Import, 需删除当前 Policy 后新建。" Frontend 表单提交前弹 confirm 对话框, 客户点 "确认 Save" 才提交。
 
 ##### 4.5.6 状态机
 
@@ -3518,7 +3523,7 @@ status:
 | **状态** | **草稿（2026-05-31）** |
 | **作者** | Claude / Mars |
 | **目标版本** | v0.10.x（前端 SVG 重构 + 后端 aggregator 小幅扩字段, 不动持久化）|
-| **关联 ADR** | ADR-031（5 层韧性模型, 节点 source-of-truth）/ 拟 **ADR-038**（DR Topology SVG 视觉规范, 6 色系 + Layer 徽章 + 数据流箭头分类）|
+| **关联 ADR** | ADR-031（5 层韧性模型, 节点 source-of-truth）/ 拟 **ADR-040**（DR Topology SVG 视觉规范, 6 色系 + Layer 徽章 + 数据流箭头分类）← 让号 2026-06-01：ADR-038 已分配给 PRD-009 v2 ImportPolicy CRD（PRD-Review 第六份要求让号） |
 | **关联 PRD** | PRD-007 §4.3（Backup Copy → SVG Layer 4 新节点 + 实线/虚线箭头）/ PRD-008 §Activity 持久化（节点红框失败状态联动 Activity Task tooltip）/ PRD-009（Policy "Snapshot + Export" vocabulary 对齐, 节点标签同步）|
 | **关联文档** | `supkube-frontend/src/components/DRTopology.vue`（681 行, 自研 SVG）/ `supkube-backend/internal/api/v1/dashboard_topology.go`（aggregator, 需新增 layer4/5 节点字段）/ USER_MANUAL.md §Dashboard（截图待重拍）|
 | **反向兼容** | 后端 aggregator JSON 新增 `localSnapshots` / `backupCopies` / `virtualLabs` 三段数组（旧前端不读则忽略）; 现有 `bsls` 数组结构不动; **0 兼容风险** |
@@ -3753,7 +3758,7 @@ Posture: 80/100   (L1✓ L2✓ L3✓ L4✓ L5✗)
 ### 10. 关联文档与任务
 
 - **ADR-031**（5 层韧性模型, 节点 source-of-truth）—— SVG 节点分类的理论依据
-- **拟 ADR-038**（DR Topology SVG 视觉规范, 6 色系 + Layer 徽章 + 数据流箭头分类）—— 本 PRD 落地后产出, 沉淀视觉规范防止后续 ad-hoc 改色
+- **拟 ADR-040**（DR Topology SVG 视觉规范, 6 色系 + Layer 徽章 + 数据流箭头分类）—— 本 PRD 落地后产出, 沉淀视觉规范防止后续 ad-hoc 改色（**2026-06-01 让号**：原占 ADR-038 已被 PRD-009 v2 ImportPolicy CRD 取用，本 PRD 改占 040；台账见 架构设计.md §ADR 号台账）
 - **PRD-007 §4.3** Backup Copy —— Layer 4 节点数据源
 - **PRD-007 §4.7** DR Drill —— Layer 5 节点数据源
 - **PRD-008** Activity 持久化 —— 节点失败红框 tooltip 跳转 Activity Task 详情
@@ -3768,7 +3773,7 @@ Posture: 80/100   (L1✓ L2✓ L3✓ L4✓ L5✗)
 
 | # | 问题 | 倾向答案 |
 |---|---|---|
-| Q1 | 5 类颜色是按本 PRD §4.1 表格定义还是给 designer 重选？ | **倾向本 PRD 方案直接拍板**——紫色撞色问题已规避（Cluster 蓝 / Cloud BSL 紫 / Local BSL 橙互不撞）, Layer 1 青绿 + Layer 4 粉 + Layer 5 灰也都是 K8s / 数据保护行业可读色系。Designer 介入留给 ADR-038 落地时统一审查全局 design token。|
+| Q1 | 5 类颜色是按本 PRD §4.1 表格定义还是给 designer 重选？ | **倾向本 PRD 方案直接拍板**——紫色撞色问题已规避（Cluster 蓝 / Cloud BSL 紫 / Local BSL 橙互不撞）, Layer 1 青绿 + Layer 4 粉 + Layer 5 灰也都是 K8s / 数据保护行业可读色系。Designer 介入留给 ADR-040 落地时统一审查全局 design token。|
 | Q2 | 未启用层 "+ 启用" 按钮是否真跳 Policy 编辑？若 Layer 1（本地快照, ADR-028 自管层）还没实施, 怎么跳？ | **倾向 L1 占位按钮 v0.10.x 跳 USER_MANUAL §Layer1 文档**（"本地快照需要 CSI snapshot 支持, 见文档配置"）, L2/L3/L4/L5 跳实际配置抽屉。ADR-028 实施后 L1 也跳 Policy 抽屉（v0.11.x）。|
 | Q3 | Layer 5 虚拟实验室是 placeholder 还是真接 DR Drill（PRD-007 §4.7）？ | **倾向 v0.10.x placeholder**（节点存在 + 状态 chip 始终显示 "未启用 / 查看文档"）, PRD-007 §4.7 落地后（预计 v0.11.x+）真接 DR Drill。否则本 PRD 等 PRD-007 串行依赖, 排期拉长。|
 | Q4 | 多 cluster 模式（MCM 切换器）怎么显示？切换显示还是全展开？ | **本 PRD 单 cluster, 不解决多 cluster**。需为 PRD-013 / MCM Dashboard（待立）留接口: 后端 aggregator JSON 顶层 `cluster` 字段未来扩为 `clusters[]` 数组, 前端能 map 多个 cluster 各自一份 5 层节点。本 PRD 不预实现, 仅在代码注释里加 TODO。|
