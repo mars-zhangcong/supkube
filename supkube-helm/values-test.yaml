@@ -1,0 +1,38 @@
+# values-test.yaml — aks-jumborca-test 环境覆盖（CD deploy-test 用 `-f` 加载）
+# ────────────────────────────────────────────────────────────────────────────
+# 仅声明 test 与默认 chart values 的差异；**不含任何密钥**。
+#
+# ① 关认证：test = QA 集群，auth.enabled=false → 后端 AUTH_ENABLED=false → 匿名 admin，
+#    让 hack/smoke-test.sh 免 token 直连 API 跑冒烟。生产/对外环境**切勿**这样。
+#
+# ② Velero 备份存储位置 (BSL)：复用 aks-dev 同一存储账户 rnd7sa71，容器 velero-dr-test。
+#    凭据 = 集群内已存在的 secret `supkube-bsl-azure-blob-credentials`（data key=cloud），
+#    与 aks-dev 同一份；values 里不放任何 access key。
+#    一次性准备（每个 test 集群一次）：把 dev 的同名 secret 镜像到 test 的 velero ns：
+#      kubectl --context aks-jumborca-test create ns velero --dry-run=client -o yaml | kubectl --context aks-jumborca-test apply -f -
+#      kubectl --context aks-jumborca-dev -n velero get secret supkube-bsl-azure-blob-credentials -o json \
+#        | jq 'del(.metadata.namespace,.metadata.resourceVersion,.metadata.uid,.metadata.creationTimestamp,.metadata.ownerReferences,.metadata.managedFields)' \
+#        | kubectl --context aks-jumborca-test -n velero apply -f -
+#    并确保容器存在：az storage container create --account-name rnd7sa71 -n velero-dr-test --auth-mode login
+
+auth:
+  enabled: false
+
+eula:
+  accept: true
+
+velero:
+  enabled: true
+  credentials:
+    useSecret: true
+    existingSecret: supkube-bsl-azure-blob-credentials   # 集群内预建；data key = cloud
+  configuration:
+    backupStorageLocation:
+      - name: azure-blob
+        provider: azure
+        default: true
+        bucket: velero-dr-test
+        config:
+          storageAccount: rnd7sa71
+          storageAccountKeyEnvVar: AZURE_STORAGE_ACCOUNT_ACCESS_KEY
+    volumeSnapshotLocation: []   # 冒烟用 ns 级元数据备份，暂不配卷快照位置（CSI 真快照列为后续）
