@@ -50,7 +50,7 @@ const PRDS = [
   { id: "PRD-006", title: "Activity Task Detail Timeline", task: "#117", state: "已评审", updated: "2026-05-31", note: "可进研发" },
   { id: "PRD-007", title: "完整 3-2-1-1-0 数据韧性（5 层 + Layer 4 Copy + DR Drill）", task: "#126", state: "已评审", updated: "2026-05-31", note: "P1-P5 全闭环（真 fixture 双重证实）" },
   { id: "PRD-008", title: "RP 删除生命周期 + Activity 持久化 + Force Delete 治理", task: "#148", state: "改正中", updated: "2026-06-02", note: "D1-D5 finding 全闭环 (§13 修订段 + §8 DoD #19-#23), 可转研发中" },
-  { id: "PRD-009", title: "Policy 模型对齐 Kasten（Snapshot + Import Policy 双 Action）", task: "#149", state: "研发中", updated: "2026-06-01", note: "Phase 1 已 ship；Phase 2 ImportPolicy CRD 进行中（ADR-038）" },
+  { id: "PRD-009", title: "Policy 模型对齐 Kasten（Snapshot + Import Policy 双 Action）", task: "#149", state: "改正中", updated: "2026-06-02", note: "Phase 1 ship + Phase 2 任务拆；PRD-Review 第六份 G1-G5 全闭环 (G5 §8.2 Phase 2 DoD + §9 任务/§9.3 风险 / G1 卖点诚实化 / G2 backupSyncPeriod 默认 60s / G3 warn 半成品标注 / G4 Action Type pill save 不可改 alert), 等 Mars 重审" },
   { id: "PRD-010", title: "DR Topology v2（可视化重构 + Local Snapshot/Backup Copy 节点）", task: "#150", state: "改正中", updated: "2026-06-02", note: "F1-F4 finding 全闭环 (§13 修订段 + §8 DoD #13-#16), 可转研发中" },
   { id: "PRD-011", title: "AI Backup Advisor MVP（规则算分 + LLM 解释 · Canonical DSL · 本地小闭环）", task: "#164", state: "改正中", updated: "2026-06-02", note: "H1/H2/H5 已修订 (§12 + §8 DoD #14-#17); H1 数值待 Mars 拍 (D-WAIT-002)" },
   { id: "PRD-012", title: "Call Home / Auto-Support（三档连接 · 自动开 Case · opt-in）", task: "#165", state: "改正中", updated: "2026-06-02", note: "I1 已闭环 (默认逐次确认+SECURITY §6 白名单); I2 仍 Blocked 等 Case API" },
