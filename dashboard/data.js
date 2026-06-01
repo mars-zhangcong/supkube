@@ -37,6 +37,7 @@ const DECISIONS = [
   { id: "D-31", date: "2026-06-01", text: "📚 项目级 MEMORY.md ship（363 行）：交互节奏 + Rule A-F 反例 + 13 条跨 session 教训速查 + 基础设施速查 + 维护约定。从 AI 个人 memory 迁入仓库，方便接力人 Review。" },
   { id: "D-32", date: "2026-06-01", text: "🗂 Rule G + LEDGER.md 立：项目所有文档编号（PRD/ADR/TC/D/C）统一台账，取号 4 步 SOP（read→reserve→write→改状态），并发由 main agent 集中预分配号（Rule C v2 延伸），让号 forward-only，漂移检查 gen-data.mjs 兜底。落 ENGINEERING.md Rule G + MEMORY.md L-14 + ADR-041。本条由 Rule G 4 步演练首次占的 D 号（与 ADR-041 同批演练）。" },
   { id: "D-33", date: "2026-06-01", text: "☁️ 开发主体环境上云 (ADR-042)：关闭本机 docker-desktop，aks-jumborca-dev=研发 (push to main 自动)、aks-jumborca-test=测试 (tag 自动)、aks-jumborca-prod=未来生产 (manual approval + cluster guard)。dev-deploy.sh 头加 DEPRECATED notice，v0.9.1.15 真删除。保留 amd64+arm64 双架构。GitHub 仓库暂保持 public（追 Demo 闭环优先于商业闭源）。Rule G 第 2 次演练取号 ADR-042 + D-33 成功，4 步 SOP 流畅。" },
+  { id: "D-34", date: "2026-06-02", text: "📋 PRD-Review 第六份 finding 全 ship (Auto 5h 自主工作): PRD-009 v2 §8.2 Phase 2 DoD 14 条 + §9 Phase 2 任务拆 7 阶段 + §9.3 风险评级 (G5 闭环) / PRD-008 D1-D5 修订段 §13 + §8 DoD #19-#23 (D1 嵌入式 store on PV / D2 hash-chain+admission+WORM 3 层防御 / D3 BSL 归档 + verify-archive / D4 deletionState 从 task store 派生 / D5 Kopia maintenance 而非裸 mc rm) / PRD-010 F1-F4 §13 + §8 DoD #13-#16 (F1 消费 PRD-007 单一 score / F2 flows[].type 5 类 / F3 L1-L5 ↔ Snapshot/Export 映射 / F4 Layer 5 改验证徽章) / PRD-011 H1/H2/H5 §12 + §8 DoD #14-#17 (规则集版本化 scoreRulesVersion + region/provider 异地判定 + 拆 /ai/score 同步 /ai/explain SSE 异步) / PRD-012 I1 §10 + §8 DoD #13-#15 (默认逐次确认 + Call Home payload 并入 SECURITY §6 白名单, I2 仍 Blocked 等 Case API)。**4 PRD 状态 草稿→改正中**, 可转研发中。**待 Mars 拍**: D-WAIT-001 (Azure dev OIDC federated credential) + D-WAIT-002 (PRD-011 Q1 评分权重 + Q4 硬阈值数值)。" },
 ];
 
 /* ---- PRD 状态（应与 PRD.md 索引表一致）---- */
@@ -48,11 +49,11 @@ const PRDS = [
   { id: "PRD-005", title: "Log Viewer v2（运维级日志观察平台）", task: "#118", state: "已评审", updated: "2026-05-31", note: "可进研发" },
   { id: "PRD-006", title: "Activity Task Detail Timeline", task: "#117", state: "已评审", updated: "2026-05-31", note: "可进研发" },
   { id: "PRD-007", title: "完整 3-2-1-1-0 数据韧性（5 层 + Layer 4 Copy + DR Drill）", task: "#126", state: "已评审", updated: "2026-05-31", note: "P1-P5 全闭环（真 fixture 双重证实）" },
-  { id: "PRD-008", title: "RP 删除生命周期 + Activity 持久化 + Force Delete 治理", task: "#148", state: "草稿", updated: "2026-05-31", note: "D1-D5 finding 仍 open" },
+  { id: "PRD-008", title: "RP 删除生命周期 + Activity 持久化 + Force Delete 治理", task: "#148", state: "改正中", updated: "2026-06-02", note: "D1-D5 finding 全闭环 (§13 修订段 + §8 DoD #19-#23), 可转研发中" },
   { id: "PRD-009", title: "Policy 模型对齐 Kasten（Snapshot + Import Policy 双 Action）", task: "#149", state: "研发中", updated: "2026-06-01", note: "Phase 1 已 ship；Phase 2 ImportPolicy CRD 进行中（ADR-038）" },
-  { id: "PRD-010", title: "DR Topology v2（可视化重构 + Local Snapshot/Backup Copy 节点）", task: "#150", state: "草稿", updated: "2026-05-31", note: "F1-F4 finding 仍 open" },
-  { id: "PRD-011", title: "AI Backup Advisor MVP（规则算分 + LLM 解释 · Canonical DSL · 本地小闭环）", task: "#164", state: "草稿", updated: "2026-06-01", note: "🆕 待评审 Q1-Q5；finding #2/#3 已写进 DoD" },
-  { id: "PRD-012", title: "Call Home / Auto-Support（三档连接 · 自动开 Case · opt-in）", task: "#165", state: "草稿", updated: "2026-06-01", note: "🆕 Blocked：待 Mars 提供 Case API 规格" },
+  { id: "PRD-010", title: "DR Topology v2（可视化重构 + Local Snapshot/Backup Copy 节点）", task: "#150", state: "改正中", updated: "2026-06-02", note: "F1-F4 finding 全闭环 (§13 修订段 + §8 DoD #13-#16), 可转研发中" },
+  { id: "PRD-011", title: "AI Backup Advisor MVP（规则算分 + LLM 解释 · Canonical DSL · 本地小闭环）", task: "#164", state: "改正中", updated: "2026-06-02", note: "H1/H2/H5 已修订 (§12 + §8 DoD #14-#17); H1 数值待 Mars 拍 (D-WAIT-002)" },
+  { id: "PRD-012", title: "Call Home / Auto-Support（三档连接 · 自动开 Case · opt-in）", task: "#165", state: "改正中", updated: "2026-06-02", note: "I1 已闭环 (默认逐次确认+SECURITY §6 白名单); I2 仍 Blocked 等 Case API" },
 ];
 
 /* ---- ADR 台账（应与 架构设计.md ADR-LEDGER 一致）---- */

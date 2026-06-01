@@ -34,11 +34,11 @@
 | PRD-005 | Log Viewer v2 | 有条件通过（按 phase） | 统一 deep-link 契约；SSE 配齐 ingress 配置；ADR-033 重编号；审计导出依赖 forwarding；AI 外发纳入 T4 | 报告②·三 |
 | PRD-006 | Activity Timeline | 通过（Phase 0 门禁内建） | 与 PRD-005 统一 deep-link；ETA 取舍；ListActions 预聚合成本约束；AI 外发纳入 T4 | 报告②·三 |
 | PRD-007 | 完整 3-2-1-1-0 数据韧性 | ✅ 已评审（06-01 复审：P1-P5 全闭环） | P1 §4.3 重写 + **真 fixture 双重证实** + Phase 0 可恢复性 E2E + `ERR_LAYER4_SNAPSHOT_UNSUPPORTED` 拦截；P2 数据/元数据分推荐 + lifecycle 冲突预检；P3 跨集群 HMAC 强制签名；P4 default-deny egress 提为 v1 必做 + 端点重写 Transform；P5 两独立指标共享数据采集层。**残留**：Posture 仍按层等权×20（PRD-010 F1 深层"等权误导安全感"未动） | 报告③·二 |
-| PRD-008 | RP 删除生命周期 + Activity 持久化 | 草稿（本轮未改，finding 仍 open） | D1 audit 存储选型（避 etcd 反模式 + 对账 ADR-019）；D2 不可篡改真实机制；D3 集群损毁后审计存活；D5 孤儿清理 Kopia 安全；D4 deletionState 由 Task 驱动 | 报告④·二 |
-| PRD-009 | Policy 对齐 Kasten + Import Policy | Phase 1 已 ship；**v2（Import Policy）方向通过/补齐后研发** | Phase 1：E3 已闭环。**v2 复审（报告⑥）**：G5 §8 DoD + §9 任务段仍是 Phase 1 内容、未覆盖 ImportPolicy CRD/controller（必补）；G1 "30s vs Kasten 5min=10x RPO" 卖点过度承诺；G2 全局 `backupSyncPeriod` 60s→5min 对无 ImportPolicy 的 BSL 是回归；fingerprint 三档是 007 P3 的好落地 | 报告④·三 + 报告⑥·三 |
-| PRD-010 | DR Topology v2（可视化重构） | 草稿（本轮未改，finding 仍 open） | F1 Posture 分数消费后端单一 score、别用层数×20 当安全百分比；F2 箭头按双 Schedule 真实路径；F3 L1-L5↔Snapshot/Export 术语映射；F4 Layer 5 改验证徽章。**另：ADR-038 让号→ADR-040** | 报告⑤·二 |
-| PRD-011 | AI Backup Advisor MVP | 接近通过（AI 纪律范本） | 已把 PRD-003 的 finding（规则引擎算分/LLM 只解释/置信度三档/缺失显式建模/本地 Ollama/非自治）写成铁律 + 校准防呆。H1 规则集版本化+扣分依据+专家校准；H2 异地按 region/provider 判定；H5 分数先返回、LLM 解释异步 | 报告⑥·四 |
-| PRD-012 | Call Home / Auto-Support | 方向通过 / Blocked（待 Case API 规格） | 隐私姿态正确（opt-in/脱敏/单向出站/非自治/AirGap 退化 0 降级）。I1 默认逐次确认 + 并入 §6 出境白名单；I2 客户身份/多租户标识；复用 PRD-011 Collector + ADR-033 | 报告⑥·五 |
+| PRD-008 | RP 删除生命周期 + Activity 持久化 | **改正中**（2026-06-02 D1-D5 全闭环） | D1 嵌入式 store on PV (避 etcd, 与 ADR-019 分工) / D2 hash-chain+admission+WORM 3 层防御 / D3 BSL 归档+verify-archive / D4 deletionState 从 task store 派生不 list DBR / D5 Kopia maintenance 而非裸 mc rm。**§13 修订段 + §8 DoD #19-#23** | 报告④·二 + Auto 5h 闭环 |
+| PRD-009 | Policy 对齐 Kasten + Import Policy | Phase 1 已 ship；v2 G5 已闭环（2026-06-02） | Phase 1：E3 已闭环。**v2 (报告⑥)**：G5 §8.2 加 Phase 2 DoD 14 条 + §9 Phase 2 任务 7 阶段 + §9.3 风险评级独立写（不再 0 迁移风险）/ G1 RPO 卖点修正 / G2 backupSyncPeriod 维持 60s。fingerprint 三档是 007 P3 的好落地 | 报告④·三 + 报告⑥·三 |
+| PRD-010 | DR Topology v2（可视化重构） | **改正中**（2026-06-02 F1-F4 全闭环） | F1 消费 PRD-007 §4.7 单一 score (不另算层数×20) / F2 flows[].type 5 类着色+线型 / F3 L1-L5↔Snapshot/Export hover tooltip 映射 / F4 Layer 5 改顶部验证徽章 4 状态。**ADR-038 让号→ADR-040 已完成**。**§13 修订段 + §8 DoD #13-#16** | 报告⑤·二 + Auto 5h 闭环 |
+| PRD-011 | AI Backup Advisor MVP | **改正中**（2026-06-02 H1/H2/H5 已修订, 等 Mars 拍 H1 数值） | H1 规则集版本化 scoreRulesVersion + evaluator 每条规则带依据注释 + **Mars 拍 Q1 权重 + Q4 硬阈值** (写 等待决策.md D-WAIT-002) / H2 BSL region+provider 三元组判定异地 5 级 / H5 拆 /ai/score 同步 5s + /ai/explain SSE 异步流式。**§12 修订段 + §8 DoD #14-#17** | 报告⑥·四 + Auto 5h 闭环 |
+| PRD-012 | Call Home / Auto-Support | **改正中**（I1 闭环, I2 仍 Blocked 等 Case API） | I1 默认逐次确认 (UI 抽屉显示 SanitizeReport 全文) + Call Home payload 并入 SECURITY.md §6.C 出境白名单 / I2 customer-id 经 HMAC 派生方案设计就绪, 等 Mars 给 Case API spec。**§10 修订段 + §8 DoD #13-#15** | 报告⑥·五 + Auto 5h 闭环 |
 
 > 报告① = PRD-Review-2026-05-31.md；报告② = …-PRD005-006.md；报告③ = …-PRD007.md；报告④ = …-PRD008-009.md；报告⑤ = …-PRD010.md；报告⑥ = …-2026-06-01-PRD009v2-011-012.md。
 

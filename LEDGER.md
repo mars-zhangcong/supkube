@@ -21,7 +21,7 @@
 | **TC-LBS** | TC-LBS-003 | **TC-LBS-004** | Local Backup Store 测试用例 | §四 |
 | **TC-RP** | TC-RP-006 | **TC-RP-007** | Restore Point 测试用例 | §四 |
 | **TC-MC** | TC-MC-004 | **TC-MC-005** | Multi-Cluster 测试用例 | §四 |
-| **D**（战略/产品决策） | D-33 | **D-34** | dashboard `DECISIONS` 数组里的当日决策 | §五 |
+| **D**（战略/产品决策） | D-34 | **D-35** | dashboard `DECISIONS` 数组里的当日决策 | §五 |
 | **C**（客户痛点） | C-012 | **C-013** | dashboard `CUSTOMER_PAIN` 数组 | §六 |
 
 > **如果你的 series 不在上面**：在 §七"新 series 注册"加一行（e.g. 新增 TC-SEC 安全扫描 series），然后回到本表加一行下个空号。
@@ -129,6 +129,7 @@
 | D-31 | 2026-06-01 | MEMORY.md 项目级落地 |
 | D-32 | 2026-06-01 | **草稿** ✅ Rule G + LEDGER.md 立 + ADR-041（4 步 SOP 首次演练成功；正文已写入 dashboard `DECISIONS`） |
 | D-33 | 2026-06-01 | **草稿** ✅ 开发主体上云（ADR-042 + cd.yaml 三阶段 + dev-deploy.sh DEPRECATED；Rule G 第二次演练; 正文已写入 dashboard `DECISIONS`） |
+| D-34 | 2026-06-02 | **草稿** ✅ PRD-Review 第六份 finding 全 ship (Auto 5h 自主工作): PRD-009 v2 §8.2 G5 / PRD-008 D1-D5 / PRD-010 F1-F4 / PRD-011 H1/H2/H5 / PRD-012 I1 全部 finding 闭环。4 PRD 状态 草稿→改正中。PRD-011 H1 数值待 Mars 拍 (D-WAIT-002), PRD-012 I2 仍 Blocked 等 Case API。CD #2 deploy-dev OIDC 凭据缺失 D-WAIT-001 写进 等待决策.md 等 Mars 拍 A/B。 |
 
 （D-23/24/25 跳过号或归并到 D-26；如发现实际占用请补回此表）
 

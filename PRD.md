@@ -59,11 +59,11 @@
 | [PRD-005](#prd-005) | Log Viewer v2 — 完整运维级日志观察平台（Virtual Scroll + SSE + 三层日志 + 错误代码 + Minimap + Forwarding + AI 根因） | **已评审（2026-05-31）** | #118 |
 | [PRD-006](#prd-006) | Activity Task Detail Timeline（任务详情阶段时间线 + Log Viewer 跳转 + AI 排错位） | **已评审（2026-05-31）** | #117 |
 | [PRD-007](#prd-007) | 完整 3-2-1-1-0 数据韧性（5 层可视化 + Layer 4 Backup Copy + Fingerprint + Lifecycle + DR Drill） | **已评审（2026-05-31）** | #126 |
-| [PRD-008](#prd-008) | RP 删除生命周期 + Activity 持久化 + Force Delete 副作用治理（Activity 不依赖 Velero CR · 删除中锁定 · 孤儿清理） | **草稿（2026-05-31）** | #148 |
+| [PRD-008](#prd-008) | RP 删除生命周期 + Activity 持久化 + Force Delete 副作用治理（Activity 不依赖 Velero CR · 删除中锁定 · 孤儿清理） | **改正中（2026-06-02 D1-D5 finding 闭环）** | #148 |
 | [PRD-009](#prd-009) | Policy 模型对齐 Kasten（Snapshot Policy + Import Policy 双 Action · Continuous/Scheduled 子模式 · fingerprint enforce/warn/disabled · 替代 Velero `backupSyncPeriod` 60s 兜底） | **v1 Phase 2 进行中（2026-06-01）** — Phase 1 (Snapshot/Export 词汇) 已 ship；Phase 2 扩 Action 类型 + ImportPolicy CRD/controller 进行中 | #149 / #156 / #157-163 |
-| [PRD-010](#prd-010) | DR Topology v2（Cluster/BSL 视觉重构 + Local Snapshot + Backup Copy 节点显示 · 5 类节点对齐 ADR-031 5 层模型） | **草稿（2026-05-31）** | #150 |
-| [PRD-011](#prd-011) | AI Backup Advisor MVP（智能业务梳理 + 数据安全综合评分 + 备份建议 · 规则算分 + LLM 解释 · Canonical DSL · 本地分析小闭环） | **草稿（2026-06-01）** | #164（待建） |
-| [PRD-012](#prd-012) | Call Home / Auto-Support（三档连接 · 采集器上送 + 自动开 Case · opt-in · 复用 ADR-033 脱敏） | **草稿（2026-06-01）** | #165（待建） |
+| [PRD-010](#prd-010) | DR Topology v2（Cluster/BSL 视觉重构 + Local Snapshot + Backup Copy 节点显示 · 5 类节点对齐 ADR-031 5 层模型） | **改正中（2026-06-02 F1-F4 finding 闭环）** | #150 |
+| [PRD-011](#prd-011) | AI Backup Advisor MVP（智能业务梳理 + 数据安全综合评分 + 备份建议 · 规则算分 + LLM 解释 · Canonical DSL · 本地分析小闭环） | **改正中（2026-06-02）** | #164 |
+| [PRD-012](#prd-012) | Call Home / Auto-Support（三档连接 · 采集器上送 + 自动开 Case · opt-in · 复用 ADR-033 脱敏） | **改正中（2026-06-02, I2 仍 Blocked）** | #165 |
 
 ---
 
@@ -2655,11 +2655,12 @@ Integrity Check:  ✅ Verified
 |---|---|
 | **PRD 编号** | PRD-008 |
 | **任务编号** | #148 (placeholder, 待建) |
-| **状态** | 草稿（2026-05-31） |
+| **状态** | **改正中**（2026-06-02 PRD-Review 第六份 D1-D5 finding 修订, 见 §13） |
 | **作者** | Claude / Mars |
 | **目标版本** | v0.9.x |
 | **关联 ADR** | ADR-031（5 层韧性）/ ADR-035（结构化日志）/ **拟 ADR-039（Activity 持久化与 audit event 存储选型）** ← 让号 2026-06-01：ADR-037 已分配给 PRD-011/012 统一数据采集架构（台账自洽，PRD-Review 第六份要求让号） |
-| **关联 PRD** | **PRD-006（Activity Task Detail Timeline）—— 本 PRD 是 PRD-006 的数据层基石** / PRD-005（Log Viewer v2）/ PRD-007（5 层韧性, ForceDelete 同源）|
+| **关联 PRD** | **PRD-006（Activity Task Detail Timeline）—— 本 PRD 是 PRD-006 的数据层基石** / PRD-005（Log Viewer v2）/ PRD-007（5 层韧性, ForceDelete 同源 + D5 孤儿清理 Kopia 同源 P1）|
+| **PRD-Review 状态** | 2026-05-31 评审 → 5 finding 已记 → 2026-06-02 finding 修订收口（§13） |
 
 ### 1. Goal（目标）
 
@@ -3039,6 +3040,108 @@ POST /api/v1/maintenance/orphan-cleanup
 | 2026-05-31 | Mars (testing 20260531.md #2) | — | 提出三件: (a) 清理 RP 应作为 Activity Task 记录有日志可查; (b) 删除中 RP 应锁定不可操作; (新增) **Activity 数据被清空 = 严重 bug**——"本身即使是还原点不在了, 也应该是给客户看到执行的历史的" |
 | 2026-05-31 | Claude | — → **草稿 (v1)** | 起草 PRD-008。**关键架构判定**: 当前 `ListActions` 从 Velero CR 派生 = 实时 view 不是持久化 audit log → Backup CR 被删 Activity 立刻消失 = Mars 反馈的根因。修复方向: 独立 audit event 流 (拟 ADR-039 选 K8s Event / CRD / 独立 store), ListActions 改 union。**定位**: 本 PRD 是 PRD-006 Activity Timeline 的数据层基石——没有 audit 持久化, PRD-006 全是空中楼阁。删除 Task 化 5 阶段 + RP 列表锁定 + Force Delete 改名/警告 + 孤儿清理 endpoint 一并解决。Q1-Q8 待 Mars 评审拍板, 重点 Q1 存储选型决定整个 Phase 0 路径。|
 | 2026-06-01 | Claude (PRD-Review 第六份 跨文档 finding) | — | **ADR-037 让号 → ADR-039**：原 PRD-008 占 ADR-037（审计存储选型），但 2026-06-01 PRD-011/012 立项时 Agent A 把 037 分配给"统一数据采集架构"，台账内部自洽但 PRD-008 仍占旧号 = 撞号复发。按 PRD-Review 第六份 §二建议让号到 ADR-039。本 PRD 全文 6 处 037→039 替换 + 架构设计.md ADR 台账登记。|
+| 2026-06-02 | Claude (PRD-Review 第六份 D1-D5 finding 闭环) | 草稿 → **改正中** | 加 §13 PRD-Review 第六份 D1-D5 finding 修订段：**D1** audit 存储选型 (拟方案 a 嵌入式 store on PV, 避 etcd 反模式 + 跟 ADR-019 分工: PRD-008 audit 管 Task 生命周期, ADR-019 audit 管业务操作行为) / **D2** 不可篡改 3 层防御 (hash-chain + admission webhook + WORM hint, "tamper-evident not tamper-proof" 客户预期管理) / **D3** 集群损毁后 audit 存活 (每日/每 1000 事件批量归档到 BSL + HMAC 签名 + `supkube audit verify-archive` 命令在 fresh 集群可拉+验签+重建 timeline) / **D4** deletionState 从 task store 派生不 list DBR (跟 PRD-006 task store SSOT 共用) / **D5** 孤儿清理 mode 参数区分纯元数据 (裸 mc rm OK) vs 带数据 (走 Kopia maintenance run, 跟 PRD-007 P1 共用 BSL 删除指引)。§8 DoD 加 #19-#23 五条新验收点。状态草稿→改正中, 可转研发中。|
+
+### 13. PRD-Review 第六份 D1-D5 finding 修订段（2026-06-02 闭环）
+
+> **修订动因**：PRD-Review-2026-05-31-PRD008-009.md（PRD-Review 第六份 §三）对 PRD-008 给出 5 个 finding（D1-D5），未在原 §4-§12 闭环；本段是**独立闭环段**，每个 finding 给出**修订后的拟方案** + **写进 §8 DoD 的可验证条目**。
+>
+> **优先**：本段优先于 §1-§12 中冲突点（如果原文跟本段矛盾，以本段为准）。Phase 0 起跑前**先实测本段拟方案**（Verify-Before-Architect, MEMORY §五）。
+
+#### D1（High）audit event 存储选型不可走 etcd 反模式 + 跟 ADR-019 既有审计对账
+
+**finding 原文**：etcd 有容量配额（默认 2-8 GB）+ 与集群状态共享, 不适合高写入 append-only 审计流；大量 CRD 对象损害 apiserver list/watch 与 informer 内存。同时 SupKube 已有 ADR-019 审计日志 (K8s Events + stdout)，本 PRD 必须说清是**取代**还是**并存**。
+
+**拟方案（Phase 0 实测后定）**：
+
+| 选项 | 优点 | 缺点 | 评级 |
+|---|---|---|---|
+| **(a)** 嵌入式 store on PV（BadgerDB / BoltDB / SQLite）+ K8s PVC | 0 apiserver 压力, append-only 写性能高 (>10k/s), 容量可扩展, 跟 ADR-019 完全互补 | 需要 PVC; 集群损毁后随 PVC 丢失（D3 需归档到 BSL）; pod 重启需 fsync | ⭐ **推荐 (拟方案)** |
+| (b) 独立 K8s Event with custom reason | 复用 K8s 原生机制 + apiserver list/watch 已 work; ADR-019 同款 | etcd 反模式（K8s Event 也存 etcd）; etcd 容量 2-8 GB 顶天; 1 万 event = ~50 MB | ❌ 拒（确认 finding 担忧）|
+| (c) 自建 CRD 类（每个 audit event 一个 CR）| 强 schema, kubectl 可查 | etcd 反模式 + apiserver 内存爆炸 | ❌ 拒 |
+| (d) 外部时序数据库（Loki / TimescaleDB） | 专业方案 | 增运维依赖 + airgap 客户额外采购 + 跟一站式定位冲突 | ⏸ v2 候选 |
+
+**与 ADR-019 关系**：**并存 / 分工**。
+- ADR-019 audit = **操作行为审计**（actor / verb / resource / timestamp，"who logged in / who created policy"）
+- PRD-008 audit = **Task 生命周期审计**（task_id / state_transition / cause / linked_resource，"DeleteBackup task Pending → Releasing → Done"）
+- ADR-039 §6 写明**字段不重叠** + 客户排查时分别查
+
+**DoD 入 §8**：见下方 §8.D1 条目（追加 #19）。
+
+#### D2（High）"不可篡改"必须落实到真实机制
+
+**finding 原文**：原 §4 说"audit event 不可篡改"，但实现层面**没有真实机制**——`internal/audit/event.go` 如果只是普通 Go struct 写 PV，运维 SSH 改 BadgerDB 文件就能改。合规审计不认账。
+
+**拟方案（3 层防御, Phase 1 实施）**：
+
+1. **写入路径强制**：Append API 在写 PV 前**自动追加 hash-chain**（`event.prev_hash = sha256(prev_event_content)`），任何中间 event 改了 → 后续 hash 全错 → `audit verify` 命令检出。
+2. **K8s admission webhook**：拦截**所有**对 audit store PVC 的 mount + 对 backend pod 的 exec/cp 请求，凡是不带 `audit-admin-bypass-token` 一律拒。
+3. **WORM 文件系统 hint**：PVC 的 StorageClass 加 `worm: true`（Phase 2, 仅 Azure Disk Ultra SSD / AWS EBS io2 支持）。Best-effort，不依赖。
+
+**安全等级**：三层 ranged，不是绝对不可篡改（cloud provider 控制台仍能改 disk）。文档化：
+
+> ⚠ "Tamper-evident" not "tamper-proof"：cloud 控制台权限不收的话，最终管理员仍能改。本系统提供应用层 hash-chain + K8s admission 两道防线，足以应付**审计师视角 + 内部 SRE 视角**的检查。
+
+**DoD 入 §8**：见 §8.D2（#20）。
+
+#### D3（High）集群损毁后 audit 必须存活
+
+**finding 原文**：当前方案 audit 写 PVC，集群 DR 场景下 audit 跟 SupKube 一起死。客户需要 audit 证明"我之前确实备份过, 不是事后伪造"——audit 必须**比业务集群活得久**。
+
+**拟方案（Phase 2 实施, 4 路径）**：
+
+| 路径 | 描述 | 取舍 |
+|---|---|---|
+| **(a)** Audit 持续归档到 BSL（每日 / 每 1000 事件批量上传 `.audit-archive.jsonl.gz`） | 客户 BSL 一般独立 region; SupKube 死 BSL 不死 | ⭐ **拟主方案** |
+| (b) Audit 跨集群 replicate 到管理集群 | 多集群部署可用 | v1.x; 单集群客户白搭 |
+| (c) ImportPolicy 同款机制 audit 跨集群 sync | 复用 PRD-009 v2 fingerprint + BSL | ⏸ v2 候选 |
+| (d) Customer's SIEM (Splunk/DataDog) syslog forward | 真专业 | airgap 客户不可用 |
+
+**Archive 文件格式**：`.supkube-audit-archive-<from>-<to>.jsonl.gz`，跟 fingerprint json 同源签名（HMAC + clusterUID + sourceClusterName）。
+
+**Archive 验证**：`supkube audit verify-archive --bsl=<bucket>` 在 fresh 集群上拉回 + 验签 + 恢复 audit timeline。
+
+**DoD 入 §8**：见 §8.D3（#21）。
+
+#### D4（Med）deletionState 由 Task 状态驱动, 不要 list DBR
+
+**finding 原文**：原 §4.4 GET /backups 加 deletionState 字段，建议 controller list DBR (`DeleteBackupRequest`) 算 deletionState。但 DBR list 性能差 + DBR 是 Velero internal CR 不该作 SupKube 状态机。
+
+**拟方案**：**deletionState 字段从 Task store 派生**：
+- Task store 已经有 `task_id` + `state` + `linked_backup_name`（本 PRD 自身设计的核心数据模型）
+- GET /backups handler 改: 拿 backup name → query task store `WHERE task_type IN ('DeleteBackup','ForceDeleteBackup') AND linked_backup_name=<name> AND state IN ('InProgress','Pending')` → 命中 = `deletionState=InProgress`
+- 不再 list DBR; DBR 是 Velero internal, 用 task store 是 SupKube 自己的状态机
+- 性能: in-memory cache + index by linked_backup_name, 增量 < 5ms
+
+**与 PRD-006 关系**：Task store 就是 PRD-006 Activity Timeline 后端那张 SSOT 表，两 PRD 共用 task 表 = SSOT。
+
+**DoD 入 §8**：见 §8.D4（#22）。
+
+#### D5（High）孤儿清理在 Kopia 共享去重仓库不可裸 mc rm
+
+**finding 原文**（也是 PRD-007 P1 同源）：Velero 卷数据走 Kopia 共享仓库 `bucket/kopia/<ns>/`，**同 ns 多个 Backup 数据块去重共享**。用户 `mc rm bucket/kopia/<ns>/` 会**误删同 ns 其它 backup 卷数据**。
+
+**拟方案**：孤儿清理流程**区分元数据 vs 数据**：
+
+1. **纯元数据孤儿**（`bucket/backups/<name>/` 有目录但 K8s 无 CR）→ 可裸 mc rm（数据不在这）
+2. **带数据孤儿**（同 ns kopia 仓库里有数据 block 但 K8s 无任何 backup CR 引用）→ **必须走 Kopia maintenance**:
+   - `kopia maintenance run --full` 让 Kopia 自己 GC 没引用的 block（Kopia 用 retention/snapshot tag 跟踪引用计数）
+   - 或 Velero DBR 走标准路径自动触发 Kopia GC
+3. **UI / endpoint 强制提示**：用户点 "清理孤儿" 必须先选 `--mode=metadata-only` 或 `--mode=full-with-kopia-maintenance`，后者**额外二次确认 + 警示横条**
+
+**文档化**：USER_MANUAL §X "Velero/Kopia 共享仓库正确删除操作指引"——本 PRD 跟 PRD-007 P1 共用一份。
+
+**DoD 入 §8**：见 §8.D5（#23）。
+
+#### §8 DoD 新增条目（D1-D5 finding 落地, 接在原 #18 之后）
+
+| # | 验收点 | finding |
+|---|---|---|
+| 19 | **D1 闭环**：ADR-039 给出选型决定（拟方案 a 嵌入式 store on PV），含 Phase 0 实测数据（1 万 event 写 < 500ms, list 100 条 < 100ms, 容量增长 < 10MB / 1 万 events）；§6 写明跟 ADR-019 对账规则 |
+| 20 | **D2 闭环**：`audit verify <store-path>` 命令存在 + 能检出 hash-chain 篡改; admission webhook 拒任何不带 token 的 audit PVC mount 请求 (e2e test 验); 文档化"tamper-evident not tamper-proof" 客户预期管理 |
+| 21 | **D3 闭环**：audit 每日 / 每 1000 事件批量归档到 BSL `.supkube-audit-archive-*.jsonl.gz` (HMAC 签名); `supkube audit verify-archive` 命令在 fresh 集群可拉 + 验签 + 重建 timeline (e2e test 验) |
+| 22 | **D4 闭环**：GET /backups deletionState 字段从 task store 派生（不 list DBR），增量延时 < 5ms（benchmark 数据贴 PR）|
+| 23 | **D5 闭环**：孤儿清理 endpoint 必须接 `mode` 参数（`metadata-only` 或 `full-with-kopia-maintenance`），后者二次确认 + 真触发 `kopia maintenance run`（或 Velero DBR）而非裸 mc rm; USER_MANUAL §X 共用 PRD-007 P1 的 BSL 删除指引 |
 
 ---
 
@@ -3474,14 +3577,87 @@ status:
 11. 兼容期 i18n key（`policy.actionSnapshot = "L1 Snapshot"` 等）**保留**在 locale 文件但**不被新 UI 引用**（grep 验证）。
 12. Audit log 字段 `policy.export_enabled` + `policy.tier`（兼容期双写）正确出现, 文档同步。
 
-### 9. 任务拆分（2-3 phase, 估时 ~3-4 人日）
+> **2026-06-01 PRD-Review G5 修订**：上 12 条是 **Phase 1（词汇重构）DoD**。Phase 2 引入 ImportPolicy CRD/controller/fingerprint, **完整规范在 §4.5**，**独立 Phase 2 DoD 在下方 §8.2**。
 
-| Phase | 内容 | 估时 | 依赖 |
+### 8.2 Phase 2 验收标准（DoD, 14 条 — 对应 §4.5 ImportPolicy 规范）
+
+> **2026-06-01 PRD-Review 第六份 G5 finding 闭环补**：原 §8 没覆盖 Phase 2 ImportPolicy CRD/controller/fingerprint 三档/状态机/错误码。这一段补齐, 每条可通过 e2e test 或 kubectl 实测验证。
+
+**CRD + Schema**:
+
+13. **ImportPolicy CRD 已注册**（`importpolicies.supkube.io/v1`），`kubectl get crd importpolicies.supkube.io` 返回 + `kubectl explain importpolicy.spec` 列出全部 §4.5.5 字段。
+14. **OpenAPI v3 schema 严格校验**：错配的 spec.continuousInterval（如 `10s`/`abc`）+ spec.schedule（非 5 字段 cron）+ spec.fingerprintMode（非 enum 值）→ `kubectl apply` 直接拒（不进 controller, validation webhook 层就 reject）+ error code 准确（见 §16）。
+
+**Controller 行为**:
+
+15. **Continuous 模式实际跑**：建一个 `mode=Continuous, continuousInterval=60s` 的 ImportPolicy → controller 每 60s 触发一次 syncOnce（看 controller log + `status.lastSyncAt` 时间戳推进）+ 没人为操作 12h 不漂时间（无 drift）。
+16. **Scheduled 模式实际跑**：建 `mode=Scheduled, schedule="*/5 * * * *"` 的 ImportPolicy → 5 min 边界时刻 ±2s 内 `status.lastSyncAt` 更新（看 kubectl get -w）。
+17. **状态机所有合法转换都覆盖**：Pending→Active（首次成功 sync）/ Active→Paused（spec.paused=true）/ Paused→Active（spec.paused=false） / Active→Failed（连 3 次 sync 失败）/ Failed→Active（重新成功）。每条转换 controller log 有明确日志行。
+
+**fingerprint 三档行为**:
+
+18. **enforce 模式**：源 cluster 新建 backup → fingerprint 写入 BSL `.supkube-fingerprint.json` → target ImportPolicy controller 拉取 → HMAC 验签通过 → 创建 Velero Backup CR 含 `supkube.io/fingerprint-status=valid` label。**篡改 fingerprint json 任意字段**（mc 命令改 tarballSHA256） → controller log 显示 `ERR_FINGERPRINT_HMAC_INVALID` + Backup CR **不创建** + `status.rejectedCount +1`。
+19. **warn 模式**：源 cluster 缺 fingerprint json（删掉文件）→ target controller 仍创建 Backup CR 但 label `supkube.io/fingerprint-status=missing` + UI Restore Points 行 chip 显示 "⚠ 未签名"。
+20. **disabled 模式**：完全跳过 fingerprint 校验 → 100% 接受 source backup → Backup CR label `supkube.io/fingerprint-status=disabled` + Settings 有 audit `AUDIT_FINGERPRINT_DISABLED_BY_USER` 记录 + UI 警告 chip "🚨 已关闭校验"。
+
+**RPO + UI**:
+
+21. **UI 实时显示 worst-case RPO**：Policies 行新建 ImportPolicy 时，下方提示 "🛡 Worst-case RPO ≤ {source_backup_interval + import_poll_interval} min"，数字随 user input 即时更新。
+22. **跨集群真实 sync**：docker-desktop 或 aks-dev 建 Snapshot Policy 备份 ns demo-app 到共享 BSL → AKS-test 建 ImportPolicy mode=Continuous interval=60s → 60s+ε 内 AKS-test `kubectl get backup -n velero` 看到该 backup 名 + Imported chip。
+
+**错误码 + 可观测**:
+
+23. **14 条错误码完整**：`ERR_FINGERPRINT_MISSING` / `_TAMPERED` / `_HMAC_INVALID` / `_REQUIRED` + `ERR_IMPORTPOLICY_BSL_NOTFOUND` / `_CRON_INVALID` / `_INTERVAL_TOO_SHORT` / 等共 14 条 全部有 e2e test 触发（见 测试用例.md §9.5 TC-IMP-001~004 + 拓展）。
+24. **`status.lastError` 字段**：失败原因写入 ImportPolicy status, kubectl get/describe 看得到, UI 列表行红色 indicator + tooltip 显示。
+25. **GC 行为**：`paused=true` 时 controller 不删已 Imported 的 Backup CR, 仅停止新 poll（防误删客户已恢复的 RP）。
+26. **Drift detection**：observed cluster ID 跟 spec.sourceClusterID 不符 → `status.lastError = "source cluster ID drift"` + 跳过该次 sync（防止恶意 swap source cluster）。
+
+### 9. 任务拆分
+
+#### 9.1 Phase 1（v1 词汇重构, ~3.5d, **2026-06-01 已 ship**）
+
+| Phase | 内容 | 估时 | 依赖 | 实际 |
+|---|---|---|---|---|
+| **P1.1** | Policies.vue 新建抽屉重构（移除 L1/L2 按钮组, 实现 Snapshot 固定 + Enable Export toggle + BSL 下拉过滤）+ i18n（en + zh-CN）+ a11y | 2d | 无 | ✅ 2026-06-01 task #156 |
+| **P1.2** | Policy 列表 badge 替换 + USER_MANUAL §Policy 词汇替换 + 截图更新 + 迁移说明 | 1d | P1.1 | ✅ task #156 |
+| **P1.3** | 老 L1 / L2 Policy 加载兼容测试 + Audit log 双写验证 | 0.5d | P1.1+P1.2 | ✅ task #156 |
+| **Phase 1 总计** | | **~3.5d** ✅ | | **已 ship v0.9.1.12-alpha** |
+
+#### 9.2 Phase 2（ImportPolicy CRD + controller + fingerprint, ~5-6d, **2026-06-01 进行中**）
+
+> **2026-06-01 PRD-Review G5 修订**：原 §9 没列 Phase 2 任务, 这一段补齐。Phase 2 工程量比 Phase 1 大 5x, 不再是"0 迁移风险" — 见 §9.3 风险评级。
+
+| Phase | 内容 | 估时 | 依赖 | 实际 |
+|---|---|---|---|---|
+| **P2.1** | **Backend ImportPolicy CRD types + controller**（`internal/importpolicy/` 8 文件 + controller-runtime reconciler + Continuous time.Ticker + Scheduled robfig/cron/v3 + REST handlers 8 个 + 单测 ≥70%）| 1.5d | Phase 1 | ✅ Agent B 2026-06-01 task #159 |
+| **P2.2** | **Backend fingerprint 模块**（`internal/fingerprint/` 6 文件 — Writer/Validator/TrustStore/HMAC/SecretLoader + 41/41 单测）| 1d | P2.1 共 interface | ✅ Agent C 2026-06-01 task #160 |
+| **P2.3** | **Backend 直 S3 BackupLister**（替代 Velero sync 依赖, 真正 30s/60s RPO）| 0.5d | P2.2 | ✅ Agent G 2026-06-01 task #157 |
+| **P2.4** | **Frontend Policies.vue Action Type pill + Import Policy 表单** + Continuous/Scheduled 模式选 + RPO 实时计算 + fingerprintMode 三档 + i18n 30+ key | 1d | P2.1 REST 契约 | ✅ Agent D 2026-06-01 task #161 |
+| **P2.5** | **Helm chart**：CRD `importpolicies.yaml` + `supkube-fingerprint-secret` 模板 + RBAC verbs + values.yaml 添加 `fingerprint.sharedSecret` + 调 Velero backupSyncPeriod 60s | 0.5d | P2.1 schema | ✅ Agent E 2026-06-01 task #162 |
+| **P2.6** | **测试用例.md §9.5 TC-IMP-001~004 + USER_MANUAL.md §24 Import Policy 章 + ROADMAP #88 ✅** | 0.5d | P2.1~P2.5 | ✅ Agent F 2026-06-01 task #163 |
+| **P2.7** | **Phase 2 真跨集群 verify**（TC-IMP-001 实跑：docker-desktop 建 SnapshotPolicy + AKS 建 ImportPolicy + 60s 跨集群验 fingerprint chip 显示）| 0.5d | P2.1~P2.6 | ⏳ 等 ADR-042 CD#2 deploy-dev 修好后, 真验在 aks-dev+aks-test 两集群 |
+| **Phase 2 总计** | | **~5.5d** | | **6/7 已 ship; P2.7 等 deploy-dev 通** |
+
+#### 9.3 Phase 2 风险评级（2026-06-01 PRD-Review G5 修订补）
+
+> **重要修订**：Phase 1 标"0 迁移风险"，**Phase 2 不再 0 风险**。引入 CRD + controller + Secret + Helm 模板 + RBAC + 新错误码体系 = 多个工程层面的复杂度增加。
+
+| 维度 | Phase 1 | Phase 2 | 评级 |
 |---|---|---|---|
-| **Phase 1** | Policies.vue 新建抽屉重构（移除 L1/L2 按钮组, 实现 Snapshot 固定 + Enable Export toggle + BSL 下拉过滤）+ i18n（en + zh-CN）+ a11y | 2d | 无 |
-| **Phase 2** | Policy 列表 badge 替换（"L1"→"Snapshot only", "L2"→"Snapshot + Export"）+ USER_MANUAL §Policy 词汇替换 + 截图更新 + 迁移说明 | 1d | Phase 1 |
-| **Phase 3** | 老 L1 / L2 Policy 加载兼容测试（手动构造 v0.9.x Policy YAML, 加载到新 UI 验证视觉 + 编辑保存后 dual annotation 不变）+ Audit log 双写验证 | 0.5d | Phase 1+2 |
-| **总计** | | **~3.5d**（中等改造, 不涉及后端 / controller / CR）| |
+| **数据模型变更** | 0（仅 i18n + UI 改） | 新 CRD `importpolicies.supkube.io/v1` + 新 Secret + 新 ConfigMap (`supkube-fingerprint-truststore`) | 🟡 Med — 升级期老集群无 ImportPolicy CR，旧 Velero sync 继续兜底，无 brownfield broken |
+| **后端 controller 复杂度** | 0（无后端改） | 新 reconciler + 跨集群 BSL 读 + HMAC 签名/验签 + 状态机 5 个 transition | 🟡 Med — controller 跑在 backend pod, 单点故障重启即恢复 |
+| **跨集群信任契约** | N/A | `supkube-fingerprint-secret` 必须双集群同值, 失同步 = enforce 模式所有 import 拒收 | 🔴 High — 客户运维不当会断 import 链路 |
+| **客户操作风险** | 0（升级即看到新 UI, 无 break） | 客户需 `helm install --set fingerprint.sharedSecret=...` 跨集群同步 | 🟡 Med — USER_MANUAL §24 + helm NOTES 已说明 |
+| **回退路径** | i18n revert | helm uninstall importpolicies CRD（已写 keep policy, 不会清 secret）→ 退回 Velero 默认 backupSyncPeriod 60s sync | 🟢 Low — 单向 forward but 退路存在 |
+| **新错误码引入** | 0 | 14 条 `ERR_FINGERPRINT_*` + `ERR_IMPORTPOLICY_*`（沿 ADR-035 风格）| 🟢 Low — 跟现有错误码体系一致 |
+
+**整体 Phase 2 风险等级**：🟡 **Med**（不 High——因 fingerprint enforce/warn/disabled 三档让客户能渐进信任 + Velero 默认 sync 退后兜底 + helm chart `keep` policy 防 secret 误删）
+
+**Mitigations 已采取**:
+- 文档化（USER_MANUAL §24 + helm NOTES + 测试用例 §9.5 TC-IMP-001~004 含 sharedSecret 三态对照）
+- fingerprintMode `warn` 默认（不立即 enforce, 给客户观察期）
+- helm Secret `keep` annotation（uninstall 不删客户的 sharedSecret）
+- Velero backupSyncPeriod 维持 60s（ImportPolicy 死了不阻断老路径）
 
 ### 10. 关联文档与任务
 
@@ -3785,6 +3961,96 @@ Posture: 80/100   (L1✓ L2✓ L3✓ L4✓ L5✗)
 |---|---|---|---|
 | 2026-05-31 | Mars（testing20260531.md 第 1 条）| — | 提出 3 件: (a) Cluster card 显示 "This Cluster" 不直观, 应改 control-plane node 名; (b) Cluster card 跟 BSL card 紫色撞色难区分; (c) 缺 Local Snapshot / Snapshot Export / Backup Copy 路径的视觉表达。(a) 部分今晚 Agent O 已 ship `clusters.go:buildThisClusterDTO` 改造（DisplayName 走 control-plane node label）, (b)+(c) 需立 PRD 重构。|
 | 2026-05-31 | Claude | — → **草稿** | 起草 PRD-010 v1。**核心决策**: (1) 6 类节点色系彻底解决紫色撞色（Cluster 蓝 / Cloud BSL 紫 / Local BSL 橙 / L1 青绿 / L4 粉 / L5 灰）; (2) ADR-031 5 层模型可视化对偶 —— 5 类节点 + Layer 1-5 徽章 + 未启用层占位 + Posture 总分; (3) 数据流箭头 5 类区分（snapshot/export 实线 + sync/copy 虚线 + restore 单向弧）; (4) 沿用现有 SVG 引擎（681 行 DRTopology.vue）不引入图库; (5) 后端 aggregator JSON 扩字段 `localSnapshots` / `backupCopies` / `virtualLabs` / `posture`, 向后兼容 0 风险; (6) cluster name 改造已 ship 本 PRD 不重做; (7) 多 cluster 留 PRD-013（MCM Dashboard, 待立）; (8) Q1-Q5 待 Mars 评审拍板（重点 Q1 色系是否需 designer 介入、Q2 L1 占位按钮跳哪里、Q3 Layer 5 是否真接 DR Drill）。待 Mars 评审决定是否 → 排队评审。|
+| 2026-06-02 | Claude (PRD-Review 第六份 F1-F4 finding 闭环) | 草稿 → **改正中** | 加 §13 PRD-Review 第六份 F1-F4 finding 修订段：**F1** Posture 分数消费后端 PRD-007 §4.7 单一权威 score 不再 "层数×20" 误导 (跨 003/007/010 共用一个真按 3-2-1-1-0 加权的 score, 不是层数计数) / **F2** 数据流箭头按 ADR-025 真实 dual schedule 渲染 (snapshot 实线 / export 实线 / 不再混色) / **F3** L1-L5 vs PRD-009 v2 Snapshot/Export 术语映射表 (每个 Layer 节点 hover tooltip 显示对应 Policy Action Type) / **F4** Layer 5 改为 "DR Drill 验证徽章" 而非独立节点 (语义自洽: Layer 5 是周期性 verify 行为, 不是 Layer 1-4 的物理实体节点)。§8 DoD 加 #13-#16 四条新验收点。状态草稿→改正中, 可转研发中。|
+
+### 13. PRD-Review 第六份 F1-F4 finding 修订段（2026-06-02 闭环）
+
+> **修订动因**：PRD-Review-2026-05-31-PRD010.md（PRD-Review 第六份 §五）对 PRD-010 给出 4 个 finding（F1-F4）。本段是**独立闭环段**。
+
+#### F1（Med-High）Posture 分数第三套口径 — "层数×20" 误导
+
+**finding 原文**：PRD-010 §4.7 把 Posture 分数算成"已启用层数 × 20"（5 层全启用=100）。但 PRD-003 应用韧性分（5 维加权）/ PRD-007 §4.7 集群 Posture 层覆盖分（按 3-2-1-1-0 实际贡献加权）已经存在两套定义；PRD-010 又造第三套 = **跨 PRD 分数语义打架**。"层数×20" 误导客户：只装本地快照（Layer 1）就 20 分？只 import 不 export（Layer 4）就 80 分？这违反 3-2-1-1-0 的安全直觉。
+
+**拟方案**：PRD-010 **不另算 score**，**直接消费 PRD-007 §4.7 单一权威 score**（HTTP GET /api/v1/dashboard/posture → 单一分数 source-of-truth）：
+- 前端 DRTopology.vue **只渲染**后端给的 `posture.totalScore` + `posture.breakdown[]` 数组
+- 不在前端做任何"层数计数 × 20" 计算
+- PRD-007 §4.7 锁定单一加权规则（按 3 copies / 2 media / 1 offsite / 1 immutable / 0 errors 各自的实际贡献加权）
+- PRD-003 应用韧性分跟 PRD-010 集群 Posture 分**是两个独立指标**（per-app vs per-cluster）但**共享同一后端规则引擎**（PRD-011 evaluator.go SSOT）
+
+**与 PRD-007 P5 同源**：本 finding 跟 PRD-007 P5 "Score 口径厘清" 是同一 issue 的不同切面。**两 PRD 共同闭环**：PRD-007 §4.7 定权重表 + PRD-010 §4.7 引用 PRD-007（不另算）。
+
+**DoD 入 §8**：#13。
+
+#### F2（Med）数据流箭头与 ADR-025 双 Schedule 不符
+
+**finding 原文**：PRD-010 §4.5 把"snapshot/export"画成同色实线，但 ADR-025 实际是 **dual schedule pair**——Snapshot 走 CSI snapshot 类型 Schedule（写本地 CSI driver）/ Export 走 file-system 类型 Schedule（写 BSL 对象存储）。两个 Schedule 物理路径不同，UI 应该**区分着色**。
+
+**拟方案**：
+
+| 数据流路径 | ADR-025 来源 | DRTopology 渲染 |
+|---|---|---|
+| Snapshot Schedule（CSI snapshot type, dual=false 半 / 单 ns 单存储路径） | Cluster → Local Snapshot 节点 | 实线 #3b82f6 蓝色 + "Snapshot" label |
+| Export Schedule（file-system type, dual=true 半 / 同 ns 上传 BSL） | Cluster → Cloud BSL 节点 | 实线 #8b5cf6 紫色 + "Export" label |
+| Import Policy（PRD-009 v2 §4.5 跨集群） | Cloud BSL → Cluster | 虚线 #ec4899 粉色 + "Import" label |
+| Backup Copy（PRD-007 Layer 4） | Cloud BSL → 第 2 Cloud BSL | 虚线 #f59e0b 橙色 + "Copy" label |
+| Restore（按需触发） | BSL → Cluster | 实线弧 #10b981 绿色 + "Restore" label |
+
+后端 aggregator JSON 加 `flows[].type` 字段（enum: snapshot/export/import/copy/restore），前端按类型映射颜色 + 实线/虚线。
+
+**DoD 入 §8**：#14。
+
+#### F3（Med）L1-L5 vs PRD-009 v2 Snapshot/Export 术语映射
+
+**finding 原文**：PRD-009 v2 把 Policy 词汇从 "L1/L2" 改成 "Snapshot Policy / Import Policy"，但 PRD-010 DRTopology 仍用 "Layer 1-5" 徽章 + "L1 占位按钮"。同一产品**两套词汇并行**让客户困惑：Policy 面是 Snapshot/Export，Dashboard 面是 L1-L5。
+
+**拟方案**：**两套词汇并存 + 映射表显式**（不消灭一套, 因为 5 层 3-2-1-1-0 模型跟 Policy Action Type 是两个正交概念, 共存合理）：
+
+| 5 层（3-2-1-1-0 韧性模型, PRD-007 + PRD-010 用）| 对应 Policy Action Type（PRD-009 v2 用） | 节点 hover tooltip |
+|---|---|---|
+| **Layer 1** 本地快照 (CSI snapshot) | Snapshot Policy（无 Export toggle） | "本层由 Snapshot Policy 提供 — 点击跳转新建 Snapshot Policy" |
+| **Layer 2** 同集群另一存储介质 | Snapshot Policy（Enable Backups via Snapshot Exports = local BSL） | "本层 = Snapshot + Export 到 local BSL" |
+| **Layer 3** 异地副本 | Snapshot Policy（Enable Backups via Snapshot Exports = cloud BSL）| "本层 = Snapshot + Export 到 cloud BSL（异地）" |
+| **Layer 4** 第 2 异地副本（Backup Copy） | Snapshot Policy + Backup Copy（PRD-007 Layer 4） | "本层 = Layer 3 + 跨第 2 云 Backup Copy" |
+| **Layer 5** DR Drill（演练验证） | 跟 Policy 无关（验证行为，不是 Policy）| "本层是周期性 DR Drill 验证 — 见 PRD-007 §4.7" |
+
+每个 Layer 节点 hover tooltip 显式映射 + 点击节点跳对应 Policy 创建抽屉（已有 PRD-009 v2 Action Type 双 pill）。
+
+**DoD 入 §8**：#15。
+
+#### F4（Low-Med）Layer 5 作为节点语义不自洽
+
+**finding 原文**：Layer 1-4 都是"物理实体"（本地 snapshot / 本地 BSL / 异地 BSL / 第 2 异地 BSL），Layer 5 "虚拟实验室 DR Drill" 是**周期性验证行为**，不是一个**节点**。把它画成跟 Layer 1-4 同等的节点违反语义自洽。
+
+**拟方案**：Layer 5 **不画节点**，改画 **"验证徽章"（Verification Badge）**——展示在整个 DR Topology SVG 顶部 / 边角：
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  DR Topology                              🛡 Layer 5    │  ← 验证徽章
+│                                          ✓ Last drill   │
+│  [Cluster]─────[Snapshot]                  6 hours ago  │
+│       │                                                  │
+│       └──[Local BSL]──[Cloud BSL]──[Copy → 第 2 Cloud]   │
+│                                                          │
+│  Posture: 4/5  ◆◆◆◆◇                                    │
+└─────────────────────────────────────────────────────────┘
+```
+
+徽章状态:
+- 🛡 ✓ "Last drill 6h ago" (周期内, 绿)
+- 🛡 ⚠ "Last drill 8d ago" (周期 7d, 超期, 黄)
+- 🛡 ❌ "Never drilled" (从未跑, 红)
+- 🛡 — "Not enabled" (PRD-007 §4.7 DR Drill 未启用, 灰)
+
+**DoD 入 §8**：#16。
+
+#### §8 DoD 新增条目（F1-F4 finding 落地, 接在原 #12 之后）
+
+| # | 验收点 | finding |
+|---|---|---|
+| 13 | **F1 闭环**：前端 DRTopology.vue **不算 score**, 只渲染 `GET /api/v1/dashboard/posture` 返回的 `totalScore` + `breakdown[]`; grep 前端代码确认无 `layerCount * 20` 这种计算; PRD-007 §4.7 锁定单一加权规则; PRD-003 应用韧性分 + PRD-010 集群 Posture 分共享 PRD-011 evaluator.go 规则引擎 |
+| 14 | **F2 闭环**：后端 aggregator JSON `flows[]` 数组加 `type` 字段（enum: `snapshot`/`export`/`import`/`copy`/`restore`），前端按 5 类映射颜色 + 线型；ADR-025 dual schedule pair 实际跑出来 SVG 真显示 2 条不同色实线（screenshot 归档） |
+| 15 | **F3 闭环**：每个 Layer 节点 hover tooltip 显示 PRD-009 v2 对应 Action Type + "点击跳转" link → 真跳 Policies 抽屉 + Action Type 预选；术语映射表写入 USER_MANUAL §X 单一来源 |
+| 16 | **F4 闭环**：Layer 5 不画节点，改画顶部"验证徽章"(4 状态: 周期内✓/超期⚠/从未❌/未启用—); SVG 渲染数据从 `GET /api/v1/dashboard/posture` 的 `lastDrillAt` + `drillEnabled` 字段读 |
 
 ---
 
@@ -3978,6 +4244,105 @@ v1 的"业务梳理"**只**呈现**能从 K8s 客观推导**的依赖关系: Ser
 | 日期 | 操作人 | 状态变化 | 反馈 |
 |---|---|---|---|
 | 2026-06-01 | Claude | — → **草稿** | 由 Mars 与外部专家 3 轮讨论（RAG 维护 / 数据流水线 / SupEye DSL / Call Home）收敛而成。**核心决策**: (1) 分数由 Go 规则引擎算, LLM 只解释（finding #2）; (2) 置信度三档不用百分比（finding #3）; (3) 缺失数据用 status 枚举显式建模; (4) 采用 SupEye 四段 DSL（fact/observation/inferred/evidence）; (5) A/B 双面知识库物理隔离, chroma-go + 结构化标签预过滤; (6) 默认 Ollama 0 出网, SaaS opt-in 经 sanitize; (7) 非自治, 应用建议只预填不写。MVP 锁单应用/同步/规则评分小闭环, 自动学习/异步/跨集群留迭代。待 Mars 评审拍板 Q1-Q5。|
+| 2026-06-02 | Claude (PRD-Review 第六份 H1/H2/H5 finding 闭环, H1 数值待 Mars 拍) | 草稿 → **改正中** | 加 §12 PRD-Review 第六份 H1/H2/H5 finding 修订段（H3 ADR-037 撞号已修 / H4 chroma-go vs 全量注入留 v1.x 决策不阻断）：**H1** 规则集版本化 (`scoreRulesVersion` 字段输出每次评分 + 历史可复现) + 每条扣分依据写入 evaluator.go 注释 + **Mars 需拍 Q1 权重表 + Q4 硬阈值 (写 等待决策.md D-WAIT-002)** / **H2** 异地判定采 BSL `region` + `provider` 元数据 (不只 local/cloud type 二分), "异地"严格定义=不同 region 且/或不同 provider, 同 region 不同 provider 也算异地半档 / **H5** `/ai/analyze` API 拆 2 endpoints: `/ai/score` 快速同步返回 score+evidence+confidence (<5s, 仅规则引擎跑, 不调 LLM), `/ai/explain?taskId=` 流式返回 LLM 解释 (Server-Sent Events, 不阻塞首屏)。§8 DoD 加 #14-#17 四条新验收点。状态草稿→改正中, 部分 Blocked 待 Mars 拍 H1 数值 + 升级到已评审。|
+
+### 12. PRD-Review 第六份 H1/H2/H5 finding 修订段（2026-06-02 闭环）
+
+> **修订动因**：PRD-Review-2026-06-01-PRD009v2-011-012.md（PRD-Review 第六份 §四）对 PRD-011 给出 5 个 finding（H1-H5）。H3 已闭环（ADR-037 撞号 PRD-011 让号给 PRD-008 → ADR-039，PRD-011 仍用 037），H4 MVP 决策接受全量注入 + 标签预过滤（chroma-go v1.x 评估）。本段闭 H1/H2/H5。
+
+#### H1（Med-High）评分权重需版本化 + 专家校准 + 写明依据
+
+**finding 原文**：评分权重（30/20/30/15/5）与扣分值（-10~-25）是合理但**主观的判断**（Q1 自己在问要不要专家校准）。这套规则正是分数可信度的全部来源，"经得起客户问凭什么"取决于它。
+
+**拟方案（3 件事）**：
+
+1. **规则集版本化**：每次评分输出**带 `scoreRulesVersion: "v1.0.0"`** 字段（语义化版本，破坏性改动 major++ / 加新规则 minor++ / 调阈值 patch++）。
+   - 客户拿到 score=85 + scoreRulesVersion=v1.0.0 → 永远可以问"v1.0.0 规则下 85 分怎么算的"
+   - 后端 evaluator 包多版本并存：`v1_0_0.go`, `v1_1_0.go`, ... 老分数永远可重算
+   - 升级 SupKube 时, dashboard 警示"评分规则从 v1.0.0 升到 v1.1.0, 历史分数下方括号显示新规则下重算结果"
+
+2. **每条扣分依据写入 evaluator.go 注释**：
+   ```go
+   // CheckBackupCoverage 检查应用是否有 backup policy 覆盖
+   // 评分逻辑：
+   //   - 没有任何 backup policy → 扣 25 分（封顶 30, 即 CRITICAL 等级）
+   //   - 依据：3-2-1-1-0 原则首条 = 3 copies, 0 copies 直接 critical;
+   //     Kasten K10 "Protection Status: Unmanaged" 也是类似处理
+   //   - 决策出处：PRD-011 §6 度量表 + Mars 与灾备专家 2026-06-XX 校准
+   func CheckBackupCoverage(app *AppContext) Finding {
+   ```
+
+3. **请 Mars / 灾备专家校准**：评分维度 (30/20/30/15/5) + 关键扣分阈值 (Q4 硬阈值 "无备份封顶 30 / 高分校准 30")，**Mars 拍数值前 PRD-011 不能进研发**。已写入 `等待决策.md D-WAIT-002`。
+
+**DoD 入 §8**：#14。
+
+#### H2（Med）异地判定需真实 region/provider 元数据
+
+**finding 原文**："3-2-1 满足度" / "跨地域" / "同存储后端单点" 这些扣分**依赖准确判定异地/介质多样性**。M3 只采"BSL 数量与类型（local/cloud）"——两个同区域 cloud BSL 不算异地，"cloud" 也可能同区域。判错会误导分数（DR 面板最忌讳）。
+
+**拟方案**：M3 显式采 BSL `region` + `provider` + `bucket` 三元组（不只 local/cloud type 二分）。"异地"严格定义：
+
+| 场景 | 定义 | 评级 |
+|---|---|---|
+| 两个 BSL 都 = local on-cluster MinIO | 0 异地（同集群存储）| 🔴 critical for 3-2-1 |
+| 两个 BSL = (local MinIO + cloud Azure Blob 同 region eastus) | 1 异地（半档, 不同 provider 但同 region）| 🟡 部分满足 |
+| 两个 BSL = (cloud Azure Blob eastus + cloud Azure Blob westus) | 1 异地（半档, 同 provider 但不同 region）| 🟡 部分满足 |
+| 两个 BSL = (cloud Azure Blob eastus + cloud AWS S3 us-west-2) | 2 异地（全档, 不同 provider 不同 region）| 🟢 满足 |
+| 任何 = on-cluster + cloud 不同 region | 2 异地（全档）| 🟢 满足 |
+
+"同存储后端单点" 严格定义：两个 BSL 同 provider + 同 region + 同 bucket prefix。
+
+**Collector 改造**：`internal/collector/app_context.go` 抓 BSL 时 `region` + `provider` 字段必抓（从 Velero BSL CR `.spec.provider` + `.spec.config.region` 读）；如果客户填的 BSL 没 region 字段 → status=`missing`, 评分时按 worst case 算。
+
+**DoD 入 §8**：#15。
+
+#### H5（Med）LLM 解释别阻塞 60s, 分数先返回
+
+**finding 原文**：`/ai/analyze` 同步 60s 跑完采集+评分+LLM 解释。本地 Ollama 在 CPU 节点生成一段解释常需 10-40s，大 ns 采集+LLM 可能破 60s（Q5 已问转异步）。
+
+**拟方案**：拆 2 endpoints, 分数先返回, LLM 解释异步:
+
+```
+POST /api/v1/ai/score
+  Request:  { appNamespace: "demo-app" }
+  Response: { score: 75, evidence: [...], confidence: "medium", scoreRulesVersion: "v1.0.0",
+              explainTaskId: "uuid-1234" }
+  Time: < 5s (仅规则引擎, 不调 LLM, evidence 是 collector 抓的 fact/observation)
+
+GET /api/v1/ai/explain/:taskId  (Server-Sent Events stream)
+  Stream:
+    event: chunk
+    data: {"text": "你这个应用"}
+    event: chunk
+    data: {"text": "的备份覆盖率"}
+    ...
+    event: done
+    data: {"totalTokens": 245, "modelUsed": "ollama:llama3:8b"}
+  Time: 10-40s (LLM 流式输出)
+
+UI 行为:
+  1. 点 "Analyze" → /ai/score 5s 内返回 → UI 立即显示 score + evidence + confidence
+  2. UI 自动 SSE 连 /ai/explain/:taskId → 解释**实时增量**显示在抽屉里 (类似 ChatGPT 打字效果)
+  3. 用户随时关掉抽屉, /ai/explain 自动 abort
+```
+
+**降级**：如果 SSE 失败 (e.g. proxy 不支持) → fallback 到轮询 `GET /ai/explain/:taskId` 返回 `{ status: "running" | "done", text: "..." }`。
+
+**DoD 入 §8**：#16。
+
+#### H4 + H3 备注（不动）
+
+- **H3 (Info)** ADR-037 撞号在 PRD-Review 第六份建议让号 PRD-008 → ADR-039。**PRD-011 仍占 ADR-037**（统一数据采集架构）。已闭环。
+- **H4 (Low)** chroma-go + 30 条知识库 vs 全量注入决策 → MVP 接受 finding 建议 "tag 预过滤 + 全量注入"，条目过百再上向量库。Q3 留 v1.x 评估。
+
+#### §8 DoD 新增条目（H1/H2/H5 落地, 接在原 #13 之后）
+
+| # | 验收点 | finding |
+|---|---|---|
+| 14 | **H1 闭环**：所有 `/ai/score` 响应含 `scoreRulesVersion` 字段; `internal/advisor/evaluator/v1_0_0.go` 每条规则带注释含权重/依据/校准来源; **Mars 在 等待决策.md D-WAIT-002 拍 Q1 权重表 + Q4 硬阈值后**, PRD-011 进研发 |
+| 15 | **H2 闭环**：Collector 抓 BSL 含 region + provider + bucket 字段; "异地"判定按 §H2 5 级表; 实测一个客户场景 (e.g. local MinIO + cloud Azure same region) 评分对得上预期 |
+| 16 | **H5 闭环**：`/ai/score` 同步返回 < 5s + `/ai/explain/:taskId` SSE 流式返回; UI 抽屉打开 5s 内出 score + 抽屉内 LLM 解释**实时打字效果**; abort 抽屉自动 abort LLM 请求 |
+| 17 | **H3/H4 备注**：ADR-037 让号已闭环（PRD-008 → ADR-039）；chroma-go v1 不上，MVP 全量注入 + 标签预过滤 (Q3 留 v1.x 决策)|
 
 ---
 
@@ -4055,4 +4420,90 @@ ADR-037 三档连接形态中"**Call Home 半连**"档的产品化。复用 PRD-
 | 日期 | 操作人 | 状态变化 | 反馈 |
 |---|---|---|---|
 | 2026-06-01 | Claude | — → **草稿（Blocked）** | 由 Mars 战略判断"SaaS-for-Kubernetes 比 AirGap 易调试 + collector 自动建 Case"收敛。**核心决策**: (1) 定位为 ADR-037 三档连接的"半连"档产品化; (2) 复用 PRD-011 Collector + DSL, 0 重复; (3) 默认关闭, 显式 opt-in + 脱敏预览 + SanitizeReport; (4) 单向出站、无入站、非自治, 只开 Case 给人不自动改集群; (5) 市场先例对标 NetApp/Dell/Pure/Veeam。**Blocked**: 待 Mars 提供公司售后系统 Case API 规格方可进入开发。|
+| 2026-06-02 | Claude (PRD-Review 第六份 I1 finding 闭环, I2 仍 Blocked) | 草稿 (Blocked) → **改正中 (仍 Blocked 等 Case API)** | 加 §10 PRD-Review 第六份 I1 finding 修订段：**I1** Story 3.2 + Q1 "预授权自动"模式有数据外泄风险——改默认 **逐次确认**（every outbound payload 需人工 review SanitizeReport 后点 Send）, "预授权自动"降级为显式高级 opt-in（Settings 二级开关 + 警告横条 + audit log）+ Call Home payload 字段并入 **SECURITY.md §6 出境白名单**（跟 PRD-011 SaaS / PRD-003 同一可审计管线, 客户可逐项关）。**I2** 客户身份方案（customer-id 一次性 K8s Secret 注入）见 §11 待补——**仍 Blocked 等 Mars 提供 Case API spec**。|
+
+### 10. PRD-Review 第六份 I1 finding 修订段（2026-06-02 闭环, I2 仍 Blocked）
+
+> **修订动因**：PRD-Review-2026-06-01-PRD009v2-011-012.md（PRD-Review 第六份 §五）对 PRD-012 给出 4 个 finding（I1-I4）。本段修 I1 (默认逐次确认 + §6 白名单); I2 (客户身份) 跟 Case API spec 强依赖, 写进 §11 待补 + 等 Mars。I3/I4 已闭环。
+
+#### I1（Med-High）默认逐次确认 + Call Home payload 并入 SECURITY §6 出境白名单
+
+**finding 原文**：Story 3.2 + Q1 的"预授权自动"模式——数据**无每次人工复核**就离开集群。脱敏一旦漏一项即外泄。
+
+**拟方案（两件事）**：
+
+**1. 默认逐次确认（每次 Send 都人工 review）**：
+
+| 场景 | 触发 | 默认行为 |
+|---|---|---|
+| Score ≤ HIGH + 备份连续 N 次失败 → Call Home 准备 | Collector 跑完 + sanitize 准备好 payload | **不自动 send**, UI 弹窗 "准备 Send to Support" + 展示 SanitizeReport 全文 (≤ 100 KB 全展开 / >100 KB 折叠+下载) + 客户点 "Send" / "Cancel" |
+| **"预授权自动"模式**（Settings 二级开关 + 警告横条 + audit log）| 客户在 Settings 显式 enable + accept disclaimer + 二次确认 | 自动 send（仍走 sanitize 管线）, 但 UI 显示 "上次 send: 5h ago" 实时通知 + 客户可随时 disable |
+
+UI mockup：
+```
+┌─ Send Diagnostic Report to Support ─────────────────────────┐
+│  下面是将外发到 jumborca 售后系统的字段（已脱敏）：             │
+│                                                              │
+│  Tap to expand 8 sections (245 lines, 12 KB)                │
+│  ► identity { customer-id, cluster-id (HMAC) }              │
+│  ► app_context { ns, workloads, ... }                       │
+│  ► backup_health { last_backup_at, failure_count, ... }     │
+│  ► sanitize_report { redacted: 14, fields: [pvcName,...] }  │
+│                                                              │
+│  □ I've reviewed the payload and want to send it.           │
+│                                                              │
+│  [Cancel]                                  [Send to Support] │
+└──────────────────────────────────────────────────────────────┘
+```
+
+**2. Call Home payload 并入 SECURITY.md §6 出境白名单**：
+
+PRD-012 出境字段**跟 PRD-011 SaaS / PRD-003 共用同一管线**——SECURITY.md §6.X 一张白名单:
+
+| section | fields | 谁可关 | 关掉后果 |
+|---|---|---|---|
+| identity | customer-id (一次性 K8s Secret 注入, I2 范围), cluster-id (HMAC of kube-system UID), product-version | 不可关（Case 无法关联） | 关 = Call Home disable 整体 |
+| app_context | namespaces[], workloads[], pvc_count, ... | 可关 | Case 没应用上下文, 售后无法定位 |
+| backup_health | last_backup_at, failure_count, snapshot_size_bytes | 可关 | Case 没失败 timeline, 售后猜瓶颈难 |
+| sanitize_report | redacted_count, fields_redacted[] | 可关（但建议不关）| 关 = 客户不知道我们脱了什么 |
+
+**实施**：
+- `SECURITY.md §6.C` 加 PRD-012 出境字段表
+- `internal/sanitize/sanitize.go` 是 SSOT, PRD-003 / PRD-011 / PRD-012 都走它
+- 客户在 Settings 看到的 "AI / Call Home 出境字段管理" 是 §6 表的可视化
+
+**DoD 入 §8**：#13。
+
+#### I2（Med, Blocked）客户身份方案
+
+**finding 原文**：出站需让售后系统识别"这是哪个客户/合同"，但项目刻意无 license server（ADR-034）。无客户身份则 Case 无法关联。
+
+**拟方案（待 Case API spec 后确认）**：
+- 安装期 helm 命令传 `--set callHome.customerToken=<one-time-token>` (jumborca 售后系统发的)
+- helm 模板把 token 写入 `supkube-callhome-customer` K8s Secret（namespace=supkube, 跟 fingerprint secret 同模式）
+- Call Home payload identity.customer-id = HMAC(token, "callhome-identity-salt")（不直传原 token）
+- 售后系统侧根据 customer-id 关联 Case → 客户合同
+
+**Blocked**：等 Mars 提供 Case API spec:
+- API endpoint URL (e.g. `https://support.jumborca.com/api/v1/cases`)
+- Auth (Bearer token? mTLS?)
+- Request schema（customer-id 字段名 / payload section 名 / 是否需 signature）
+- Response schema（case-id / status / 后续追踪 url）
+
+**等 Mars 给规格** → 写入 §11 待补 → 解 Blocker → PRD-012 转研发中。
+
+**DoD 入 §8**：#14 (等 spec)。
+
+#### I3 + I4（备注, 不动）
+
+- **I3 (Info)** SanitizeReport 预览是亮点。已有, 保留 §8.2。
+- **I4 (Info, 赞)** Blocked 状态用得对。保持。
+
+#### §8 DoD 新增条目（I1-I2 落地）
+
+| # | 验收点 | finding |
+|---|---|---|
+| 13 | **I1 闭环 (a)**：UI Send to Support 抽屉**默认逐次确认**, 展示 SanitizeReport 全文 + 客户点 "Send" 才发; "预授权自动" 模式是 Settings 二级开关 + warning banner + audit log |
+| 14 | **I1 闭环 (b)**：Call Home 出境字段表写入 **SECURITY.md §6.C**，跟 PRD-003/PRD-011 共用一份白名单; `internal/sanitize/sanitize.go` 是 SSOT, 3 处调用方都走它 |
+| 15 | **I2 设计就绪**：等 Mars 给 Case API spec (URL/auth/schema), 拿到后 customer-token 经 HMAC 派生 customer-id 走 identity section; helm `--set callHome.customerToken=` 注入 K8s Secret (跟 fingerprint secret 同模式) |
 
