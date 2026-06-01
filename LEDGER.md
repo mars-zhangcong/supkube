@@ -39,11 +39,11 @@
 | PRD-005 | Log Viewer v2（运维级日志观察平台） | Claude / 2026-05-31 | 已评审 | PRD.md `#prd-005` |
 | PRD-006 | Activity Task Detail Timeline | Claude / 2026-05-31 | 已评审 | PRD.md `#prd-006` |
 | PRD-007 | 完整 3-2-1-1-0 数据韧性（5 层 + Layer 4 Copy + DR Drill） | Claude / 2026-05-31 | 已评审 v1.1 | PRD.md `#prd-007` |
-| PRD-008 | RP 删除生命周期 + Activity 持久化 + Force Delete 治理 | Claude / 2026-05-31 | 草稿（D1-D5 finding open） | PRD.md `#prd-008` |
-| PRD-009 | Policy 模型对齐 Kasten（Snapshot + Import Policy 双 Action） | Claude / 2026-05-31 | v2 研发中（Phase 1 ship） | PRD.md `#prd-009` |
-| PRD-010 | DR Topology v2（可视化重构 + Local Snapshot/Backup Copy 节点） | Claude / 2026-05-31 | 草稿（F1-F4 finding open） | PRD.md `#prd-010` |
-| PRD-011 | AI Backup Advisor MVP（规则算分 + LLM 解释 · Canonical DSL · 本地小闭环） | Claude / 2026-06-01 | 草稿（H1-H5 finding open） | PRD.md `#prd-011` |
-| PRD-012 | Call Home / Auto-Support（三档连接 · 自动开 Case · opt-in） | Claude / 2026-06-01 | 草稿（Blocked，待 Case API） | PRD.md `#prd-012` |
+| PRD-008 | RP 删除生命周期 + Activity 持久化 + Force Delete 治理 | Claude / 2026-05-31 | 改正中（D1-D5 finding 闭环 2026-06-02, §13 修订段 + §8 DoD #19-#23, 等 Mars 重审） | PRD.md `#prd-008` |
+| PRD-009 | Policy 模型对齐 Kasten（Snapshot + Import Policy 双 Action） | Claude / 2026-05-31 | v2 Phase 1 ship + Phase 2 任务拆 7 阶段（G5 finding 2026-06-02 闭环, §8.2 Phase 2 DoD 14 条 + §9.3 风险评级） | PRD.md `#prd-009` |
+| PRD-010 | DR Topology v2（可视化重构 + Local Snapshot/Backup Copy 节点） | Claude / 2026-05-31 | 改正中（F1-F4 finding 闭环 2026-06-02, §13 修订段 + §8 DoD #13-#16, 等 Mars 重审） | PRD.md `#prd-010` |
+| PRD-011 | AI Backup Advisor MVP（规则算分 + LLM 解释 · Canonical DSL · 本地小闭环） | Claude / 2026-06-01 | 改正中（H1/H2/H5 finding 闭环 2026-06-02, §12 修订段 + §8 DoD #14-#17; H1 Q1 权重 + Q4 阈值 deferred 等 Mars 拍 → D-WAIT-002） | PRD.md `#prd-011` |
+| PRD-012 | Call Home / Auto-Support（三档连接 · 自动开 Case · opt-in） | Claude / 2026-06-01 | 改正中（I1 finding 闭环 2026-06-02 默认逐次确认 + SECURITY §6.C 并入, §10 修订段 + §8 DoD #13-#15; I2 customer-id 仍 Blocked 等 Case API spec） | PRD.md `#prd-012` |
 
 ---
 
