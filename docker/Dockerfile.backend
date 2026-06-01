@@ -1,7 +1,15 @@
 # Build stage
 # v0.8.5: bumped from 1.21 → 1.25 because go-oidc/v3 v3.18 requires 1.25+
 # (Go 1.25 has the synchronous mutex semantics go-jose v4 depends on).
-FROM golang:1.25-alpine AS builder
+#
+# --platform=$BUILDPLATFORM (2026-06-01 ADR-042 follow-up):
+# builder stage 永远在 native runner 平台跑 (amd64 GHA runner)，避免
+# buildx --platform=linux/arm64 时把整个 builder 放进 QEMU emulate (慢 5-10x)。
+# Go 已 cross-compile (`GOARCH=${TARGETARCH}` L30)，所以输出 arm64 二进制
+# 无问题；final stage (alpine:3.19) 仍是 TARGETPLATFORM，但只 COPY +
+# apk add ca-certificates，几秒搞定。
+# 实测: 第一次 CD #1 (无此优化) backend build 14m32s; 加此后预期 ~3-4 min。
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
 
 RUN apk add --no-cache git
 

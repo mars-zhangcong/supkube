@@ -97,14 +97,24 @@ jobs:
           cache-to: type=gha,mode=max
           provenance: false
 
-      - name: 推送后即时校验（推成功≠能拉；确认双架构 manifest）
+      - name: 推送后即时校验（推成功≠能拉；确认双架构 manifest list）
         run: |
           V="${{ steps.ver.outputs.version }}"
+          # 1) Tag 存在: show-tags 走 repository 维度
           az acr repository show-tags -n "$ACR_NAME" --repository backend  -o tsv | grep -qx "$V" || { echo "::error::backend:$V 未出现在 ACR"; exit 1; }
           az acr repository show-tags -n "$ACR_NAME" --repository frontend -o tsv | grep -qx "$V" || { echo "::error::frontend:$V 未出现在 ACR"; exit 1; }
-          archs=$(az acr manifest list-metadata -n "$ACR_NAME" --name "backend:$V" --query "[].architecture" -o tsv)
-          echo "backend 架构: $archs"
-          echo "$archs" | grep -qx amd64 || { echo "::error::backend:$V 缺 amd64 架构，AKS 将 ImagePull/exec format error"; exit 1; }
+          # 2) 是 manifest list (双架构) — buildx 推 multi-arch 产 manifest list,
+          #    list 本身 platform-agnostic, sub-manifest 才带 architecture。
+          #    我们查 mediaType 包含 "manifest.list" 即可证明是多架构。
+          #    NOTE: `az acr manifest list-metadata --name "<repo>:<tag>"` 是错的语法
+          #    (--name 只接 repo, 不接 :tag); 用 -r/-n + query tags 才对。
+          backend_media=$(az acr manifest list-metadata -r "$ACR_NAME" -n backend  --query "[?tags[?@=='$V']].mediaType | [0]" -o tsv)
+          frontend_media=$(az acr manifest list-metadata -r "$ACR_NAME" -n frontend --query "[?tags[?@=='$V']].mediaType | [0]" -o tsv)
+          echo "backend  mediaType: $backend_media"
+          echo "frontend mediaType: $frontend_media"
+          echo "$backend_media"  | grep -q "manifest.list" || { echo "::error::backend:$V 不是 manifest list (single-arch 推上去会 ImagePullBackOff / exec format error 在 wrong-arch 节点)"; exit 1; }
+          echo "$frontend_media" | grep -q "manifest.list" || { echo "::error::frontend:$V 不是 manifest list"; exit 1; }
+          echo "✅ backend + frontend 双架构 manifest list verified"
 
   # ─────────────── 2a) 部署 dev 集群（ADR-042：main 提交即推） ───────────────
   deploy-dev:
