@@ -9,18 +9,19 @@
 // interceptor (useCluster composable) attaches whenever the user has
 // the Mode Switcher set to a remote cluster:
 //
-//   header absent / "" / "this-cluster" / "_mcm" → local client (no change)
-//   header = "<cluster-name>"                     → remote client built
-//                                                   from that Cluster CR's
-//                                                   kubeconfig Secret
+//	header absent / "" / "this-cluster" / "_mcm" → local client (no change)
+//	header = "<cluster-name>"                     → remote client built
+//	                                                from that Cluster CR's
+//	                                                kubeconfig Secret
 //
 // What about WRITE handlers (POST/PUT/DELETE)?
-//   The cross-cluster Restore dispatch (MC3) goes through a different
-//   path — the request body explicitly carries `targetCluster` rather
-//   than relying on the header. That's because a write can land on a
-//   different cluster than the user is currently viewing (the canonical
-//   "from A's RP, restore into B" flow). For reads, the header IS the
-//   intent ("show me B's state"), so routing-by-header is the right model.
+//
+//	The cross-cluster Restore dispatch (MC3) goes through a different
+//	path — the request body explicitly carries `targetCluster` rather
+//	than relying on the header. That's because a write can land on a
+//	different cluster than the user is currently viewing (the canonical
+//	"from A's RP, restore into B" flow). For reads, the header IS the
+//	intent ("show me B's state"), so routing-by-header is the right model.
 //
 // Failure modes & UX:
 //   - If the header names a cluster that doesn't exist → 404 with a clear

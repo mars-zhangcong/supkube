@@ -1,0 +1,44 @@
+apiVersion: velero.io/v1
+kind: Backup
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"velero.io/v1","kind":"Backup","metadata":{"annotations":{},"labels":{"supkube.io/managed-by":"supkube"},"name":"reverse-demo-aks2local-224734","namespace":"velero"},"spec":{"defaultVolumesToFsBackup":false,"includedNamespaces":["test-app-restore"],"snapshotMoveData":true,"snapshotVolumes":true,"storageLocation":"azure-blob","ttl":"720h0m0s"}}
+    velero.io/resource-timeout: 10m0s
+    velero.io/source-cluster-k8s-gitversion: v1.34.7
+    velero.io/source-cluster-k8s-major-version: "1"
+    velero.io/source-cluster-k8s-minor-version: "34"
+  creationTimestamp: "2026-05-28T14:50:13Z"
+  generation: 1
+  labels:
+    supkube.io/managed-by: supkube
+    velero.io/storage-location: myazureblob
+  name: reverse-demo-aks2local-224734
+  namespace: velero
+  resourceVersion: "2596842"
+  uid: 3c7c85ea-0b06-4d62-b581-711f023f49f6
+spec:
+  csiSnapshotTimeout: 10m0s
+  defaultVolumesToFsBackup: false
+  hooks: {}
+  includedNamespaces:
+  - test-app-restore
+  itemOperationTimeout: 4h0m0s
+  metadata: {}
+  snapshotMoveData: true
+  snapshotVolumes: true
+  storageLocation: myazureblob
+  ttl: 720h0m0s
+status:
+  backupItemOperationsAttempted: 2
+  backupItemOperationsCompleted: 2
+  completionTimestamp: "2026-05-28T14:49:04Z"
+  expiration: "2026-06-27T14:47:36Z"
+  formatVersion: 1.1.0
+  hookStatus: {}
+  phase: Completed
+  progress:
+    itemsBackedUp: 22
+    totalItems: 22
+  startTimestamp: "2026-05-28T14:47:36Z"
+  version: 1

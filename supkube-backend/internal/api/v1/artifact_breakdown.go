@@ -24,8 +24,8 @@
 //     snapshot operations, VolumeSnapshot CRs themselves, etc. We split
 //     groups into two top-level categories so the drawer can show:
 //
-//       Application Items: 25  (Workloads, Config, Networking, Storage, RBAC)
-//       Infrastructure:    13  (CSI snapshot CRs, Events, auto-generated)
+//     Application Items: 25  (Workloads, Config, Networking, Storage, RBAC)
+//     Infrastructure:    13  (CSI snapshot CRs, Events, auto-generated)
 //
 //     The "Application Items" number is the v0.8.10.1 #24 stable column —
 //     same data path here so the two surfaces stay in sync.

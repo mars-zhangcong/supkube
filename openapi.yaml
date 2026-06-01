@@ -1,0 +1,469 @@
+openapi: 3.1.0
+info:
+  title: SupKube Backend API
+  version: "0.9.1.10-alpha"
+  description: |
+    SupKube 后端 REST API 的机器可读契约。
+
+    **本文件状态**：cross-cutting 契约（认证 / 错误信封 / `/status` / 列表信封 / RBAC）
+    已完整定义；resource paths 以**已核对的核心资源**为种子，按模块增量补全。
+    **完整端点目录（13 组 ~90 端点）以 [API-REFERENCE.md](API-REFERENCE.md) §7 为准**，
+    其权威源是 `supkube-backend/internal/auth/rbac.go` 的 `permissionTable`。
+
+    扩展字段 `x-min-role`：调用该操作所需最低角色（viewer < editor < admin）。
+    带 `x-namespace-scoped: true` 的 editor 操作还要过 namespace 作用域检查。
+  contact:
+    name: SupKube
+    url: https://charts.supkube.com
+  license:
+    name: Proprietary
+
+servers:
+  - url: https://{host}/api/v1
+    description: 外部（ingress）
+    variables:
+      host:
+        default: supkube.example.com
+  - url: http://supkube-backend.{namespace}.svc:8080/api/v1
+    description: 集群内
+    variables:
+      namespace:
+        default: supkube
+
+tags:
+  - name: status
+    description: 健康/版本探针
+  - name: auth
+    description: 认证与身份
+  - name: backups
+    description: 备份
+  - name: restores
+    description: 还原
+  - name: schedules
+    description: 计划备份
+  - name: import-policies
+    description: 导入策略（PRD-009 / ADR-038）
+  - name: storage
+    description: BSL / VSL / 本地库 / CSI
+  - name: backup-copy
+    description: Layer 4 跨 BSL 复制（PRD-007）
+  - name: clusters
+    description: 多集群注册（MCM）
+  - name: admin
+    description: 管理 / 审计 / 清理
+
+security:
+  - bearerAuth: []
+  - basicAuth: []
+
+paths:
+  /status:
+    get:
+      tags: [status]
+      operationId: getStatus
+      summary: 版本/健康探针（公开，免认证）
+      description: |
+        verify-before-ship（ENGINEERING.md Rule D）依赖此端点：`helm upgrade` 后
+        `buildStamp` 变了才证明新镜像真的滚出去。
+      security: []
+      x-min-role: public
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Status"
+              example:
+                status: ok
+                version: "0.9.1.10-alpha"
+                buildStamp: "260531-2310"
+
+  /auth/me:
+    get:
+      tags: [auth]
+      operationId: getAuthMe
+      summary: 当前身份 + 角色 + namespace 作用域
+      x-min-role: viewer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Identity"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /namespaces:
+    get:
+      tags: [admin]
+      operationId: listNamespaces
+      summary: 命名空间列表
+      x-min-role: viewer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ListResponse"
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [admin]
+      operationId: createNamespace
+      summary: 创建命名空间（Restore 抽屉新建目标用；拒绝保护 ns）
+      x-min-role: admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  description: DNS-1123 label
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name: { type: string }
+        "400":
+          description: 非法名 / 受保护 ns
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /backups:
+    get:
+      tags: [backups]
+      operationId: listBackups
+      summary: 备份列表
+      x-min-role: viewer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ListResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [backups]
+      operationId: createBackup
+      summary: 创建备份
+      x-min-role: editor
+      x-namespace-scoped: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: |
+                Backup 规格（透传到 Velero Backup CR 的子集）。
+                互斥约束：`snapshotVolumes`(CSI) 与 `defaultVolumesToFsBackup`(filesystem)
+                只能选一；`snapshotMoveData` 需 `snapshotVolumes=true`。
+              properties:
+                name: { type: string }
+                includedNamespaces:
+                  type: array
+                  items: { type: string }
+                snapshotVolumes: { type: boolean }
+                defaultVolumesToFsBackup: { type: boolean }
+                snapshotMoveData: { type: boolean }
+      responses:
+        "201": { description: Created }
+        "400":
+          description: 卷模式歧义 / 冲突
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403": { $ref: "#/components/responses/ForbiddenNamespace" }
+
+  /backups/{name}:
+    parameters:
+      - $ref: "#/components/parameters/Name"
+    get:
+      tags: [backups]
+      operationId: getBackup
+      summary: 备份详情
+      x-min-role: viewer
+      responses:
+        "200": { description: OK }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [backups]
+      operationId: deleteBackup
+      summary: 删除备份（级联 DeleteBackupRequest）
+      x-min-role: editor
+      x-namespace-scoped: true
+      responses:
+        "200": { description: OK }
+        "403": { $ref: "#/components/responses/ForbiddenNamespace" }
+
+  /backups/{name}/force-delete:
+    parameters:
+      - $ref: "#/components/parameters/Name"
+    post:
+      tags: [backups]
+      operationId: forceDeleteBackup
+      summary: 强删卡住的 Backup CR（全集群备份升 admin）
+      x-min-role: editor
+      x-namespace-scoped: true
+      responses:
+        "200": { description: OK }
+        "403": { $ref: "#/components/responses/ForbiddenNamespace" }
+
+  /restores/preflight:
+    post:
+      tags: [restores]
+      operationId: restorePreflight
+      summary: 还原前置检查（只读诊断，PRD-001）
+      x-min-role: editor
+      x-namespace-scoped: true
+      responses:
+        "200": { description: 检查结果（阻断项 + 直达解决路径） }
+        "403": { $ref: "#/components/responses/ForbiddenNamespace" }
+
+  /restores:
+    get:
+      tags: [restores]
+      operationId: listRestores
+      summary: 还原列表
+      x-min-role: viewer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ListResponse" }
+    post:
+      tags: [restores]
+      operationId: createRestore
+      summary: 发起还原
+      x-min-role: editor
+      x-namespace-scoped: true
+      responses:
+        "201": { description: Created }
+        "403": { $ref: "#/components/responses/ForbiddenNamespace" }
+
+  /import-policies:
+    get:
+      tags: [import-policies]
+      operationId: listImportPolicies
+      summary: 导入策略列表
+      x-min-role: viewer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/ImportPolicy" }
+    post:
+      tags: [import-policies]
+      operationId: createImportPolicy
+      summary: 创建导入策略（替代 Velero backupSyncPeriod 60s 兜底）
+      x-min-role: editor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ImportPolicy" }
+      responses:
+        "201": { description: Created }
+        "400":
+          description: 校验失败（ERR_IMPORTPOLICY_*）
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StructuredError" }
+        "409":
+          description: 同名已存在
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StructuredError" }
+              example:
+                error: "import policy 'foo' already exists"
+                code: ERR_IMPORTPOLICY_ALREADY_EXISTS
+
+  /backup-copy/preflight:
+    post:
+      tags: [backup-copy]
+      operationId: backupCopyPreflight
+      summary: Layer 4 复制预检（列可复制 vs CSI-only 被拒）
+      x-min-role: editor
+      x-namespace-scoped: true
+      responses:
+        "200":
+          description: 可复制清单 + 被拒原因（ERR_LAYER4_SNAPSHOT_UNSUPPORTED）
+        "403": { $ref: "#/components/responses/ForbiddenNamespace" }
+
+  /backup-copy:
+    post:
+      tags: [backup-copy]
+      operationId: backupCopy
+      summary: 执行跨 BSL 复制（搬字节，可能产生云出口费 → admin）
+      x-min-role: admin
+      responses:
+        "202": { description: Accepted（异步搬运） }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: |
+        `Authorization: Bearer <token>`。token 可为静态 API Token（脚本/MCP/CI）
+        或 OIDC JWT（人类经 Dex 登录）。后端按内容自动分派。
+    basicAuth:
+      type: http
+      scheme: basic
+      description: htpasswd 兜底（无 IdP 的小集群 / air-gap）。
+
+  parameters:
+    Name:
+      name: name
+      in: path
+      required: true
+      schema: { type: string }
+      description: 资源名（gin pattern :name）
+
+  responses:
+    Unauthorized:
+      description: 未认证
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: "missing or malformed Authorization header" }
+    Forbidden:
+      description: 角色不足
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/RbacError" }
+          example: { error: "insufficient role", required: "admin", current: "editor" }
+    ForbiddenNamespace:
+      description: 角色不足或 namespace 越权
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/RbacError" }
+          example:
+            error: "namespace not in your scope"
+            namespace: "prod"
+            scope: ["dev", "staging"]
+    NotFound:
+      description: 不存在
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Status:
+      type: object
+      required: [status, version, buildStamp]
+      properties:
+        status: { type: string, example: ok }
+        version: { type: string, example: "0.9.1.10-alpha" }
+        buildStamp:
+          type: string
+          description: YYMMDD-HHMM，由 -ldflags 注入；helm upgrade 后变化才证明新镜像生效
+          example: "260531-2310"
+
+    Identity:
+      type: object
+      properties:
+        username: { type: string }
+        role:
+          type: string
+          enum: [viewer, editor, admin]
+        namespaceScope:
+          type: array
+          items: { type: string }
+          description: editor 的可写 ns 白名单；admin/viewer 为空表示不受限
+
+    ListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { type: object }
+        total:
+          type: integer
+          description: 部分新端点不返回 total，以各端点定义为准
+
+    Error:
+      type: object
+      description: 传统错误信封（早期端点）
+      required: [error]
+      properties:
+        error: { type: string, description: 给人看的错误文案 }
+
+    StructuredError:
+      type: object
+      description: 结构化错误信封（ADR-035，新模块）
+      required: [error, code]
+      properties:
+        error: { type: string, description: 给人看的话 }
+        code:
+          type: string
+          description: ERR_<DOMAIN>_<REASON>，稳定不随文案变
+          example: ERR_IMPORTPOLICY_ALREADY_EXISTS
+
+    RbacError:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+        required: { type: string, enum: [viewer, editor, admin] }
+        current: { type: string, enum: [viewer, editor, admin] }
+        namespace: { type: string }
+        scope:
+          type: array
+          items: { type: string }
+
+    ImportPolicy:
+      type: object
+      description: |
+        导入策略（PRD-009 / ADR-038）。字段为当前已核对子集，完整以
+        internal/importpolicy/types.go 为准。
+      properties:
+        name:
+          type: string
+          description: DNS-1123 label
+        mode:
+          type: string
+          enum: [Continuous, Scheduled]
+          description: Continuous=time.Ticker；Scheduled=robfig/cron
+        bsl:
+          type: string
+          description: 源 BackupStorageLocation 名
+        schedule:
+          type: string
+          description: cron 表达式（Scheduled 模式）
+        intervalSeconds:
+          type: integer
+          description: Continuous 模式间隔（有下限，过短报 ERR_IMPORTPOLICY_INTERVAL_TOO_SHORT）
+        fingerprintMode:
+          type: string
+          enum: [enforce, warn, disabled]
+        lastError:
+          type: string
+          readOnly: true

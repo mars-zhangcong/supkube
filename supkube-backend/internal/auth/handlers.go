@@ -2,28 +2,28 @@
 //
 // Endpoints (mounted under /api/v1/auth/):
 //
-//   GET  /api/v1/auth/providers
-//     Returns the list of identity providers the SPA should render as
-//     "Login with X" buttons. In demo (embedded Dex with static password)
-//     this returns a single "username/password" entry. In production it
-//     returns whatever Dex connectors are configured.
+//	GET  /api/v1/auth/providers
+//	  Returns the list of identity providers the SPA should render as
+//	  "Login with X" buttons. In demo (embedded Dex with static password)
+//	  this returns a single "username/password" entry. In production it
+//	  returns whatever Dex connectors are configured.
 //
-//   GET  /api/v1/auth/login?provider=<id>
-//     Returns the OAuth2 authorization URL for the chosen provider.
-//     The SPA navigates the browser to it; Dex handles the rest.
+//	GET  /api/v1/auth/login?provider=<id>
+//	  Returns the OAuth2 authorization URL for the chosen provider.
+//	  The SPA navigates the browser to it; Dex handles the rest.
 //
-//   POST /api/v1/auth/callback
-//     The SPA POSTs the authorization code (extracted from the Dex
-//     redirect URL) here. We exchange it for an ID token + refresh token
-//     and return them to the SPA.
+//	POST /api/v1/auth/callback
+//	  The SPA POSTs the authorization code (extracted from the Dex
+//	  redirect URL) here. We exchange it for an ID token + refresh token
+//	  and return them to the SPA.
 //
-//   GET  /api/v1/auth/me
-//     Returns the authenticated user (validated by middleware).
+//	GET  /api/v1/auth/me
+//	  Returns the authenticated user (validated by middleware).
 //
-//   POST /api/v1/auth/logout
-//     Server-side: nothing to invalidate (stateless JWTs). Client side:
-//     clear localStorage. We just return a redirect URL for the IdP's
-//     end-session endpoint if it has one.
+//	POST /api/v1/auth/logout
+//	  Server-side: nothing to invalidate (stateless JWTs). Client side:
+//	  clear localStorage. We just return a redirect URL for the IdP's
+//	  end-session endpoint if it has one.
 package auth
 
 import (
@@ -52,10 +52,10 @@ type Provider struct {
 // straight to the named connector. So we construct N "Login with X"
 // buttons by:
 //
-//   1. Reading the configured provider list from c.Providers (populated
-//      from the Helm-rendered AUTH_PROVIDERS_JSON env var)
-//   2. For each, building a fresh OAuth2 authorize URL with the right
-//      connector_id parameter
+//  1. Reading the configured provider list from c.Providers (populated
+//     from the Helm-rendered AUTH_PROVIDERS_JSON env var)
+//  2. For each, building a fresh OAuth2 authorize URL with the right
+//     connector_id parameter
 //
 // All buttons share the same state nonce — they're functionally
 // equivalent auth attempts; whichever the user picks, the callback flow

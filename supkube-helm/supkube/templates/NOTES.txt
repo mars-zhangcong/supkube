@@ -1,0 +1,21 @@
+SupKube {{ .Chart.AppVersion }} installed in namespace {{ .Release.Namespace }}.
+
+Open the UI:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "supkube.fullname" . }} 8080:80
+  open http://localhost:8080
+
+======================================================
+Cross-cluster DR (Import Policy + fingerprint)
+======================================================
+This release includes:
+  - ImportPolicies CRD (supkube.io/v1)
+  - Fingerprint secret (supkube-fingerprint-secret)
+
+For cross-cluster trusted import:
+  1. Generate a shared secret on cluster A:
+       SUPKUBE_FP_SECRET=$(openssl rand -base64 32)
+  2. Install BOTH clusters with --set fingerprint.sharedSecret="$SUPKUBE_FP_SECRET"
+  3. In SupKube UI: Policies → New Policy → Action Type = Import Policy → choose shared BSL.
+
+ImportPolicy default mode = enforce (cross-cluster signature required).
+Velero's backupSyncPeriod has been moved to 5min — ImportPolicy is the primary sync path.

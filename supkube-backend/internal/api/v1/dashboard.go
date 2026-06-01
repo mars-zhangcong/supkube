@@ -11,7 +11,6 @@ import (
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
 )
 
 // Dashboard summary cache
@@ -24,10 +23,10 @@ var (
 
 // DashboardSummary holds aggregated cluster data
 type DashboardSummary struct {
-	Cluster        ClusterInfo        `json:"cluster"`
-	BackupSummary  BackupSummaryInfo  `json:"backupSummary"`
-	RecentBackups  []RecentBackupInfo `json:"recentBackups"`
-	StorageLocations int             `json:"storageLocations"`
+	Cluster          ClusterInfo        `json:"cluster"`
+	BackupSummary    BackupSummaryInfo  `json:"backupSummary"`
+	RecentBackups    []RecentBackupInfo `json:"recentBackups"`
+	StorageLocations int                `json:"storageLocations"`
 }
 
 type ClusterInfo struct {

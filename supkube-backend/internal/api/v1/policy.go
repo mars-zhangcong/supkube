@@ -6,9 +6,9 @@
 // Schedule CR. That worked for L1 (snapshot-only) but didn't model L2
 // (Snapshot + Export) the way users — and Kasten K10 — expect:
 //
-//   L2 Policy fires once  ─►  Snapshot RP (cluster-local, short TTL)
-//                          ╲
-//                           ▶  Export RP (BSL, long TTL)
+//	L2 Policy fires once  ─►  Snapshot RP (cluster-local, short TTL)
+//	                       ╲
+//	                        ▶  Export RP (BSL, long TTL)
 //
 // One Velero Backup CR carries EITHER a CSI snapshot OR a Data Mover
 // upload, never both (Data Mover deletes the snapshot after upload).
@@ -18,13 +18,15 @@
 // label and the (approximate) timestamp, letting the UI group them.
 //
 // Naming convention:
-//   Snapshot half: <policy-name>           (legacy-compatible)
-//   Export   half: <policy-name>-export    (synthetic suffix)
+//
+//	Snapshot half: <policy-name>           (legacy-compatible)
+//	Export   half: <policy-name>-export    (synthetic suffix)
 //
 // Labels (on both Schedules and inherited by the Backups they spawn
 // via Velero controller-side copy in v1.15+):
-//   supkube.io/policy-name: <user-chosen>
-//   supkube.io/policy-role: snapshot | export
+//
+//	supkube.io/policy-name: <user-chosen>
+//	supkube.io/policy-role: snapshot | export
 //
 // Why metadata.name = <policy-name> for snapshot half:
 //   - Legacy single-Schedule policies in pre-v0.8.9 deployments don't
@@ -196,10 +198,10 @@ type PolicyAggregate struct {
 // findPolicy resolves a user-typed policy name into one or two Schedules.
 // Resolution order:
 //
-//   1. List by label supkube.io/policy-name=<name>. If we get back one
-//      or both halves, that's the new-model policy.
-//   2. Fall back to exact name match (legacy single-Schedule policies
-//      created before v0.8.9 have no label).
+//  1. List by label supkube.io/policy-name=<name>. If we get back one
+//     or both halves, that's the new-model policy.
+//  2. Fall back to exact name match (legacy single-Schedule policies
+//     created before v0.8.9 have no label).
 //
 // Returns ErrPolicyNotFound when nothing matches. Returns PolicyAggregate
 // with mode=single when only the snapshot half exists (could be L1 or

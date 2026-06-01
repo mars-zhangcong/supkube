@@ -3,6 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- v0.9.x cache-bust 双保险 (跟 nginx Cache-Control: no-store 配合):
+       浏览器 bfcache / back-forward navigation 会绕过 nginx response header,
+       直接从 memory bfcache 拿; 这 3 个 meta 强制每次 navigation 都走网络,
+       让 Vue chunk hash 改后客户端 Cmd+R 就能拉新 (不再需要 Cmd+Shift+R). -->
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <link rel="icon" type="image/svg+xml" href="/supkube-favicon.svg" />
   <title>SupKube — Kubernetes Data Protection</title>
   <style>

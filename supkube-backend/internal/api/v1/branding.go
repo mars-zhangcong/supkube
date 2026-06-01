@@ -3,9 +3,9 @@
 // Stored in the shared supkube-settings ConfigMap so EVERY user sees
 // the same brand the second the admin saves. Keys:
 //
-//   branding.productName  — string shown in sidebar header + window title
-//   branding.logoDataUrl  — data: URL for the sidebar shield icon
-//   branding.faviconDataUrl — data: URL for the browser tab favicon
+//	branding.productName  — string shown in sidebar header + window title
+//	branding.logoDataUrl  — data: URL for the sidebar shield icon
+//	branding.faviconDataUrl — data: URL for the browser tab favicon
 //
 // Why data URLs (not a separate object-store upload)
 // ──────────────────────────────────────────────────
@@ -17,9 +17,10 @@
 //
 // Default values (returned when the CM has no branding.* keys)
 // ──────────────────────────────────────────────────────────────
-//   productName: "SupKube"
-//   logoDataUrl: "" → frontend falls back to its bundled built-in SVG
-//   faviconDataUrl: "" → frontend falls back to /favicon.ico
+//
+//	productName: "SupKube"
+//	logoDataUrl: "" → frontend falls back to its bundled built-in SVG
+//	faviconDataUrl: "" → frontend falls back to /favicon.ico
 //
 // RBAC: GET is viewer-or-above (everyone needs branding to render
 // the header), PUT is admin-only (rebrand is a privileged action).

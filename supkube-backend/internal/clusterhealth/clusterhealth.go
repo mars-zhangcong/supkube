@@ -5,12 +5,12 @@
 // Nodes list + Velero Deployment probe), and patches the CR's status
 // subresource with:
 //
-//   .status.phase           Healthy / Unreachable / Unauthorized
-//   .status.lastChecked     RFC3339 timestamp
-//   .status.message         non-empty when probe fails (useful in UI)
-//   .status.k8sVersion      e.g. "v1.32.6"
-//   .status.nodeCount
-//   .status.velero.{installed,version}
+//	.status.phase           Healthy / Unreachable / Unauthorized
+//	.status.lastChecked     RFC3339 timestamp
+//	.status.message         non-empty when probe fails (useful in UI)
+//	.status.k8sVersion      e.g. "v1.32.6"
+//	.status.nodeCount
+//	.status.velero.{installed,version}
 //
 // Why a poll loop (not a controller-runtime Reconcile):
 //   - State is external to this cluster; informer caches don't help. Each

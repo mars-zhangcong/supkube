@@ -28,6 +28,26 @@ eula:
 # DR/multi-cluster/audit features.
 license:
   key: ""
+# v0.9.1.13 — Fingerprint shared secret for cross-cluster ImportPolicy trust.
+#
+# Used to HMAC-sign Velero Backup CRs as they cross cluster boundaries (a
+# cluster pulling RPs in via an ImportPolicy verifies the signature before
+# accepting). 32-byte base64-encoded value.
+#
+# Behavior:
+#   Empty (default) → helm generates a random secret on first install and
+#     KEEPS the same value across upgrades (template uses `lookup` to
+#     preserve it). Suitable for SINGLE-CLUSTER trust only — peer clusters
+#     would generate different secrets and never trust each other.
+#
+#   Set on every cluster → cross-cluster trust works. The SAME base64 value
+#     must be installed on every participating cluster:
+#       echo -n "$(openssl rand -base64 32)" > /tmp/sk-secret
+#       helm install supkube ... \
+#         --set fingerprint.sharedSecret="$(cat /tmp/sk-secret)"
+#     Repeat the --set on every cluster you want to mutually trust.
+fingerprint:
+  sharedSecret: ""
 # v0.8.14 LV8 — AirGapped install support (Kasten-style global.airgapped.repository).
 #
 # When customer's cluster can't reach public registries (Azure ACR / Docker
@@ -175,6 +195,15 @@ velero:
   # but is slower and misses CSI-aware semantics.
   configuration:
     features: EnableCSI
+    # v0.9.1.13 (Mars 2026-06-01 RPO clarification): we keep this at Velero
+    # default (60s). ImportPolicy CRD (supkube.io/v1) adds a fingerprint +
+    # source-cluster filter layer on top; Agent G (v0.9.1.13.1) added direct
+    # S3 polling so ImportPolicy can drive the effective sync rate down to
+    # 30s/60s without depending on Velero's period. Velero's native sync
+    # stays at 60s as a safety net — if SupKube ImportPolicy controller
+    # crashes, Velero still surfaces RPs (without fingerprint metadata).
+    # NOTE: setting this longer than 60s slows down RP visibility for BSLs
+    # NOT managed by an ImportPolicy (e.g. customer's hand-added BSL).
     backupSyncPeriod: 60s
     fsBackupTimeout: 4h
     # Default BSL. Customers add Cloud BSLs via the UI later; this block

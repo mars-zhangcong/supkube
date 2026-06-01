@@ -1,0 +1,62 @@
+apiVersion: velero.io/v1
+kind: Backup
+metadata:
+  annotations:
+    supkube.io/data-path: data-mover
+    supkube.io/dual-rp-paired: may28th-demo-2nd-try-20260530001031
+    supkube.io/export-enabled: "true"
+    supkube.io/export-retention: 720h0m0s
+    supkube.io/export-schedule: 0 0 * * *
+    supkube.io/policy-run-instant: "2026-05-30T00:10:31Z"
+    supkube.io/snapshot-retention: 6h
+    supkube.io/snapshot-schedule: 0 0 * * *
+    supkube.io/triggered-by: dual-pair-controller
+    supkube.io/volume-mode: csi
+    velero.io/csi-volumesnapshot-content-retain-policy: retain
+    velero.io/resource-timeout: 10m0s
+    velero.io/source-cluster-k8s-gitversion: v1.32.2
+    velero.io/source-cluster-k8s-major-version: "1"
+    velero.io/source-cluster-k8s-minor-version: "32"
+  creationTimestamp: "2026-05-30T00:11:02Z"
+  generation: 12
+  labels:
+    supkube.io/policy-name: may28th-demo-2nd-try
+    supkube.io/policy-role: export
+    velero.io/schedule-name: may28th-demo-2nd-try-export
+    velero.io/storage-location: myazureblob
+  name: may28th-demo-2nd-try-export-20260530001031
+  namespace: velero
+  resourceVersion: "2770945"
+  uid: e3daac83-2394-46aa-a2b8-096e0d35ec96
+spec:
+  csiSnapshotTimeout: 10m0s
+  defaultVolumesToFsBackup: false
+  excludedClusterScopedResources:
+  - volumesnapshotcontents.snapshot.storage.k8s.io
+  excludedNamespaceScopedResources:
+  - volumesnapshots.snapshot.storage.k8s.io
+  hooks: {}
+  includedNamespaces:
+  - test-app
+  itemOperationTimeout: 4h0m0s
+  metadata: {}
+  snapshotMoveData: true
+  snapshotVolumes: true
+  storageLocation: myazureblob
+  ttl: 720h0m0s
+  volumeGroupSnapshotLabelKey: velero.io/volume-group
+  volumeSnapshotLocations:
+  - csi-default
+status:
+  backupItemOperationsAttempted: 2
+  backupItemOperationsCompleted: 2
+  completionTimestamp: "2026-05-30T00:12:10Z"
+  expiration: "2026-06-29T00:11:03Z"
+  formatVersion: 1.1.0
+  hookStatus: {}
+  phase: Completed
+  progress:
+    itemsBackedUp: 39
+    totalItems: 39
+  startTimestamp: "2026-05-30T00:11:03Z"
+  version: 1

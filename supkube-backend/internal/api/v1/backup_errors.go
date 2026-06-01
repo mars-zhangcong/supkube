@@ -5,11 +5,11 @@
 // A Velero Backup CR carries an `errors: N` count in status, but the
 // actual error messages are scattered across:
 //
-//   1. status.message            — Velero's own top-level error (rare)
-//   2. DataUpload CRs            — Data Mover failures (most common)
-//   3. PodVolumeBackup CRs       — Filesystem backup failures
-//   4. <backup>-results.gz in BSL — Velero-emitted per-namespace errors
-//                                  (requires DownloadRequest dance)
+//  1. status.message            — Velero's own top-level error (rare)
+//  2. DataUpload CRs            — Data Mover failures (most common)
+//  3. PodVolumeBackup CRs       — Filesystem backup failures
+//  4. <backup>-results.gz in BSL — Velero-emitted per-namespace errors
+//     (requires DownloadRequest dance)
 //
 // Until v0.8.8 the SupKube UI's Activity Action Details panel showed
 // "Health: 2 errors" with NO way to see what those errors actually were
@@ -59,7 +59,7 @@ type BackupErrorEntry struct {
 
 // BackupErrorsResponse is what GET /backups/:name/errors returns.
 type BackupErrorsResponse struct {
-	BackupName string             `json:"backupName"`
+	BackupName string `json:"backupName"`
 	// Errors lists every failed DataUpload + PodVolumeBackup tied to
 	// this backup. Empty array (not null) when nothing failed.
 	Errors []BackupErrorEntry `json:"errors"`

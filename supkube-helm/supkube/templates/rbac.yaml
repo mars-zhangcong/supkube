@@ -105,6 +105,19 @@ rules:
   - apiGroups: ["supkube.io"]
     resources: ["clusters", "clusters/status"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # v0.9.1.13: ImportPolicy CR (cross-cluster Velero Backup import).
+  # ClusterRole-wide (matches the Cluster CR pattern above) — the importpolicy
+  # controller watches across the supkube namespace and must reconcile status.
+  # Note: Velero Backup write access (needed to create imported Backup CRs in
+  # the velero namespace) is already granted by the velero.io rule near the
+  # top of this ClusterRole — no extra binding needed.
+  # K8s Secret/ConfigMap access for supkube-fingerprint-secret and
+  # supkube-fingerprint-truststore is covered by the existing cluster-wide
+  # secrets/configmaps rules above; tightening to per-name resourceNames is
+  # tracked under the v0.8.1 RBAC overhaul (USER_MANUAL §27).
+  - apiGroups: ["supkube.io"]
+    resources: ["importpolicies", "importpolicies/status"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

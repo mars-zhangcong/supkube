@@ -18,7 +18,7 @@
 //
 //   - snapshotVolumes=true, snapshotMoveData=false, fsBackup=false
 //     → pure cluster-local CSI snapshot (matches the Applications page's
-//       UX promise: "instant rollback point", not "DR backup")
+//     UX promise: "instant rollback point", not "DR backup")
 //   - TTL=24h (configurable via body, but caller usually doesn't set it)
 //   - StorageLocation=default (any BSL — only metadata tarball goes
 //     there; PV data is in CSI snapshot)
@@ -197,6 +197,6 @@ func CreateManualSnapshot(c *gin.Context) {
 		"user":        username,
 		"ttl":         ttlDur.String(),
 		// Hint to the SPA: where the user can watch progress.
-		"watchUrl":    "/activity?type=Backup&filter=" + backupName,
+		"watchUrl": "/activity?type=Backup&filter=" + backupName,
 	})
 }

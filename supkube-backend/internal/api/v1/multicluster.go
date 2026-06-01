@@ -44,14 +44,14 @@ type MultiClusterSummary struct {
 // ClusterSummary is one cluster's snapshot. Fields are picked to populate
 // the cluster-row cards on the MCM dashboard without further drill-down.
 type ClusterSummary struct {
-	Name         string `json:"name"`
-	DisplayName  string `json:"displayName,omitempty"`
-	Type         string `json:"type"`     // primary | secondary
-	Phase        string `json:"phase"`    // Healthy | Unreachable | Unauthorized | Unknown
-	Message      string `json:"message,omitempty"`
-	IsCurrent    bool   `json:"isCurrent"`
-	K8sVersion   string `json:"k8sVersion,omitempty"`
-	NodeCount    int    `json:"nodeCount,omitempty"`
+	Name        string `json:"name"`
+	DisplayName string `json:"displayName,omitempty"`
+	Type        string `json:"type"`  // primary | secondary
+	Phase       string `json:"phase"` // Healthy | Unreachable | Unauthorized | Unknown
+	Message     string `json:"message,omitempty"`
+	IsCurrent   bool   `json:"isCurrent"`
+	K8sVersion  string `json:"k8sVersion,omitempty"`
+	NodeCount   int    `json:"nodeCount,omitempty"`
 	// Live-fetched per-cluster counts. Zero when probe failed.
 	AppCount    int `json:"appCount"`
 	PolicyCount int `json:"policyCount"`

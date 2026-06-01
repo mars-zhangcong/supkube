@@ -205,6 +205,7 @@ func enrichBackupForResponse(b *velerov1.Backup, meta SupKubeBackupMeta) map[str
 // v0.6 dual-mode volume backup:
 //   - SnapshotVolumes=true        → CSI snapshot path (Velero v1.14+ core)
 //   - DefaultVolumesToFsBackup=true → Restic/Kopia filesystem backup path
+//
 // UI sends exactly one of these as true; either OR neither (skip volumes) is
 // valid. Both true is rejected as ambiguous.
 func CreateBackup(c *gin.Context) {
@@ -517,9 +518,101 @@ func DeleteBackup(c *gin.Context) {
 		gc.TriggerSoon(context.Background(), cl, k8sCli)
 	}
 	c.JSON(http.StatusAccepted, gin.H{
-		"message":              "Delete in progress (cascade); orphan cleanup scheduled ~60s",
-		"deleteBackupRequest":  dbrName,
-		"backupName":           name,
+		"message":             "Delete in progress (cascade); orphan cleanup scheduled ~60s",
+		"deleteBackupRequest": dbrName,
+		"backupName":          name,
+	})
+}
+
+// ForceDeleteBackup is the emergency-escape hatch for a Backup CR that's
+// stuck — either because Velero's controller is hung, the DBR cascade
+// stalled, or a finalizer is wedged from a half-done previous delete.
+//
+// It does what `kubectl patch ... finalizers=null && kubectl delete` does
+// manually, but: (a) keeps RBAC scoping, (b) records what was bypassed in
+// audit log, (c) schedules orphan GC for the storage-snapshot side
+// (otherwise force-delete leaks cloud-provider snapshots).
+//
+// USE WITH CARE: this does NOT trigger DBR cascade. The backup tarball on
+// the BSL is left behind (Velero's BackupSyncController will re-sync it
+// back from BSL in 60s unless the object was already removed). For a
+// CLEAN cascading delete, use DELETE /backups/:name. Use this only when
+// that has stalled. The response tells the user what was bypassed.
+//
+// v0.9.x: introduced after repeated demo pain — a Backup CR with a
+// node-agent-related finalizer was un-deletable for hours; users had to
+// kubectl-edit the CR by hand. (See task #68, ADR-026 background.)
+func ForceDeleteBackup(c *gin.Context) {
+	name := c.Param("name")
+	cl, err := k8s.GetRuntimeClient()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	backup := &velerov1.Backup{}
+	if err := cl.Get(context.Background(), client.ObjectKey{Name: name, Namespace: "velero"}, backup); err != nil {
+		if apierrors.IsNotFound(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "backup not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	// Same authz scope as DeleteBackup — force-delete must not be a
+	// privilege-escalation path. Whole-cluster backup still requires admin.
+	if len(backup.Spec.IncludedNamespaces) == 0 {
+		user := auth.FromContext(c)
+		if user != nil && user.Role == auth.RoleEditor {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+				"error": "force-deleting a whole-cluster backup requires admin",
+			})
+			return
+		}
+	} else if !auth.RequireNamespaceAccess(c, backup.Spec.IncludedNamespaces...) {
+		return
+	}
+
+	hadFinalizers := append([]string{}, backup.Finalizers...)
+	bypassed := []string{}
+
+	// Step 1: strip finalizers if any. We patch with empty slice (not nil)
+	// so the JSON-Patch is unambiguous.
+	if len(backup.Finalizers) > 0 {
+		patch := client.MergeFrom(backup.DeepCopy())
+		backup.Finalizers = []string{}
+		if err := cl.Patch(context.Background(), backup, patch); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error":         "failed to strip finalizers: " + err.Error(),
+				"hadFinalizers": hadFinalizers,
+			})
+			return
+		}
+		bypassed = append(bypassed, fmt.Sprintf("finalizers (%s)", strings.Join(hadFinalizers, ",")))
+	}
+
+	// Step 2: direct delete. NO DBR — that's the path we just abandoned.
+	if err := cl.Delete(context.Background(), backup); err != nil && !apierrors.IsNotFound(err) {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":              "failed to delete Backup after stripping finalizers: " + err.Error(),
+			"strippedFinalizers": hadFinalizers,
+		})
+		return
+	}
+	bypassed = append(bypassed, "DeleteBackupRequest cascade (BSL tarball NOT removed)")
+
+	// Step 3: schedule orphan GC so the cloud snapshot side doesn't leak.
+	// Per D-11 the orphan-VSC/cloud-snapshot trap is the real billing risk.
+	k8sCli, kerr := k8s.GetClient()
+	if kerr == nil {
+		gc.TriggerSoon(context.Background(), cl, k8sCli)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":           "Backup force-deleted. Review 'bypassed' — those side effects were skipped.",
+		"backupName":        name,
+		"bypassed":          bypassed,
+		"orphanGcScheduled": kerr == nil,
+		"warning":           "BSL tarball not removed by force-delete. If you want the storage reclaimed, also remove the BSL object directly or wait for retention policy.",
 	})
 }
 
@@ -571,7 +664,7 @@ func CreateRestore(c *gin.Context) {
 		// references the named ConfigMap in velero ns so Velero applies
 		// the JSONPath patches at restore time. We don't materialize
 		// anything new here — just write the ref.
-		TransformSetName       string            `json:"transformSetName,omitempty"`
+		TransformSetName string `json:"transformSetName,omitempty"`
 		// v0.9.0 MC3 — cross-cluster restore. Empty or "this-cluster" means
 		// "restore on the local cluster" (existing v0.8 behavior). Otherwise
 		// the named cluster must be a registered Cluster CR; we use its
@@ -580,7 +673,7 @@ func CreateRestore(c *gin.Context) {
 		// synced (via BackupSyncController from a shared BSL) — MC4 will
 		// automate the BSL sync; for MC3 we just apply the Restore CR and
 		// let Velero fail-loudly if metadata isn't present yet.
-		TargetCluster          string            `json:"targetCluster,omitempty"`
+		TargetCluster string `json:"targetCluster,omitempty"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -905,10 +998,11 @@ func GetRestoreResults(c *gin.Context) {
 //
 // Response shape change: items[] now contains PolicyAggregate entries,
 // not raw Schedules. Frontend reads:
-//   item.policyName       → display name + URL identifier
-//   item.mode             → "single" | "dual"
-//   item.snapshotSchedule → the L1 / snapshot half (always present)
-//   item.exportSchedule   → only set when mode=dual
+//
+//	item.policyName       → display name + URL identifier
+//	item.mode             → "single" | "dual"
+//	item.snapshotSchedule → the L1 / snapshot half (always present)
+//	item.exportSchedule   → only set when mode=dual
 //
 // Backwards compat: legacy pre-v0.8.9 single Schedules (no labels) come
 // through as mode=single with the Schedule in snapshotSchedule — old

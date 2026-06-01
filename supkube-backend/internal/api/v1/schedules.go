@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"time"
@@ -8,6 +9,8 @@ import (
 	"github.com/gin-gonic/gin"
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/util/retry"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/supkube/supkube-backend/internal/auth"
 	"github.com/supkube/supkube-backend/internal/k8s"
@@ -43,14 +46,15 @@ func GetSchedule(c *gin.Context) {
 // fork. The omitted fields keep their original values from the live CR.
 //
 // Editable fields (all optional; omit to leave unchanged):
-//   paused                     bool              — quick pause/resume
-//   schedule                   string (cron)     — new cron expression
-//   ttl                        string (24h fmt)  — Backup retention
-//   includedNamespaces         []string          — change ns scope (RBAC-checked against new + old)
-//   storageLocation            string            — BSL name
-//   snapshotVolumes            *bool             — CSI snapshot toggle
-//   defaultVolumesToFsBackup   *bool             — filesystem backup toggle
-//   annotations                map[string]string — supkube.io/* intent overlay; merged in
+//
+//	paused                     bool              — quick pause/resume
+//	schedule                   string (cron)     — new cron expression
+//	ttl                        string (24h fmt)  — Backup retention
+//	includedNamespaces         []string          — change ns scope (RBAC-checked against new + old)
+//	storageLocation            string            — BSL name
+//	snapshotVolumes            *bool             — CSI snapshot toggle
+//	defaultVolumesToFsBackup   *bool             — filesystem backup toggle
+//	annotations                map[string]string — supkube.io/* intent overlay; merged in
 //
 // We deliberately reject name changes; renaming a Schedule in Velero
 // requires creating a new one (the Backup history is keyed by ref name).
@@ -98,6 +102,19 @@ func PatchSchedule(c *gin.Context) {
 	}
 	if req.IncludedNamespaces != nil && !auth.RequireNamespaceAccess(c, (*req.IncludedNamespaces)...) {
 		return
+	}
+
+	// Pre-validate any TTL inputs up front. The Update below runs inside a
+	// RetryOnConflict loop that only retries genuine optimistic-concurrency
+	// conflicts; a bad-TTL error must still surface as 400 (not get masked as
+	// a 500 by the retry path), so we reject malformed input before the loop.
+	for label, ttl := range map[string]*string{"ttl": req.TTL, "snapshotTtl": req.SnapshotTTL, "exportTtl": req.ExportTTL} {
+		if ttl != nil {
+			if _, perr := time.ParseDuration(*ttl); perr != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("invalid %s %q: %v", label, *ttl, perr)})
+				return
+			}
+		}
 	}
 
 	// Apply common fields + role-specific TTL/BSL to BOTH halves
@@ -171,31 +188,59 @@ func PatchSchedule(c *gin.Context) {
 		return nil
 	}
 
-	// Snapshot half (always present)
-	role := roleSnapshot
-	if policy.SnapshotSchedule.Labels[labelPolicyRole] != "" {
-		role = policy.SnapshotSchedule.Labels[labelPolicyRole]
-	}
-	if err := apply(policy.SnapshotSchedule, role); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	policy, updateErr := patchPolicyWithRetry(c.Request.Context(), cl, name, apply)
+	if updateErr != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": updateErr.Error()})
 		return
-	}
-	if err := cl.Update(c.Request.Context(), policy.SnapshotSchedule); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "snapshot half: " + err.Error()})
-		return
-	}
-	// Export half (only in dual mode)
-	if policy.ExportSchedule != nil {
-		if err := apply(policy.ExportSchedule, roleExport); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-		if err := cl.Update(c.Request.Context(), policy.ExportSchedule); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "export half: " + err.Error()})
-			return
-		}
 	}
 	c.JSON(http.StatusOK, policy)
+}
+
+// patchPolicyWithRetry runs the read-modify-write for a policy's Schedule
+// halves under RetryOnConflict.
+//
+// Why: a velero/policypair controller reconcile (or API defaulting) can bump a
+// Schedule's resourceVersion between our Get and Update, making Update return a
+// 409 Conflict ("the object has been modified"). Without retry that surfaced to
+// the user as an intermittent 500 — and as a flaky e2e test. On each attempt we
+// re-fetch the latest via findPolicy, re-apply the caller's mutations, and
+// re-Update. Mirrors the pattern in internal/fingerprint/truststore.go.
+//
+// Extracted from PatchSchedule (taking the client as a parameter) so the
+// conflict-recovery behaviour is unit-testable with an injected fake client.
+// See TestPatchPolicyWithRetry_RecoversFromConflict.
+func patchPolicyWithRetry(ctx context.Context, cl client.Client, name string, apply func(*velerov1.Schedule, string) error) (*PolicyAggregate, error) {
+	var out *PolicyAggregate
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		fresh, ferr := findPolicy(ctx, cl, name)
+		if ferr != nil {
+			return ferr
+		}
+
+		// Snapshot half (always present)
+		role := roleSnapshot
+		if fresh.SnapshotSchedule.Labels[labelPolicyRole] != "" {
+			role = fresh.SnapshotSchedule.Labels[labelPolicyRole]
+		}
+		if aerr := apply(fresh.SnapshotSchedule, role); aerr != nil {
+			return aerr
+		}
+		if uerr := cl.Update(ctx, fresh.SnapshotSchedule); uerr != nil {
+			return uerr
+		}
+		// Export half (only in dual mode)
+		if fresh.ExportSchedule != nil {
+			if aerr := apply(fresh.ExportSchedule, roleExport); aerr != nil {
+				return aerr
+			}
+			if uerr := cl.Update(ctx, fresh.ExportSchedule); uerr != nil {
+				return uerr
+			}
+		}
+		out = fresh
+		return nil
+	})
+	return out, err
 }
 
 // RunScheduleOnce triggers an ad-hoc backup.

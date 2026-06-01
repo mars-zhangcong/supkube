@@ -1,22 +1,23 @@
 <!--
-  TransformSets (v0.8.2)
-  ──────────────────────
-  Management UI for the Velero ResourceModifier ConfigMaps that SupKube
-  treats as named "Transform Sets". A Transform Set is a bundle of JSONPath
-  patches applied during restore — used to fix structural conflicts when
-  restoring across namespaces or clusters (see USER_MANUAL.md §4.2).
+  TransformSets (PRD-002 v1.3, 2026-05-31)
+  ────────────────────────────────────────
+  Two-layer model: TransformSet is now a CONTAINER that references one or
+  more atomic Transforms (Velero ResourceModifier rule bundles) by name
+  and supplies defaults for ${VAR} placeholders. The visual rule editor
+  moved into Transforms.vue.
 
   Page layout:
     - Top description + Create button
-    - Filter row (search by name)
-    - Card grid: each Transform Set as a card with name + description +
-      rule count + Built-In badge + ⋮ menu (Edit / Delete / Clone)
-    - Side drawer for create / edit (visual rule editor — no raw YAML
-      required, but YAML preview at bottom for power users)
+    - Filter row (search by name / description)
+    - Card grid: each TransformSet shows its name + description + ref count
+      + the names of referenced Transforms + a Built-In badge + ⋮ menu
+    - Side drawer for create / edit:
+      - Pick Transforms from the catalog (multi-select)
+      - Defaults map (key/value rows) for ${VAR} substitution
+      - No inline rule editing — "manage Transforms…" link jumps to the
+        Transforms page
 
-  Built-in templates ship with the install (strip-nodeport,
-  strip-clusterip, strip-loadbalancer-ip, strip-pv-binding). They're
-  read-only; users must Clone to customize.
+  Built-ins are read-only (clone-to-edit).
 -->
 <template>
   <div class="ts-page">
@@ -57,7 +58,7 @@
       <div v-for="ts in filtered" :key="ts.name" class="ts-card">
         <div class="ts-card-head">
           <div class="ts-name">
-            <el-icon><Tools /></el-icon>
+            <el-icon><Files /></el-icon>
             <span>{{ ts.name }}</span>
             <span v-if="ts.builtIn" class="builtin-pill">{{ t('transformSets.builtin') }}</span>
           </div>
@@ -75,18 +76,14 @@
         </div>
         <div class="ts-desc">{{ ts.description || t('transformSets.noDesc') }}</div>
         <div class="ts-meta">
-          <span class="meta-chip">{{ t('transformSets.ruleCount', { n: (ts.rules || []).length }) }}</span>
-          <span class="meta-chip">{{ ts.rules?.reduce((s, r) => s + (r.patches?.length || 0), 0) || 0 }} {{ t('transformSets.patches') }}</span>
+          <span class="meta-chip">{{ t('transformSets.refCount', { n: (ts.transformRefs || []).length }) }}</span>
+          <span v-if="ts.defaults && Object.keys(ts.defaults).length > 0" class="meta-chip">{{ Object.keys(ts.defaults).length }} {{ t('transformSets.defaults') }}</span>
         </div>
-        <div class="ts-rules-preview">
-          <div v-for="(rule, ri) in (ts.rules || []).slice(0, 2)" :key="ri" class="rule-mini">
-            <span class="rule-gr">{{ rule.conditions.groupResource }}</span>
-            <span class="rule-arrow">→</span>
-            <span v-for="(p, pi) in rule.patches" :key="pi" class="rule-op">
-              {{ p.operation }} <code>{{ p.path }}</code>
-            </span>
-          </div>
-          <div v-if="(ts.rules || []).length > 2" class="rule-more">+{{ ts.rules.length - 2 }} more rule(s)</div>
+        <div class="ts-refs-preview">
+          <span v-for="ref in (ts.transformRefs || []).slice(0, 6)" :key="ref.name" class="ref-chip">
+            <el-icon><Tools /></el-icon> {{ ref.name }}
+          </span>
+          <span v-if="(ts.transformRefs || []).length > 6" class="rule-more">+{{ ts.transformRefs.length - 6 }} more</span>
         </div>
       </div>
     </div>
@@ -102,78 +99,68 @@
       <div v-if="form" class="editor-body">
         <el-form :model="form" label-position="top">
           <el-form-item :label="t('common.name')" required>
-            <el-input v-model="form.name" :disabled="!!editingName" placeholder="my-transform" />
+            <el-input v-model="form.name" :disabled="!!editingName || readOnly" placeholder="my-transform-set" />
           </el-form-item>
           <el-form-item :label="t('transformSets.description')">
             <el-input v-model="form.description" type="textarea" :rows="2"
+              :disabled="readOnly"
               :placeholder="t('transformSets.descriptionPlaceholder')" />
           </el-form-item>
 
-          <div class="rules-section">
-            <div class="rules-header">
-              <span class="rules-title">{{ t('transformSets.rules') }}</span>
-              <el-button size="small" @click="addRule">
-                <el-icon><Plus /></el-icon> {{ t('transformSets.addRule') }}
+          <el-form-item required>
+            <template #label>
+              <span class="label-row">
+                {{ t('transformSets.refsLabel') }}
+                <a class="manage-link" href="#" @click.prevent="goManageTransforms">
+                  {{ t('transformSets.manageTransforms') }}
+                </a>
+              </span>
+            </template>
+            <el-select
+              v-model="selectedRefNames"
+              multiple
+              filterable
+              :disabled="readOnly"
+              :placeholder="t('transformSets.refsPlaceholder')"
+              class="refs-select"
+            >
+              <el-option
+                v-for="tr in availableTransforms"
+                :key="tr.name"
+                :label="tr.name"
+                :value="tr.name"
+              >
+                <span class="ref-option">
+                  <span>{{ tr.name }}</span>
+                  <span v-if="tr.builtIn" class="ref-builtin">{{ t('transformSets.builtin') }}</span>
+                  <span class="ref-desc">{{ tr.description || '' }}</span>
+                </span>
+              </el-option>
+            </el-select>
+            <div v-if="selectedRefNames.length === 0" class="refs-empty-hint">{{ t('transformSets.refsEmpty') }}</div>
+          </el-form-item>
+
+          <div class="defaults-section">
+            <div class="defaults-head">
+              <span class="defaults-title">{{ t('transformSets.defaults') }}</span>
+              <el-button size="small" :disabled="readOnly" @click="addDefault">
+                <el-icon><Plus /></el-icon> {{ t('transformSets.addDefault') }}
               </el-button>
             </div>
-
-            <div v-for="(rule, ri) in form.rules" :key="ri" class="rule-editor">
-              <div class="rule-editor-head">
-                <span class="rule-num">#{{ ri + 1 }}</span>
-                <el-button size="small" type="danger" circle @click="removeRule(ri)" :disabled="form.rules.length <= 1">
-                  <el-icon><Close /></el-icon>
-                </el-button>
-              </div>
-
-              <el-form-item :label="t('transformSets.groupResource')" required>
-                <el-input v-model="rule.conditions.groupResource" placeholder="services, deployments.apps, persistentvolumeclaims" />
-              </el-form-item>
-              <el-form-item :label="t('transformSets.namespaces')">
-                <el-select v-model="rule.conditions.namespaces" multiple filterable allow-create
-                  :placeholder="t('transformSets.allNamespaces')">
-                  <el-option v-for="ns in namespaces" :key="ns" :label="ns" :value="ns" />
-                </el-select>
-              </el-form-item>
-              <el-form-item :label="t('transformSets.resourceNameRegex')">
-                <el-input v-model="rule.conditions.resourceNameRegex" :placeholder="t('transformSets.resourceNameRegexHint')" />
-              </el-form-item>
-
-              <div class="patches-section">
-                <div class="patches-head">
-                  <span>{{ t('transformSets.patches') }}</span>
-                  <el-button size="small" @click="addPatch(rule)">
-                    <el-icon><Plus /></el-icon> {{ t('transformSets.addPatch') }}
-                  </el-button>
-                </div>
-                <div v-for="(patch, pi) in rule.patches" :key="pi" class="patch-row">
-                  <el-select v-model="patch.operation" class="patch-op">
-                    <el-option v-for="op in ['add','remove','replace','test','copy','move']" :key="op" :label="op" :value="op" />
-                  </el-select>
-                  <el-input v-model="patch.path" :placeholder="t('transformSets.pathPlaceholder')" class="patch-path" />
-                  <el-input
-                    v-if="['add','replace','test'].includes(patch.operation)"
-                    v-model="patch.value"
-                    :placeholder="t('transformSets.valuePlaceholder')"
-                    class="patch-value"
-                  />
-                  <el-button size="small" type="danger" circle @click="removePatch(rule, pi)" :disabled="rule.patches.length <= 1">
-                    <el-icon><Close /></el-icon>
-                  </el-button>
-                </div>
-              </div>
+            <div class="defaults-hint">{{ t('transformSets.defaultsHint') }}</div>
+            <div v-for="(entry, idx) in defaultsList" :key="idx" class="default-row">
+              <el-input v-model="entry.key" :placeholder="t('transformSets.defaultsKey')" :disabled="readOnly" class="default-key" />
+              <el-input v-model="entry.value" :placeholder="t('transformSets.defaultsValue')" :disabled="readOnly" class="default-value" />
+              <el-button size="small" type="danger" circle :disabled="readOnly" @click="removeDefault(idx)">
+                <el-icon><Close /></el-icon>
+              </el-button>
             </div>
           </div>
-
-          <!-- YAML preview for power users -->
-          <details class="yaml-preview">
-            <summary>{{ t('transformSets.yamlPreview') }}</summary>
-            <pre>{{ yamlPreview }}</pre>
-          </details>
         </el-form>
       </div>
       <template #footer>
         <el-button @click="drawerOpen = false">{{ t('common.cancel') }}</el-button>
-        <el-button type="primary" :loading="saving" :disabled="readOnly" @click="handleSave">
+        <el-button type="primary" :loading="saving" :disabled="readOnly || selectedRefNames.length === 0" @click="handleSave">
           {{ readOnly ? t('common.close') : (editingName ? t('common.save') : t('common.create')) }}
         </el-button>
       </template>
@@ -182,68 +169,46 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Close, InfoFilled, Loading, Plus, Search, Tools } from '@element-plus/icons-vue'
+import { useRouter } from 'vue-router'
+import { Close, Files, InfoFilled, Loading, Plus, Search, Tools } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getTransformSets, createTransformSet, updateTransformSet, deleteTransformSet,
-  getNamespaces
+  getTransforms
 } from '../api/velero'
 
 const { t } = useI18n()
+const router = useRouter()
 import { useAuth } from '../composables/useAuth'
 const auth = useAuth()
 
 const items = ref([])
-const namespaces = ref([])
+const availableTransforms = ref([])
 const loading = ref(false)
 const filter = ref('')
 const drawerOpen = ref(false)
 const editingName = ref('')
 const readOnly = ref(false)
 const form = ref(null)
+const selectedRefNames = ref([])
+// Defaults map is rendered as an array of {key, value} rows so the user
+// can add/remove without keying the map directly in templates. We flatten
+// back to an object on save.
+const defaultsList = ref([])
 const saving = ref(false)
 
 const filtered = computed(() => {
   const q = filter.value.trim().toLowerCase()
   if (!q) return items.value
-  return items.value.filter(t => (t.name + ' ' + (t.description || '')).toLowerCase().includes(q))
+  return items.value.filter(ts => (ts.name + ' ' + (ts.description || '')).toLowerCase().includes(q))
 })
 
 const editorTitle = computed(() => {
   if (readOnly.value) return t('transformSets.viewTitle', { name: editingName.value })
   if (editingName.value) return t('transformSets.editTitle', { name: editingName.value })
   return t('transformSets.createTitle')
-})
-
-const yamlPreview = computed(() => {
-  if (!form.value) return ''
-  // Render a Velero-style YAML preview so power users can copy/paste it
-  // outside SupKube if needed. We don't pull js-yaml in just for this;
-  // a hand-rolled mini-emitter is fine for the shape we control.
-  const lines = ['version: v1', 'resourceModifierRules:']
-  for (const rule of form.value.rules) {
-    lines.push('  - conditions:')
-    lines.push(`      groupResource: ${rule.conditions.groupResource || ''}`)
-    if (rule.conditions.namespaces?.length) {
-      lines.push('      namespaces:')
-      for (const n of rule.conditions.namespaces) lines.push(`        - ${n}`)
-    }
-    if (rule.conditions.resourceNameRegex) {
-      lines.push(`      resourceNameRegex: ${JSON.stringify(rule.conditions.resourceNameRegex)}`)
-    }
-    lines.push('    patches:')
-    for (const p of rule.patches) {
-      lines.push(`      - operation: ${p.operation}`)
-      lines.push(`        path: ${JSON.stringify(p.path)}`)
-      if (['add','replace','test'].includes(p.operation) && p.value !== undefined && p.value !== '') {
-        const v = typeof p.value === 'string' ? JSON.stringify(p.value) : JSON.stringify(p.value)
-        lines.push(`        value: ${v}`)
-      }
-    }
-  }
-  return lines.join('\n')
 })
 
 async function fetchItems() {
@@ -258,65 +223,78 @@ async function fetchItems() {
   }
 }
 
-async function fetchNamespaces() {
+async function fetchTransforms() {
   try {
-    const res = await getNamespaces()
-    namespaces.value = (res.data.items || []).map(ns => ns.metadata?.name || ns)
-  } catch {}
+    const res = await getTransforms()
+    availableTransforms.value = res.data.items || []
+  } catch (e) {
+    // Non-fatal — the picker just shows nothing. Users see why via the
+    // empty hint, and can hop to the Transforms page to investigate.
+    console.error('Failed to load Transforms catalog:', e)
+    availableTransforms.value = []
+  }
 }
 
 function openEditor(ts) {
   editingName.value = ts ? ts.name : ''
   readOnly.value = false
   form.value = ts ? deepClone(ts) : freshForm()
+  selectedRefNames.value = (form.value.transformRefs || []).map(r => r.name)
+  defaultsList.value = Object.entries(form.value.defaults || {}).map(([k, v]) => ({ key: k, value: v }))
   drawerOpen.value = true
+  // Refresh the Transforms catalog when opening so the picker reflects any
+  // additions made in another tab.
+  fetchTransforms()
 }
 
 function openViewer(ts) {
   editingName.value = ts.name
   readOnly.value = true
   form.value = deepClone(ts)
+  selectedRefNames.value = (form.value.transformRefs || []).map(r => r.name)
+  defaultsList.value = Object.entries(form.value.defaults || {}).map(([k, v]) => ({ key: k, value: v }))
   drawerOpen.value = true
+  fetchTransforms()
 }
 
 function freshForm() {
   return {
     name: '',
     description: '',
-    rules: [{
-      conditions: { groupResource: '', namespaces: [], resourceNameRegex: '' },
-      patches: [{ operation: 'remove', path: '', value: '' }]
-    }]
+    transformRefs: [],
+    defaults: {}
   }
 }
 
 function deepClone(o) { return JSON.parse(JSON.stringify(o)) }
 
-function addRule() {
-  form.value.rules.push({
-    conditions: { groupResource: '', namespaces: [], resourceNameRegex: '' },
-    patches: [{ operation: 'remove', path: '', value: '' }]
-  })
+function addDefault() {
+  defaultsList.value.push({ key: '', value: '' })
 }
-function removeRule(idx) { form.value.rules.splice(idx, 1) }
-function addPatch(rule) {
-  rule.patches.push({ operation: 'remove', path: '', value: '' })
+function removeDefault(idx) {
+  defaultsList.value.splice(idx, 1)
 }
-function removePatch(rule, idx) { rule.patches.splice(idx, 1) }
+
+function goManageTransforms() {
+  router.push('/transforms')
+}
 
 async function handleSave() {
   if (readOnly.value) { drawerOpen.value = false; return }
   saving.value = true
   try {
-    // Clean up empty fields so backend validation doesn't reject "".
-    const payload = deepClone(form.value)
-    for (const rule of payload.rules) {
-      if (!rule.conditions.namespaces?.length) delete rule.conditions.namespaces
-      if (!rule.conditions.resourceNameRegex) delete rule.conditions.resourceNameRegex
-      for (const p of rule.patches) {
-        if (!['add','replace','test'].includes(p.operation)) delete p.value
-        else if (p.value === '' || p.value === null) delete p.value
-      }
+    // Defaults: flatten back to {key: value}, skip blank rows.
+    const defaults = {}
+    for (const { key, value } of defaultsList.value) {
+      const k = (key || '').trim()
+      if (!k) continue
+      defaults[k] = value ?? ''
+    }
+    const payload = {
+      name: form.value.name,
+      description: form.value.description || '',
+      transformRefs: selectedRefNames.value.map(name => ({ name })),
+      defaults: Object.keys(defaults).length > 0 ? defaults : undefined
     }
     if (editingName.value) {
       await updateTransformSet(editingName.value, payload)
@@ -338,7 +316,13 @@ async function handleCommand(cmd, ts) {
   switch (cmd) {
     case 'view': openViewer(ts); break
     case 'edit': openEditor(ts); break
-    case 'clone': openEditor({ ...deepClone(ts), name: ts.name + '-copy', builtIn: false }); editingName.value = ''; break
+    case 'clone': {
+      const cloned = { ...deepClone(ts), name: ts.name + '-copy', builtIn: false }
+      openEditor(cloned)
+      editingName.value = ''
+      readOnly.value = false
+      break
+    }
     case 'delete': await confirmDelete(ts); break
   }
 }
@@ -360,9 +344,16 @@ async function confirmDelete(ts) {
   }
 }
 
+// Keep form.transformRefs in sync with the selected names so the YAML/cards
+// always reflect what the user picked.
+watch(selectedRefNames, (names) => {
+  if (!form.value) return
+  form.value.transformRefs = names.map(name => ({ name }))
+})
+
 onMounted(() => {
   fetchItems()
-  fetchNamespaces()
+  fetchTransforms()
 })
 </script>
 
@@ -414,20 +405,22 @@ onMounted(() => {
   font-size: 11px; color: var(--sk-text-caption); background: #f5f7fa;
   padding: 2px 8px; border-radius: 10px;
 }
-.ts-rules-preview {
-  font-size: 11.5px;
-  color: var(--sk-text-muted);
-  font-family: 'SF Mono', Menlo, Consolas, monospace;
+.ts-refs-preview {
+  display: flex; flex-wrap: wrap; gap: 6px;
   background: #fafbfc;
   border-radius: 4px;
   padding: 8px 10px;
-  line-height: 1.6;
+  min-height: 38px;
 }
-.rule-gr { font-weight: 600; color: var(--sk-text); }
-.rule-arrow { color: var(--sk-text-placeholder); margin: 0 6px; }
-.rule-op { color: var(--sk-primary); }
-.rule-op code { background: rgba(0,0,0,0.05); padding: 1px 3px; border-radius: 3px; font-size: 10.5px; }
-.rule-more { color: var(--sk-text-caption); font-style: italic; margin-top: 4px; }
+.ref-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: #fff; border: 1px solid var(--sk-border);
+  border-radius: 4px; padding: 2px 8px;
+  font-size: 11.5px; color: var(--sk-text);
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+}
+.ref-chip .el-icon { color: var(--sk-primary); font-size: 12px; }
+.rule-more { color: var(--sk-text-caption); font-style: italic; font-size: 11.5px; }
 
 .more-btn {
   background: none; border: 0;
@@ -445,54 +438,48 @@ onMounted(() => {
 .rot { animation: rot 1s linear infinite; }
 @keyframes rot { from { transform: rotate(0); } to { transform: rotate(360deg); } }
 
-/* Editor */
 .editor-body { padding: 0 4px; }
-.rules-section { margin-top: 12px; }
-.rules-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-.rules-title { font-size: 14px; font-weight: 600; }
-.rule-editor {
-  border: 1px solid var(--sk-border); border-radius: 6px;
-  padding: 12px 14px; margin-bottom: 12px;
-  background: #fafbfc;
+.label-row {
+  display: inline-flex; align-items: center; gap: 10px; width: 100%;
 }
-.rule-editor-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-.rule-num { font-size: 12px; color: var(--sk-text-caption); font-weight: 600; }
-.patches-section { margin-top: 8px; }
-.patches-head {
-  display: flex; justify-content: space-between; align-items: center;
-  font-size: 12px; color: var(--sk-text-muted); font-weight: 500;
-  margin-bottom: 6px;
+.manage-link {
+  margin-left: auto; font-size: 12px; color: var(--sk-primary);
+  text-decoration: none;
 }
-.patch-row {
+.manage-link:hover { text-decoration: underline; }
+.refs-select { width: 100%; }
+.ref-option {
+  display: inline-flex; align-items: center; gap: 8px; width: 100%;
+}
+.ref-builtin {
+  font-size: 10px; padding: 1px 5px; border-radius: 3px;
+  background: #ecf5ff; color: var(--sk-primary);
+}
+.ref-desc {
+  margin-left: auto; color: var(--sk-text-caption); font-size: 11.5px;
+  max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.refs-empty-hint {
+  margin-top: 6px; font-size: 12px; color: var(--sk-status-warning);
+}
+
+.defaults-section { margin-top: 16px; }
+.defaults-head { display: flex; justify-content: space-between; align-items: center; }
+.defaults-title { font-size: 14px; font-weight: 600; }
+.defaults-hint { font-size: 12px; color: var(--sk-text-muted); margin: 4px 0 10px; line-height: 1.5; }
+.default-row {
   display: grid;
-  grid-template-columns: 110px 1fr 1fr 32px;
+  grid-template-columns: 200px 1fr 32px;
   gap: 6px;
   margin-bottom: 6px;
 }
-.yaml-preview {
-  margin-top: 16px; padding-top: 12px;
-  border-top: 1px dashed #ebeef5;
-}
-.yaml-preview summary {
-  font-size: 12px; color: var(--sk-primary); cursor: pointer; user-select: none;
-}
-.yaml-preview pre {
-  margin: 10px 0 0 0;
-  background: #1d1e26; color: #e5eaf3;
-  padding: 12px 14px; border-radius: 6px;
-  font-size: 11.5px; line-height: 1.55;
-  font-family: 'SF Mono', Menlo, Consolas, monospace;
-  white-space: pre; overflow-x: auto; max-height: 360px;
-}
 
-/* Dark mode */
 :global(html.dark) .ts-card { background: #1f2026; border-color: #2c2f36; }
 :global(html.dark) .ts-name { color: #e5eaf3; }
 :global(html.dark) .ts-desc { color: #b1b3b8; }
-:global(html.dark) .ts-rules-preview { background: #16171b; color: #b1b3b8; }
-:global(html.dark) .rule-gr { color: #e5eaf3; }
+:global(html.dark) .ts-refs-preview { background: #16171b; }
+:global(html.dark) .ref-chip { background: #2c2f36; border-color: #3a3d44; color: #cfd3dc; }
 :global(html.dark) .meta-chip { background: #2c2f36; color: #b1b3b8; }
-:global(html.dark) .rule-editor { background: #1a1b21; border-color: #2c2f36; }
 :global(html.dark) .loading, :global(html.dark) .empty {
   background: #1f2026; border-color: #3a3d44; color: var(--sk-text-caption);
 }

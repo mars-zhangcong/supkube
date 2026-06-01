@@ -1,0 +1,62 @@
+apiVersion: velero.io/v1
+kind: Backup
+metadata:
+  annotations:
+    supkube.io/data-path: data-mover
+    supkube.io/dual-rp-paired: may28th-demo-20260531000054
+    supkube.io/export-enabled: "true"
+    supkube.io/export-retention: 720h0m0s
+    supkube.io/export-schedule: 0 0 * * *
+    supkube.io/policy-run-instant: "2026-05-31T00:00:54Z"
+    supkube.io/snapshot-retention: 24h
+    supkube.io/snapshot-schedule: 0 0 * * *
+    supkube.io/triggered-by: dual-pair-controller
+    supkube.io/volume-mode: csi
+    velero.io/csi-volumesnapshot-content-retain-policy: retain
+    velero.io/resource-timeout: 10m0s
+    velero.io/source-cluster-k8s-gitversion: v1.32.2
+    velero.io/source-cluster-k8s-major-version: "1"
+    velero.io/source-cluster-k8s-minor-version: "32"
+  creationTimestamp: "2026-05-31T00:01:21Z"
+  generation: 12
+  labels:
+    supkube.io/policy-name: may28th-demo
+    supkube.io/policy-role: export
+    velero.io/schedule-name: may28th-demo-export
+    velero.io/storage-location: default
+  name: may28th-demo-export-20260531000054
+  namespace: velero
+  resourceVersion: "2896960"
+  uid: 1fcf0b58-ccd0-4086-b72f-1cb0e9486ba1
+spec:
+  csiSnapshotTimeout: 10m0s
+  defaultVolumesToFsBackup: false
+  excludedClusterScopedResources:
+  - volumesnapshotcontents.snapshot.storage.k8s.io
+  excludedNamespaceScopedResources:
+  - volumesnapshots.snapshot.storage.k8s.io
+  hooks: {}
+  includedNamespaces:
+  - test-app
+  itemOperationTimeout: 4h0m0s
+  metadata: {}
+  snapshotMoveData: true
+  snapshotVolumes: true
+  storageLocation: default
+  ttl: 720h0m0s
+  volumeGroupSnapshotLabelKey: velero.io/volume-group
+  volumeSnapshotLocations:
+  - csi-default
+status:
+  backupItemOperationsAttempted: 2
+  backupItemOperationsCompleted: 2
+  completionTimestamp: "2026-05-31T00:02:22Z"
+  expiration: "2026-06-30T00:01:28Z"
+  formatVersion: 1.1.0
+  hookStatus: {}
+  phase: Completed
+  progress:
+    itemsBackedUp: 38
+    totalItems: 38
+  startTimestamp: "2026-05-31T00:01:28Z"
+  version: 1

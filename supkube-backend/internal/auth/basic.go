@@ -14,10 +14,10 @@
 // through the SAME RBAC bindings table the OIDC path uses — bindings can
 // match by user email OR by username, so an entry like:
 //
-//     bindings:
-//       - user: alice
-//         role: editor
-//         namespaces: [shop-prod]
+//	bindings:
+//	  - user: alice
+//	    role: editor
+//	    namespaces: [shop-prod]
 //
 // works for both `alice@corp.com` arriving via OIDC and `alice` arriving
 // via Basic Auth.
@@ -26,8 +26,8 @@
 // ───────────
 // Standard htpasswd format, one entry per line:
 //
-//     alice:$2y$10$bcrypt-hash...
-//     bob:$2y$10$bcrypt-hash...
+//	alice:$2y$10$bcrypt-hash...
+//	bob:$2y$10$bcrypt-hash...
 //
 // Bcrypt only — we deliberately do NOT support MD5 (Apache md5crypt) or
 // SHA-1, those have been broken or near-broken for years and a SupKube

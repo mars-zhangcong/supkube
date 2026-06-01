@@ -1,0 +1,43 @@
+apiVersion: velero.io/v2alpha1
+kind: DataUpload
+metadata:
+  creationTimestamp: "2026-05-28T08:16:37Z"
+  generateName: may28th-demo-2nd-try-export-20260528081605-
+  generation: 5
+  labels:
+    velero.io/async-operation-id: du-e85ade44-2981-4078-a9ce-216869ab8f0f.11804e93-a889-4eea3ac58
+    velero.io/backup-name: may28th-demo-2nd-try-export-20260528081605
+    velero.io/backup-uid: e85ade44-2981-4078-a9ce-216869ab8f0f
+    velero.io/pvc-uid: 11804e93-a889-4eeb-908a-5828e7f2c327
+  name: may28th-demo-2nd-try-export-20260528081605-97z4l
+  namespace: velero
+  ownerReferences:
+  - apiVersion: velero.io/v1
+    controller: true
+    kind: Backup
+    name: may28th-demo-2nd-try-export-20260528081605
+    uid: e85ade44-2981-4078-a9ce-216869ab8f0f
+  resourceVersion: "2564861"
+  uid: 99b0f802-b1ff-4063-8a18-b7c647a037f3
+spec:
+  backupStorageLocation: myazureblob
+  csiSnapshot:
+    driver: hostpath.csi.k8s.io
+    snapshotClass: csi-hostpath-snapclass
+    storageClass: csi-hostpath-sc
+    volumeSnapshot: velero-csi-test-pvc-nm8vz
+  operationTimeout: 10m0s
+  snapshotType: CSI
+  sourceNamespace: test-app
+  sourcePVC: csi-test-pvc
+status:
+  acceptedByNode: docker-desktop
+  acceptedTimestamp: "2026-05-28T08:16:37Z"
+  completionTimestamp: "2026-05-28T08:17:01Z"
+  node: docker-desktop
+  nodeOS: linux
+  path: /99b0f802-b1ff-4063-8a18-b7c647a037f3
+  phase: Completed
+  progress: {}
+  snapshotID: 7bd3a01c47bd2f61d9407f207382a0aa
+  startTimestamp: "2026-05-28T08:16:51Z"

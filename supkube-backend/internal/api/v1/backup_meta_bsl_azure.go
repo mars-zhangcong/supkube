@@ -2,18 +2,18 @@
 //
 // Sister to backup_meta_bsl.go's AWS-flavored path. Same shape:
 //
-//   hydrateBSLSizesAzure(ctx, cl, bsl) → tarballSizes
+//	hydrateBSLSizesAzure(ctx, cl, bsl) → tarballSizes
 //
 // What's different from the S3 path
 // ─────────────────────────────────
-//   1. Auth: Azure plugin's credential Secret stores key=value pairs
-//      (not an AWS INI file). We parse those + use shared-key auth.
-//   2. SDK: github.com/Azure/azure-sdk-for-go/sdk/storage/azblob — its
-//      List walker has a totally different shape than S3's paginator,
-//      so we can't reuse the S3 loop.
-//   3. Endpoint: Azure containers live under
-//      https://<storageAccount>.blob.core.windows.net/<container>/...
-//      — no region, no path-style toggle.
+//  1. Auth: Azure plugin's credential Secret stores key=value pairs
+//     (not an AWS INI file). We parse those + use shared-key auth.
+//  2. SDK: github.com/Azure/azure-sdk-for-go/sdk/storage/azblob — its
+//     List walker has a totally different shape than S3's paginator,
+//     so we can't reuse the S3 loop.
+//  3. Endpoint: Azure containers live under
+//     https://<storageAccount>.blob.core.windows.net/<container>/...
+//     — no region, no path-style toggle.
 //
 // What stays the same: the cache (per-BSL 60s TTL via tarballSizes),
 // the error-message trimming for UI tooltips, and the prefix scan over

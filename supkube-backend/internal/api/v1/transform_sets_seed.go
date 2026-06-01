@@ -1,182 +1,353 @@
 // Package v1: transform_sets_seed.go
 //
-// Built-in Transform Set seeding (v0.8.2)
-// ────────────────────────────────────────
-// On startup the backend ensures these standard Transform Sets exist in
-// the velero namespace. Each one is idempotent (label `supkube.io/builtin=true`
-// is checked before applying; we never overwrite a user-modified version).
+// Built-in Transform/TransformSet seeding + startup migrations
+// ────────────────────────────────────────────────────────────
 //
-// These 4 templates cover ~80% of the cross-ns / cross-cluster restore
-// conflicts the Pre-flight Check (v0.7.12) reports:
+// PRD-002 v1.3 two-layer model rollout:
 //
-//   strip-nodeport             — fixes NodePortCollision
-//   strip-clusterip            — fixes ClusterIPCollision
-//   strip-pv-binding           — fixes PVBinding (warning, but recommended)
-//   strip-loadbalancer-ip      — fixes LoadBalancerIPCollision
+//  1. Seed atomic Transforms (strip-clusterip / strip-loadbalancer-ip /
+//     strip-pv-binding / strip-nodeport) in `supkube` ns with
+//     label supkube.io/kind=transform, data.rules.yaml.
 //
-// The seeder runs in a goroutine so a temporary K8s API hiccup doesn't
-// block server startup; if it fails we just log and let the next
-// process-restart try again.
+//  2. Seed a default "common-cluster-relocation" TransformSet (also in
+//     supkube ns, label supkube.io/kind=transform-set, data.transform-set.yaml)
+//     that references all four built-ins, so the user has a working
+//     pack out of the box.
+//
+//  3. Migrate any v0.8.x single-layer ConfigMaps still living in
+//     `velero` ns (label supkube.io/kind=transform OR transform-set,
+//     data.rules.yaml directly) into the new two-layer shape:
+//     - atomic Transform `<orig>-rules` in supkube ns (rules copied verbatim)
+//     - wrapper TransformSet `<orig>`  in supkube ns (transformRefs=[<orig>-rules])
+//     The legacy velero-ns CM is ANNOTATED (not deleted) with
+//     supkube.io/migrated-to=<orig> so admins keep a forensic trail
+//     and a fallback if rollback is needed.
+//
+// The migration is best-effort: per-CM failures get annotated with
+// supkube.io/migration-error=<msg> and logged, but do NOT block startup
+// or other migrations. SupKube continues to serve traffic regardless.
 package v1
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	sigyaml "sigs.k8s.io/yaml"
 
-	"github.com/supkube/supkube-backend/internal/k8s"
+	"github.com/supkube/supkube-backend/internal/transform"
 )
 
 // SeedBuiltinTransformSets is called from server startup. Non-blocking.
-// Also runs the v0.8.2 → v0.8.3 migration that purges any TransformSet
-// ConfigMap with the broken multi-key Data layout (description+rules.yaml
-// +rules.json in Data violates Velero's len(Data)==1 requirement).
+// Runs the legacy-schema migration first, then seeds built-ins
+// (Transforms + a default TransformSet).
 func SeedBuiltinTransformSets() {
 	go func() {
 		// Brief delay so the K8s API client is unlikely to race with
 		// SupKube's own pod startup.
 		time.Sleep(3 * time.Second)
 		migrateBrokenTransformSets()
-		if err := seedBuiltinTransformSetsOnce(); err != nil {
+		if err := seedBuiltinsOnce(); err != nil {
 			log.Printf("[transform-sets] seed failed: %v (will retry on next process restart)", err)
 		} else {
-			log.Printf("[transform-sets] built-in templates ensured")
+			log.Printf("[transform-sets] built-in Transforms + TransformSet ensured")
 		}
 	}()
 }
 
-// migrateBrokenTransformSets deletes every ConfigMap labeled as a SupKube
-// Transform Set whose Data field has >1 key. v0.8.2 stored description +
-// rules.yaml + rules.json all in Data, which Velero rejects at restore
-// validation as "illegal resource modifiers".
+// migrateBrokenTransformSets runs THREE distinct migrations:
 //
-// We delete instead of patch because:
-//   - Built-ins will be re-seeded immediately after this runs
-//   - Auto-generated (preflight-fix-*) ones are short-lived and tied to
-//     a specific Restore session; the user re-clicks Apply Fix and we
-//     regenerate them with the v0.8.3 layout
-//   - User-curated TransformSets in v0.8.2 are at most a handful (this
-//     was a fresh feature); easier to ask the 1-2 alpha users to recreate
-//     than to write a complex in-place migration
+//  1. v0.8.2 → v0.8.3: delete velero-ns ConfigMaps with len(Data)>1
+//     (multi-key Data is rejected by Velero's parser).
+//
+//  2. v0.8.x → PRD-002 v1.2 schema rename inside velero ns: the legacy
+//     value "transform-set" → "transform" for label supkube.io/kind.
+//     This step is now LEGACY-ONLY because the new model has both
+//     "transform" AND "transform-set" living in supkube ns — but old
+//     clusters may still have CMs in velero ns with either label.
+//
+//  3. v0.8.x → PRD-002 v1.3 two-layer split: for every velero-ns CM
+//     with our kind label (either value), CREATE the matching atomic
+//     Transform + wrapper TransformSet pair in supkube ns and ANNOTATE
+//     the source as migrated-to. Idempotent: a second run sees the
+//     annotation and skips.
+//
+// Phase-0 (Agent J) renamed the kind label in place inside velero ns.
+// This expansion does cross-namespace split; the in-place rename remains
+// for the brief window between server start and full split completion.
 func migrateBrokenTransformSets() {
-	cl, err := k8s.GetClient()
+	cl, err := transformClientFactory()
 	if err != nil {
 		log.Printf("[transform-sets] migration: cannot reach K8s API: %v", err)
 		return
 	}
-	selector := transformSetLabelKind + "=" + transformSetKindValue
-	cms, err := cl.CoreV1().ConfigMaps(transformSetNamespace).List(context.Background(), metav1.ListOptions{LabelSelector: selector})
-	if err != nil {
-		log.Printf("[transform-sets] migration list failed: %v", err)
-		return
-	}
-	deleted := 0
-	for i := range cms.Items {
-		cm := &cms.Items[i]
-		if len(cm.Data) <= 1 {
-			continue // already v0.8.3-compatible
-		}
-		if err := cl.CoreV1().ConfigMaps(transformSetNamespace).Delete(context.Background(), cm.Name, metav1.DeleteOptions{}); err != nil {
-			log.Printf("[transform-sets] migration: failed to delete broken CM %q: %v", cm.Name, err)
+	ctx := context.Background()
+
+	// ── Migration (1): delete v0.8.2 multi-key broken CMs in velero ns ──
+	// Cheap, no cross-ns work; do it first so subsequent migrations
+	// don't try to copy garbage.
+	for _, kindVal := range []string{"transform", "transform-set"} {
+		selector := transformSetLabelKind + "=" + kindVal
+		cms, err := cl.CoreV1().ConfigMaps(transformSetLegacyNamespace).List(ctx, metav1.ListOptions{LabelSelector: selector})
+		if err != nil {
+			log.Printf("[transform-sets] migration list (velero ns, %s): %v", kindVal, err)
 			continue
 		}
-		deleted++
-		log.Printf("[transform-sets] migration: deleted broken v0.8.2 CM %q (had %d data keys)", cm.Name, len(cm.Data))
+		for i := range cms.Items {
+			cm := &cms.Items[i]
+			if len(cm.Data) <= 1 {
+				continue
+			}
+			if err := cl.CoreV1().ConfigMaps(transformSetLegacyNamespace).Delete(ctx, cm.Name, metav1.DeleteOptions{}); err != nil {
+				log.Printf("[transform-sets] migration: failed to delete broken v0.8.2 CM %q: %v", cm.Name, err)
+				continue
+			}
+			log.Printf("[transform-sets] migration: deleted broken v0.8.2 CM %q (had %d data keys)", cm.Name, len(cm.Data))
+		}
 	}
-	if deleted > 0 {
-		log.Printf("[transform-sets] migration: cleaned %d broken Transform Set(s) from v0.8.2", deleted)
+
+	// ── Migration (3): cross-ns split (velero single-layer → supkube two-layer) ──
+	// We accept BOTH legacy label values because pre-Phase-0 clusters
+	// had "transform-set", post-Phase-0 (Agent J) clusters have
+	// "transform". Either way it's a single-layer rules CM in velero ns.
+	for _, kindVal := range []string{"transform", "transform-set"} {
+		selector := transformSetLabelKind + "=" + kindVal
+		cms, err := cl.CoreV1().ConfigMaps(transformSetLegacyNamespace).List(ctx, metav1.ListOptions{LabelSelector: selector})
+		if err != nil {
+			log.Printf("[transform-sets] migration: list legacy %s in velero ns: %v", kindVal, err)
+			continue
+		}
+		split := 0
+		for i := range cms.Items {
+			cm := &cms.Items[i]
+			// Idempotency guard.
+			if cm.Annotations[annotMigratedTo] != "" {
+				continue
+			}
+			if err := splitLegacyToTwoLayer(ctx, cl, cm); err != nil {
+				log.Printf("[transform-sets] migration: split %q failed: %v", cm.Name, err)
+				annotateMigrationError(ctx, cl, cm, err)
+				continue
+			}
+			split++
+			log.Printf("[transform-sets] migration: split %q into supkube/%s-rules + supkube/%s", cm.Name, cm.Name, cm.Name)
+		}
+		if split > 0 {
+			log.Printf("[transform-sets] migration: split %d legacy %s CM(s) into two-layer schema", split, kindVal)
+		}
 	}
 }
 
-func seedBuiltinTransformSetsOnce() error {
-	cl, err := k8s.GetClient()
-	if err != nil {
-		return err
+// splitLegacyToTwoLayer takes a single-layer ConfigMap (velero ns,
+// data.rules.yaml directly) and creates the matching two-layer pair
+// in supkube ns:
+//   - Transform     `<orig>-rules`   (kind=transform, data.rules.yaml=<orig rules>)
+//   - TransformSet  `<orig>`         (kind=transform-set, transformRefs=[<orig>-rules])
+//
+// On success the source CM is annotated supkube.io/migrated-to=<orig> so
+// subsequent migration runs (e.g. crash-restart) see the marker and skip.
+// The source is NOT deleted — admins can `kubectl get cm -n velero` and
+// see the original layout for rollback / debugging.
+//
+// If either of the new CMs already exists in supkube ns (e.g. partial
+// previous migration), we proceed idempotently: the existing one stays
+// and we annotate the source. We do NOT overwrite supkube-ns content
+// because the user may have edited it post-migration.
+func splitLegacyToTwoLayer(ctx context.Context, cl kubernetes.Interface, src *corev1.ConfigMap) error {
+	// Pick the rules.yaml body — prefer the canonical key, fall back to
+	// the very old "spec" key just in case (defensive).
+	rulesYAML, ok := src.Data[transformRulesKey]
+	if !ok || rulesYAML == "" {
+		rulesYAML, ok = src.Data["spec"]
 	}
-	for _, ts := range builtinTransformSets() {
-		cm, err := transformSetToConfigMap(&ts, true)
-		if err != nil {
-			log.Printf("[transform-sets] serialize %q: %v", ts.Name, err)
-			continue
+	if !ok || rulesYAML == "" {
+		return fmt.Errorf("source CM has no rules.yaml (data keys: %d)", len(src.Data))
+	}
+
+	atomicName := src.Name + "-rules"
+	wrapperName := src.Name
+
+	// Create atomic Transform if absent.
+	atomicCM := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      atomicName,
+			Namespace: transformSetNamespace,
+			Labels: map[string]string{
+				transformSetLabelKind:   transformKindValue,
+				"supkube.io/managed-by": "supkube",
+			},
+			Annotations: map[string]string{
+				tsDescriptionAnnotation: src.Annotations[tsDescriptionAnnotation],
+				annotMigratedFrom:       transformSetLegacyNamespace + "/" + src.Name,
+			},
+		},
+		Data: map[string]string{
+			transformRulesKey: rulesYAML,
+		},
+	}
+	if _, err := cl.CoreV1().ConfigMaps(transformSetNamespace).Create(ctx, atomicCM, metav1.CreateOptions{}); err != nil {
+		if !apierrors.IsAlreadyExists(err) {
+			return fmt.Errorf("create atomic Transform %q: %w", atomicName, err)
 		}
-		_, err = cl.CoreV1().ConfigMaps(transformSetNamespace).Create(context.Background(), cm, metav1.CreateOptions{})
-		if err == nil {
-			log.Printf("[transform-sets] seeded built-in %q", ts.Name)
-			continue
+		// Already exists — fine, idempotent.
+	}
+
+	// Create wrapper TransformSet if absent.
+	spec := transform.TransformSetSpec{
+		TransformRefs: []string{atomicName},
+		Description:   src.Annotations[tsDescriptionAnnotation],
+	}
+	specYAML, err := sigyaml.Marshal(spec)
+	if err != nil {
+		return fmt.Errorf("serialize TransformSet spec for %q: %w", wrapperName, err)
+	}
+	wrapperCM := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      wrapperName,
+			Namespace: transformSetNamespace,
+			Labels: map[string]string{
+				transformSetLabelKind:   transformSetKindValue,
+				"supkube.io/managed-by": "supkube",
+			},
+			Annotations: map[string]string{
+				tsDescriptionAnnotation: src.Annotations[tsDescriptionAnnotation],
+				annotMigratedFrom:       transformSetLegacyNamespace + "/" + src.Name,
+			},
+		},
+		Data: map[string]string{
+			transformSetSpecKey: string(specYAML),
+		},
+	}
+	if _, err := cl.CoreV1().ConfigMaps(transformSetNamespace).Create(ctx, wrapperCM, metav1.CreateOptions{}); err != nil {
+		if !apierrors.IsAlreadyExists(err) {
+			return fmt.Errorf("create wrapper TransformSet %q: %w", wrapperName, err)
 		}
-		if apierrors.IsAlreadyExists(err) {
-			// v0.8.4: Built-ins use mergePatches now. v0.8.3 seeded them
-			// with JSON Patch `remove` which Velero rejects at restore
-			// time on already-stripped fields. We can't "see" the schema
-			// from outside easily — but built-ins are tagged with
-			// supkube.io/builtin=true and we OWN them, so we
-			// unconditionally overwrite. User customizations are blocked
-			// by UpdateTransformSet anyway.
-			existing, gerr := cl.CoreV1().ConfigMaps(transformSetNamespace).Get(context.Background(), ts.Name, metav1.GetOptions{})
-			if gerr != nil {
-				log.Printf("[transform-sets] re-seed %q: get failed: %v", ts.Name, gerr)
-				continue
-			}
-			cm.ResourceVersion = existing.ResourceVersion
-			if _, uerr := cl.CoreV1().ConfigMaps(transformSetNamespace).Update(context.Background(), cm, metav1.UpdateOptions{}); uerr != nil {
-				log.Printf("[transform-sets] re-seed %q: update failed: %v", ts.Name, uerr)
-				continue
-			}
-			log.Printf("[transform-sets] refreshed built-in %q to v0.8.4 schema", ts.Name)
-			continue
-		}
-		log.Printf("[transform-sets] failed to seed %q: %v", ts.Name, err)
+	}
+
+	// Annotate the source. Use a freshly fetched copy to avoid stale
+	// resourceVersion conflicts when this migration runs alongside the
+	// in-place rename (Migration step 2).
+	fresh, err := cl.CoreV1().ConfigMaps(transformSetLegacyNamespace).Get(ctx, src.Name, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("re-fetch source %q for annotation: %w", src.Name, err)
+	}
+	if fresh.Annotations == nil {
+		fresh.Annotations = map[string]string{}
+	}
+	fresh.Annotations[annotMigratedTo] = transformSetNamespace + "/" + wrapperName
+	delete(fresh.Annotations, annotMigrationErr) // clear any prior error
+	if _, err := cl.CoreV1().ConfigMaps(transformSetLegacyNamespace).Update(ctx, fresh, metav1.UpdateOptions{}); err != nil {
+		// Non-fatal: the split itself succeeded. Worst case is we
+		// re-do the (now-idempotent) split on next startup.
+		log.Printf("[transform-sets] migration: annotate source %q (non-fatal): %v", src.Name, err)
 	}
 	return nil
 }
 
-// builtinTransformSets returns the canonical defaults.
+// annotateMigrationError records a per-CM failure so admins can spot it
+// via `kubectl get cm -n velero -o yaml`. Non-fatal: if annotation itself
+// fails we just log.
+func annotateMigrationError(ctx context.Context, cl kubernetes.Interface, src *corev1.ConfigMap, migrationErr error) {
+	fresh, err := cl.CoreV1().ConfigMaps(transformSetLegacyNamespace).Get(ctx, src.Name, metav1.GetOptions{})
+	if err != nil {
+		log.Printf("[transform-sets] migration: cannot re-fetch %q to annotate error: %v", src.Name, err)
+		return
+	}
+	if fresh.Annotations == nil {
+		fresh.Annotations = map[string]string{}
+	}
+	fresh.Annotations[annotMigrationErr] = migrationErr.Error()
+	if _, err := cl.CoreV1().ConfigMaps(transformSetLegacyNamespace).Update(ctx, fresh, metav1.UpdateOptions{}); err != nil {
+		log.Printf("[transform-sets] migration: annotate error on %q: %v", src.Name, err)
+	}
+}
+
+// ─── Seeding ────────────────────────────────────────────────────────────
+
+// seedBuiltinsOnce ensures every built-in atomic Transform exists, then
+// ensures the default "common-cluster-relocation" TransformSet exists
+// referencing them.
 //
-// v0.8.4 — Why MergePatches instead of JSON Patches:
-//
-// Velero strips many fields at backup time (volumeName, sometimes
-// clusterIP/loadBalancerIP). JSON Patch's `remove` operation is strict
-// — RFC 6902 mandates that removing a non-existent path is an error.
-// That bit us in v0.8.3: every Restore using these templates reported
-// noisy "remove for path X: unable to remove nonexistent key" errors
-// even though the actual restore succeeded.
-//
-// JSON Merge Patch (RFC 7396) sets a field to null to remove it, and
-// silently no-ops if the field is already absent. Exactly what we need.
-//
-// For strip-nodeport: array elements can't be cleanly null'd by merge
-// patch (which replaces whole arrays). We use a STRATEGIC merge patch
-// with $patch:replace semantics targeted at all ports — K8s applies it
-// element-by-element via the `port` merge key. The downside is it
-// requires the live Service to have at least one port (which is always
-// true for a NodePort/LoadBalancer Service).
-func builtinTransformSets() []TransformSet {
-	return []TransformSet{
-		{
-			Name:        "strip-nodeport",
-			Description: "Removes nodePort from every Service port so K8s reassigns free ports at restore. Strategic merge patch — handles arrays cleanly. Fixes NodePortCollision Pre-flight conflicts.",
-			Rules: []TSRule{
-				{
-					Conditions: TSCondition{GroupResource: "services"},
-					// Strategic merge: K8s merges Service ports by the
-					// `port` key. Without a port value we can't target
-					// one specifically; this generic template falls back
-					// to "first port" by relying on the fact that most
-					// Services have one port. Auto-fix uses precise
-					// strategic patches with the actual port value.
-					Patches: []TSPatch{
-						{Operation: "remove", Path: "/spec/ports/0/nodePort"},
-					},
-				},
-			},
+// Built-ins are always overwritten (they carry supkube.io/builtin=true,
+// users can't modify them via the API — UpdateTransform refuses). This
+// lets schema/content changes ship automatically on upgrade.
+func seedBuiltinsOnce() error {
+	cl, err := transformClientFactory()
+	if err != nil {
+		return err
+	}
+	ctx := context.Background()
+
+	// 1) Atomic Transforms.
+	for _, tr := range builtinTransforms() {
+		cm, err := transformToConfigMap(&tr, true)
+		if err != nil {
+			log.Printf("[transform-sets] serialize Transform %q: %v", tr.Name, err)
+			continue
+		}
+		if err := upsertConfigMap(ctx, cl, cm); err != nil {
+			log.Printf("[transform-sets] seed Transform %q: %v", tr.Name, err)
+		}
+	}
+
+	// 2) Default TransformSet packaging the built-ins.
+	defaultTS := TransformSet{
+		Name:        "common-cluster-relocation",
+		Description: "Default pack for cross-cluster restores: strips clusterIP, nodePort, loadBalancerIP, and PV bindings so resources rebind cleanly.",
+		TransformRefs: []TransformSetRef{
+			{Name: "strip-clusterip"},
+			{Name: "strip-loadbalancer-ip"},
+			{Name: "strip-pv-binding"},
+			{Name: "strip-nodeport"},
 		},
+	}
+	cm, err := transformSetToConfigMap(&defaultTS, true)
+	if err != nil {
+		log.Printf("[transform-sets] serialize default TransformSet: %v", err)
+		return nil // already logged
+	}
+	if err := upsertConfigMap(ctx, cl, cm); err != nil {
+		log.Printf("[transform-sets] seed default TransformSet: %v", err)
+	}
+	return nil
+}
+
+// upsertConfigMap creates the CM if absent, updates it (preserving RV)
+// if already present.
+func upsertConfigMap(ctx context.Context, cl kubernetes.Interface, cm *corev1.ConfigMap) error {
+	if _, err := cl.CoreV1().ConfigMaps(cm.Namespace).Create(ctx, cm, metav1.CreateOptions{}); err == nil {
+		log.Printf("[transform-sets] seeded built-in %s/%s", cm.Namespace, cm.Name)
+		return nil
+	} else if !apierrors.IsAlreadyExists(err) {
+		return err
+	}
+	existing, gerr := cl.CoreV1().ConfigMaps(cm.Namespace).Get(ctx, cm.Name, metav1.GetOptions{})
+	if gerr != nil {
+		return fmt.Errorf("get for update: %w", gerr)
+	}
+	cm.ResourceVersion = existing.ResourceVersion
+	if _, uerr := cl.CoreV1().ConfigMaps(cm.Namespace).Update(ctx, cm, metav1.UpdateOptions{}); uerr != nil {
+		return fmt.Errorf("update: %w", uerr)
+	}
+	log.Printf("[transform-sets] refreshed built-in %s/%s", cm.Namespace, cm.Name)
+	return nil
+}
+
+// builtinTransforms returns the canonical atomic Transforms.
+//
+// v0.8.4 lesson: prefer MergePatch (RFC 7396) over JSON Patch `remove`
+// — Velero strips many fields at backup time, and JSON Patch errors on
+// removing a non-existent path while Merge Patch silently no-ops.
+func builtinTransforms() []Transform {
+	return []Transform{
 		{
 			Name:        "strip-clusterip",
-			Description: "Removes .spec.clusterIP and .spec.clusterIPs so the restored Service gets a fresh IP. Uses JSON Merge Patch — silently no-ops if Velero already stripped the field at backup time.",
+			Description: "Removes .spec.clusterIP and .spec.clusterIPs so the restored Service gets a fresh IP. Merge patch — no-ops if Velero already stripped the field.",
 			Rules: []TSRule{
 				{
 					Conditions: TSCondition{GroupResource: "services"},
@@ -188,7 +359,7 @@ func builtinTransformSets() []TransformSet {
 		},
 		{
 			Name:        "strip-loadbalancer-ip",
-			Description: "Removes .spec.loadBalancerIP so the cloud LB controller assigns a new one. Merge patch — safe to apply even if field is already absent.",
+			Description: "Removes .spec.loadBalancerIP so the cloud LB controller assigns a new one.",
 			Rules: []TSRule{
 				{
 					Conditions: TSCondition{GroupResource: "services"},
@@ -200,7 +371,7 @@ func builtinTransformSets() []TransformSet {
 		},
 		{
 			Name:        "strip-pv-binding",
-			Description: "Removes .spec.volumeName on every PVC so it dynamically binds to a fresh PV at restore. Merge patch — Velero strips volumeName at backup time so JSON Patch remove would error.",
+			Description: "Removes .spec.volumeName on every PVC so it dynamically binds to a fresh PV at restore.",
 			Rules: []TSRule{
 				{
 					Conditions: TSCondition{GroupResource: "persistentvolumeclaims"},
@@ -210,47 +381,17 @@ func builtinTransformSets() []TransformSet {
 				},
 			},
 		},
+		{
+			Name:        "strip-nodeport",
+			Description: "Removes nodePort from the first Service port so K8s reassigns a free port. (Generic template; auto-fix uses precise per-port strategic patches.)",
+			Rules: []TSRule{
+				{
+					Conditions: TSCondition{GroupResource: "services"},
+					Patches: []TSPatch{
+						{Operation: "remove", Path: "/spec/ports/0/nodePort"},
+					},
+				},
+			},
+		},
 	}
-}
-
-// EnsureTransformSetForConflict creates a one-off Transform Set tailored to
-// a single Pre-flight conflict. Returns the ConfigMap name the UI should
-// reference via Restore.spec.resourceModifierRef.
-//
-// Naming convention: `apply-<conflict-kind-lower>-<short-random>`. The
-// caller (the Pre-flight "Apply Suggested Fix" handler) is responsible for
-// deleting the ConfigMap if it later decides not to use it.
-//
-// Why we create ConfigMaps on-the-fly here instead of asking the user to
-// pick one of the built-ins:
-//   - The suggestedTransform from Pre-flight has the EXACT path (e.g.
-//     `/spec/ports/2/nodePort`) — strip-nodeport built-in only handles
-//     index 0. Ad-hoc CMs are tailored to the specific resource.
-//   - It's a clean "one-shot" semantic that users can review, run, then
-//     discard. v0.9 can add an "ad-hoc Transform Set cleanup" job that
-//     GCs anything older than a finished Restore.
-func EnsureTransformSetForConflict(ctx context.Context, ts *TransformSet) (*corev1.ConfigMap, error) {
-	if err := validateTransformSetRules(ts.Rules); err != nil {
-		return nil, err
-	}
-	cm, err := transformSetToConfigMap(ts, false)
-	if err != nil {
-		return nil, err
-	}
-	// Tag as "auto" so a future GC job can distinguish ad-hoc from
-	// user-curated entries.
-	if cm.Labels == nil {
-		cm.Labels = map[string]string{}
-	}
-	cm.Labels["supkube.io/auto-generated"] = "true"
-
-	cl, err := k8s.GetClient()
-	if err != nil {
-		return nil, err
-	}
-	created, err := cl.CoreV1().ConfigMaps(transformSetNamespace).Create(ctx, cm, metav1.CreateOptions{})
-	if err != nil {
-		return nil, err
-	}
-	return created, nil
 }

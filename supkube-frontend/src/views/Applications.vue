@@ -523,7 +523,14 @@ const handleCommand = (command, row) => {
       router.push({ path: '/backups', query: { namespace: row.namespace, intent: 'restore' } })
       break
     case 'policy':
-      router.push({ path: '/policies', query: { namespace: row.namespace } })
+      // v0.9.1.12 (Mars 2026-06-01 reroll of #108): "创建策略" must open the
+      // Create-Policy wizard pre-filled with this app's ns + a default name.
+      // Earlier we routed without `intent=create` and Policies.vue's onMounted
+      // would just land on the bare list — Mars saw "drawer didn't open + name
+      // empty". The 'backup' command was already correct; 'policy' was the
+      // regression. Now both deep-links use the same query contract so renaming
+      // the menu item later doesn't reintroduce the divergence.
+      router.push({ path: '/policies', query: { namespace: row.namespace, intent: 'create' } })
       break
     case 'details':
       openDetail(row)

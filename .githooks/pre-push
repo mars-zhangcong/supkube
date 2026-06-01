@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  .githooks/pre-push — SupKube CICD 标准的客户端强制闸                      ║
+# ║                                                                          ║
+# ║  每次 `git push` 前自动跑 CI 的本地等价子集，坏代码推不出去。             ║
+# ║  这是"每次提交上线都按 CICD 标准执行"的第一道（最快）防线；服务端由        ║
+# ║  ci.yaml + branch protection 兜底。                                       ║
+# ║                                                                          ║
+# ║  启用（每个 clone 一次性）：  git config core.hooksPath .githooks         ║
+# ║  紧急跳过（不建议）：         SUPKUBE_SKIP_HOOK=1 git push                 ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+set -euo pipefail
+
+if [[ "${SUPKUBE_SKIP_HOOK:-0}" == "1" ]]; then
+  echo "⚠ SUPKUBE_SKIP_HOOK=1 —— 跳过 pre-push 校验（你已知风险）"
+  exit 0
+fi
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+C_OK="\033[32m"; C_ERR="\033[31m"; C_DIM="\033[2m"; C_OFF="\033[0m"
+ok()  { echo -e "  ${C_OK}✅${C_OFF} $*"; }
+run() { echo -e "  ${C_DIM}▶ $*${C_OFF}"; }
+die() { echo -e "  ${C_ERR}❌ $*${C_OFF}" >&2; echo -e "\n${C_ERR}pre-push 失败：修复后再 push（或 SUPKUBE_SKIP_HOOK=1 紧急跳过）。${C_OFF}" >&2; exit 1; }
+
+echo "── SupKube pre-push 校验（CI 本地等价子集）──"
+
+# 1) 后端：gofmt + vet + test + build（与 ci.yaml backend / lint-format 对齐）
+if command -v go >/dev/null 2>&1; then
+  pushd supkube-backend >/dev/null
+  run "gofmt -l ."
+  unformatted=$(gofmt -l .) && [[ -z "$unformatted" ]] || die "未 gofmt：$unformatted（跑 gofmt -w .）"
+  run "go vet ./..."   ; go vet ./...  || die "go vet 失败"
+  run "go build ./..." ; go build ./... || die "go build 失败"
+  run "go test ./..."  ; go test ./... || die "go test 失败（不要删/跳测试来凑绿，见 ENGINEERING.md Rule E）"
+  popd >/dev/null
+  ok "后端 gofmt + vet + build + test 通过"
+else
+  echo "  ⚠ 未装 go，跳过后端校验（CI 仍会拦）"
+fi
+
+# 2) Dashboard 漂移闸（与 ci.yaml dashboard-drift 对齐）
+if command -v node >/dev/null 2>&1; then
+  run "node dashboard/gen-data.mjs"
+  node dashboard/gen-data.mjs || die "dashboard 数据漂移（跑 node dashboard/gen-data.mjs --write 修复后 review）"
+  ok "dashboard 无漂移"
+else
+  echo "  ⚠ 未装 node，跳过漂移闸（CI 仍会拦）"
+fi
+
+# 3) 前端构建（与 ci.yaml frontend 对齐）—— 仅当依赖已装，避免 push 前 npm ci 太慢
+if command -v npm >/dev/null 2>&1 && [[ -d supkube-frontend/node_modules ]]; then
+  run "npm run build (supkube-frontend)"
+  ( cd supkube-frontend && npm run build >/dev/null 2>&1 ) || die "前端 npm run build 失败"
+  ok "前端构建通过"
+else
+  echo -e "  ${C_DIM}· 跳过前端构建（无 node_modules；CI 会跑完整 npm ci + build）${C_OFF}"
+fi
+
+echo -e "${C_OK}✅ pre-push 全部通过，允许推送。${C_OFF}"

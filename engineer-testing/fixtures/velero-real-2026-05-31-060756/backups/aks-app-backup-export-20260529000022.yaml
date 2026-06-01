@@ -1,0 +1,56 @@
+apiVersion: velero.io/v1
+kind: Backup
+metadata:
+  annotations:
+    supkube.io/data-path: data-mover
+    supkube.io/export-enabled: "true"
+    supkube.io/export-retention: 720h0m0s
+    supkube.io/export-schedule: 0 0 * * *
+    supkube.io/snapshot-retention: 24h
+    supkube.io/snapshot-schedule: 0 0 * * *
+    supkube.io/volume-mode: csi
+    velero.io/resource-timeout: 10m0s
+    velero.io/source-cluster-k8s-gitversion: v1.34.7
+    velero.io/source-cluster-k8s-major-version: "1"
+    velero.io/source-cluster-k8s-minor-version: "34"
+  creationTimestamp: "2026-05-29T14:21:21Z"
+  generation: 1
+  labels:
+    supkube.io/policy-name: aks-app-backup
+    supkube.io/policy-role: export
+    velero.io/schedule-name: aks-app-backup-export
+    velero.io/storage-location: myazureblob
+  name: aks-app-backup-export-20260529000022
+  namespace: velero
+  resourceVersion: "2714872"
+  uid: 336f0f1b-e7c3-45e6-8fd2-1490222d7582
+spec:
+  csiSnapshotTimeout: 10m0s
+  defaultVolumesToFsBackup: false
+  excludedClusterScopedResources:
+  - volumesnapshotcontents.snapshot.storage.k8s.io
+  excludedNamespaceScopedResources:
+  - volumesnapshots.snapshot.storage.k8s.io
+  hooks: {}
+  includedNamespaces:
+  - test-app-restore
+  itemOperationTimeout: 4h0m0s
+  metadata: {}
+  snapshotMoveData: true
+  snapshotVolumes: true
+  storageLocation: myazureblob
+  ttl: 720h0m0s
+  volumeGroupSnapshotLabelKey: velero.io/volume-group
+status:
+  backupItemOperationsAttempted: 2
+  backupItemOperationsCompleted: 2
+  completionTimestamp: "2026-05-29T14:20:27Z"
+  expiration: "2026-06-28T14:18:36Z"
+  formatVersion: 1.1.0
+  hookStatus: {}
+  phase: Completed
+  progress:
+    itemsBackedUp: 26
+    totalItems: 26
+  startTimestamp: "2026-05-29T14:18:37Z"
+  version: 1

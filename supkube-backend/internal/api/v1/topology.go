@@ -35,7 +35,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
 )
 
 // ──────────────────────────────────────────────────────────────────────
@@ -43,17 +42,17 @@ import (
 // ──────────────────────────────────────────────────────────────────────
 
 type TopologyResponse struct {
-	Clusters   []TopologyCluster   `json:"clusters"`
-	BSLs       []TopologyBSL       `json:"bsls"`
-	Flows      []TopologyFlow      `json:"flows"`
-	Score      TopologyScore       `json:"score"`
-	Summary    TopologySummary     `json:"summary"`
+	Clusters []TopologyCluster `json:"clusters"`
+	BSLs     []TopologyBSL     `json:"bsls"`
+	Flows    []TopologyFlow    `json:"flows"`
+	Score    TopologyScore     `json:"score"`
+	Summary  TopologySummary   `json:"summary"`
 }
 
 type TopologyCluster struct {
 	ID             string   `json:"id"`
 	Name           string   `json:"name"`
-	Type           string   `json:"type"`           // "primary" | "secondary"
+	Type           string   `json:"type"` // "primary" | "secondary"
 	IsCurrent      bool     `json:"isCurrent"`
 	NamespaceNames []string `json:"namespaceNames"` // ns covered by at least one policy
 	PolicyCount    int      `json:"policyCount"`
@@ -69,7 +68,7 @@ type TopologyBSL struct {
 	Bucket            string `json:"bucket,omitempty"`
 	Phase             string `json:"phase"` // Available / Unavailable / ...
 	RPCount           int    `json:"rpCount"`
-	BackedupNs        int    `json:"backedupNs"`        // distinct ns count writing here
+	BackedupNs        int    `json:"backedupNs"` // distinct ns count writing here
 	ObjectLockEnabled bool   `json:"objectLockEnabled"`
 	ObjectLockMode    string `json:"objectLockMode,omitempty"`
 	// v0.8.12.5 fix C: capacity bar. Local BSL exposes the PVC's bound
@@ -107,12 +106,12 @@ type TopologyScore struct {
 }
 
 type TopologySummary struct {
-	ClusterCount    int `json:"clusterCount"`
-	PolicyCount     int `json:"policyCount"`
-	RPCount         int `json:"rpCount"`
-	NamespaceCount  int `json:"namespaceCount"`
-	LocalBSLCount   int `json:"localBSLCount"`
-	CloudBSLCount   int `json:"cloudBSLCount"`
+	ClusterCount   int `json:"clusterCount"`
+	PolicyCount    int `json:"policyCount"`
+	RPCount        int `json:"rpCount"`
+	NamespaceCount int `json:"namespaceCount"`
+	LocalBSLCount  int `json:"localBSLCount"`
+	CloudBSLCount  int `json:"cloudBSLCount"`
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -122,14 +121,14 @@ type TopologySummary struct {
 // GetTopology is GET /api/v1/dashboard/topology.
 //
 // Internally:
-//   1. List BSLs (Velero CRDs in the velero namespace)
-//   2. List Schedules (Velero CRDs) and Backups (for per-flow RP count)
-//   3. Single-cluster v1: synthesise one Cluster from cluster identity
-//      env vars / fallback to "this-cluster". v0.9.0 will replace this
-//      with the supkube.io/Cluster CR aggregator.
-//   4. Walk Schedules to populate Flows + per-ns coverage
-//   5. Walk Backups to populate per-flow + per-BSL counts
-//   6. Evaluate the 3-2-1-1-0 score from aggregated state
+//  1. List BSLs (Velero CRDs in the velero namespace)
+//  2. List Schedules (Velero CRDs) and Backups (for per-flow RP count)
+//  3. Single-cluster v1: synthesise one Cluster from cluster identity
+//     env vars / fallback to "this-cluster". v0.9.0 will replace this
+//     with the supkube.io/Cluster CR aggregator.
+//  4. Walk Schedules to populate Flows + per-ns coverage
+//  5. Walk Backups to populate per-flow + per-BSL counts
+//  6. Evaluate the 3-2-1-1-0 score from aggregated state
 func GetTopology(c *gin.Context) {
 	// v0.9.0.1 fix #3: header-routed clients so the Dashboard topology
 	// reflects the cluster the Mode Switcher currently points at.
@@ -143,11 +142,10 @@ func GetTopology(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "k8s: " + err.Error()})
 		return
 	}
-	dynCli, err := getRequestDynamicClient(c)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "dynamic: " + err.Error()})
-		return
-	}
+	// 注: 之前还 fetch 过 dynCli 给 detectClusterName 用, 但那函数死写
+	// "this-cluster", 跟 /clusters endpoint 不一致 (Mars 2026-05-31 反馈)。
+	// 现在改用 k8sCli.Nodes().List() 直接探测 control-plane node 名,
+	// 跟 buildThisClusterDTO 共用同一套优先级 — 不再需要 dynCli。
 	ctx := context.Background()
 	veleroNS := "velero"
 	supkubeNS := "supkube"
@@ -335,10 +333,16 @@ func GetTopology(c *gin.Context) {
 	// ───── Clusters (single-cluster v1) ───────────────────────────
 	// v0.9.0 MC will replace this with iteration over clusters.supkube.io.
 	// For now: one entry representing "this cluster", enriched with
-	// k8s server version (Discovery API — free) + node count.
+	// k8s server version (Discovery API — free) + node count + a real
+	// human-recognizable name (Mars 2026-05-31 testing 20260531 #1).
+	//
+	// 历史 bug: 这里之前用 detectClusterName() 写死 "this-cluster",
+	// 跟 /clusters endpoint 的 buildThisClusterDTO 是两套独立逻辑 —
+	// 客户在 DR Topology 仍看到 "this-cluster" 字眼。现在共用同样的
+	// control-plane node 名探测优先级 (跟 clusters.go L168-190 对齐)。
 	thisCluster := TopologyCluster{
 		ID:             clusterID,
-		Name:           detectClusterName(ctx, dynCli),
+		Name:           "Local Cluster", // 兜底, 下面 detect override
 		Type:           "primary",
 		IsCurrent:      true,
 		PolicyCount:    len(policyNames),
@@ -349,8 +353,32 @@ func GetTopology(c *gin.Context) {
 		// visual parity with how kubectl version shows it in UIs.
 		thisCluster.K8sVersion = ver.GitVersion
 	}
+	// 一次 List 同时供应 nodeCount 和 displayName, 不重复打 apiserver。
 	if nodes, err := k8sCli.CoreV1().Nodes().List(ctx, metav1.ListOptions{}); err == nil {
 		thisCluster.NodeCount = len(nodes.Items)
+		// 优先级: control-plane node 名 → 任意第一个 node → "Local Cluster"。
+		// 跟 clusters.go buildThisClusterDTO 完全一致, 避免两个 endpoint
+		// 显示不同字眼。
+		var cpName, anyName string
+		for _, n := range nodes.Items {
+			if anyName == "" {
+				anyName = n.Name
+			}
+			if _, ok := n.Labels["node-role.kubernetes.io/control-plane"]; ok {
+				cpName = n.Name
+				break
+			}
+			if _, ok := n.Labels["node-role.kubernetes.io/master"]; ok {
+				cpName = n.Name
+				break
+			}
+		}
+		switch {
+		case cpName != "":
+			thisCluster.Name = cpName
+		case anyName != "":
+			thisCluster.Name = anyName
+		}
 	}
 	resp.Clusters = []TopologyCluster{thisCluster}
 
@@ -478,17 +506,11 @@ func computeTopologyScore(bsls []TopologyBSL, flows []TopologyFlow, backups *vel
 	return s
 }
 
-// detectClusterName uses the cluster's `kube-system/kube-system` namespace
-// UID as a stable cluster identity; falls back to a literal if anything
-// fails. The UI displays this string verbatim, so prefer a human label
-// when one is configured (future: read from supkube-settings ConfigMap).
-func detectClusterName(ctx context.Context, dyn interface{}) string {
-	// v0.8.12.5 v1: hardcode. v0.9.0 Cluster Manager will replace this
-	// with the user-provided cluster display name. We avoid reading
-	// kube-system UID here because that's a 32-char hex string, ugly
-	// in the UI.
-	return "this-cluster"
-}
+// (detectClusterName 已删除, 2026-06-01 Mars testing 20260531 #1 修复:
+//  原函数死写 "this-cluster", DR Topology 永远显示 sentinel 不是真集群名;
+//  现在在 GetTopology 内联探测 control-plane node 名, 跟 buildThisClusterDTO
+//  共用同一套优先级。如果未来要重新抽出共享 helper, 应放在 clusters.go
+//  或 internal/k8s package, 避免 topology.go 和 clusters.go 再次 drift。)
 
 // sortedKeys returns map keys deterministically sorted. We use a tiny
 // implementation rather than pulling slices.Sort because the Go version

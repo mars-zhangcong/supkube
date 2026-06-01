@@ -28,9 +28,44 @@ import (
 
 // permEntry says "<method> <pattern>" requires at least <minRole>.
 type permEntry struct {
-	method   string
-	pattern  string // gin path pattern, e.g. "/backups/:name"
-	minRole  string
+	method  string
+	pattern string // gin path pattern, e.g. "/backups/:name"
+	minRole string
+}
+
+// PermEntry is the exported version used by RegisterPermissions so
+// downstream packages (e.g. internal/importpolicy) can extend the
+// permission table at init without creating an import cycle through
+// this package's private types.
+type PermEntry struct {
+	Method  string
+	Pattern string
+	MinRole string
+}
+
+// RegisterPermissions appends entries to permissionTable. Intended to
+// be called from a sibling package's RegisterRoutes() so feature owners
+// keep their permissions co-located with their handlers. Safe to call
+// multiple times; duplicates (same method+pattern) are silently ignored
+// so re-init in tests doesn't grow the table unbounded.
+func RegisterPermissions(entries ...PermEntry) {
+	for _, e := range entries {
+		dup := false
+		for _, existing := range permissionTable {
+			if existing.method == e.Method && existing.pattern == e.Pattern {
+				dup = true
+				break
+			}
+		}
+		if dup {
+			continue
+		}
+		permissionTable = append(permissionTable, permEntry{
+			method:  e.Method,
+			pattern: e.Pattern,
+			minRole: e.MinRole,
+		})
+	}
 }
 
 // permissionTable is the WHOLE authz surface in one place.
@@ -66,6 +101,10 @@ var permissionTable = []permEntry{
 	{"GET", "/api/v1/actions/:id", RoleViewer},
 	{"GET", "/api/v1/transform-sets", RoleViewer},
 	{"GET", "/api/v1/transform-sets/:name", RoleViewer},
+	// PRD-002 v1.3: atomic Transform CRUD (the layer below TransformSet).
+	// Same role bands as TransformSets — read viewer, write admin.
+	{"GET", "/api/v1/transforms", RoleViewer},
+	{"GET", "/api/v1/transforms/:name", RoleViewer},
 	{"GET", "/api/v1/schedules", RoleViewer},
 	{"GET", "/api/v1/schedules/:name", RoleViewer},
 	{"GET", "/api/v1/storage-locations", RoleViewer},
@@ -90,6 +129,11 @@ var permissionTable = []permEntry{
 	{"DELETE", "/api/v1/schedules/:name", RoleEditor},
 	// Transform Set ops the editor needs to drive Pre-flight Apply Fix
 	{"POST", "/api/v1/transform-sets/apply-conflict-fixes", RoleEditor},
+	// PRD-002 v1.3 §4.3 (T1): preview-resolution is read-only (no CM
+	// create; dry-run compile). Viewer can call it to audit what a
+	// TransformSet+params combo will compile to before the editor
+	// triggers the Restore. Same role as GET /transform-sets/:name.
+	{"POST", "/api/v1/transform-sets/:name/preview-resolution", RoleViewer},
 
 	// /auth/me — every authenticated user reads their OWN identity
 	// (the canonical "who am I"). Must be viewer-or-above (i.e. any
@@ -146,6 +190,10 @@ var permissionTable = []permEntry{
 	{"POST", "/api/v1/transform-sets", RoleAdmin},
 	{"PUT", "/api/v1/transform-sets/:name", RoleAdmin},
 	{"DELETE", "/api/v1/transform-sets/:name", RoleAdmin},
+	// PRD-002 v1.3: atomic Transform write CRUD.
+	{"POST", "/api/v1/transforms", RoleAdmin},
+	{"PUT", "/api/v1/transforms/:name", RoleAdmin},
+	{"DELETE", "/api/v1/transforms/:name", RoleAdmin},
 	// Storage Profile management
 	{"POST", "/api/v1/storage-locations", RoleAdmin},
 	{"PUT", "/api/v1/storage-locations/:name", RoleAdmin},
@@ -154,6 +202,34 @@ var permissionTable = []permEntry{
 	// Snapshot Profile management
 	{"POST", "/api/v1/volume-snapshot-locations", RoleAdmin},
 	{"DELETE", "/api/v1/volume-snapshot-locations/:name", RoleAdmin},
+
+	// v0.9.x #79 Log Viewer. Every logged-in user (viewer+) needs logs
+	// to diagnose their own backups/restores; we don't want to gate
+	// "open Observability → Logs" behind admin. The actual K8s log
+	// retrieval RBAC is enforced by the backend ServiceAccount, not by
+	// SupKube role — so a viewer can't see logs the SA can't read either.
+	{"GET", "/api/v1/logs/components", RoleViewer},
+	{"GET", "/api/v1/logs", RoleViewer},
+
+	// v0.9.x #84 CSI auto-config status (read-only).  Viewer because
+	// the Settings → Storage tab surfaces "X drivers auto-configured"
+	// for everyone; the underlying VSC create happens in a startup
+	// controller (no API surface for that yet).
+	{"GET", "/api/v1/storage/csi-autoconfig", RoleViewer},
+
+	// v0.9.x #68 Force-delete: same role as DELETE /backups/:name
+	// (Editor with in-handler ns scope check; whole-cluster backup
+	// upgraded to admin inside ForceDeleteBackup).
+	{"POST", "/api/v1/backups/:name/force-delete", RoleEditor},
+
+	// PRD-007 §4.3 Layer 4 Backup Copy (#111).
+	// Preflight is read-only diagnostics (lists which backups are eligible
+	// for BSL→BSL copy vs which are CSI-snapshot-only and rejected with
+	// ERR_LAYER4_SNAPSHOT_UNSUPPORTED) — Editor matches Restore preflight.
+	// The actual Transfer (Phase 2) is admin-only because it moves bytes
+	// across BSLs and can incur cloud egress charges.
+	{"POST", "/api/v1/backup-copy/preflight", RoleEditor},
+	{"POST", "/api/v1/backup-copy", RoleAdmin},
 }
 
 // RBACMiddleware returns a Gin handler that enforces the permission
@@ -187,7 +263,7 @@ func (c *Config) RBACMiddleware() gin.HandlerFunc {
 		}
 		if !user.IsAtLeast(minRole) {
 			gc.AbortWithStatusJSON(http.StatusForbidden, gin.H{
-				"error": "insufficient role",
+				"error":    "insufficient role",
 				"required": minRole,
 				"current":  user.Role,
 			})

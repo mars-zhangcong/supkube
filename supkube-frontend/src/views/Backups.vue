@@ -233,6 +233,7 @@
                   <el-dropdown-item command="restore">{{ t('common.restore') }}</el-dropdown-item>
                   <el-dropdown-item command="export" disabled :title="t('common.comingSoon')">{{ t('common.export') }}</el-dropdown-item>
                   <el-dropdown-item command="delete" divided>{{ t('common.delete') }}</el-dropdown-item>
+                  <el-dropdown-item command="force-delete" style="color: var(--el-color-danger);">{{ t('restorePoints.forceDelete') || 'Force Delete (stuck)' }}</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
@@ -347,7 +348,7 @@ const viewingHtml = computed(() =>
   })
 )
 import { Plus, Search, Box, Monitor, MagicStick } from '@element-plus/icons-vue'
-import { getBackups, createBackup, deleteBackup, getNamespaces, getAction, getStorageLocations } from '../api/velero'
+import { getBackups, createBackup, deleteBackup, forceDeleteBackup, getNamespaces, getAction, getStorageLocations } from '../api/velero'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { normalizePhase, phaseTagType } from '../utils/phase'
 import RestoreDrawer from '../components/RestoreDrawer.vue'
@@ -482,6 +483,21 @@ const typeChipTooltip = (row) => {
   const parts = []
   if (src === 'Imported') {
     parts.push(t('restorePoints.tooltipImported'))
+    // Agent D 2026-06-01: surface source-cluster + fingerprint signature
+    // (valid / missing / invalid) for Imported RPs. These labels are stamped
+    // by the ImportPolicy controller (Agent A/B/C backend); when absent
+    // the tooltip falls back to the legacy single-line wording.
+    const meta = importMeta(row)
+    if (meta.fingerprintStatus === 'valid') {
+      parts.push(t('importPolicy.signatureValid', { cluster: meta.sourceCluster || 'unknown' }))
+    } else if (meta.fingerprintStatus === 'invalid') {
+      parts.push(t('importPolicy.signatureInvalid'))
+    } else if (meta.fingerprintStatus === 'missing') {
+      parts.push(t('importPolicy.signatureMissing'))
+    } else if (meta.sourceCluster) {
+      // 没指纹信息但知道 source-cluster — 仍展示出来
+      parts.push(`source: ${meta.sourceCluster}`)
+    }
   } else {
     parts.push(t('restorePoints.tooltipLocal'))
   }
@@ -517,11 +533,26 @@ const sourceOf = (row) => {
   // the root cause of C-001 "没看到 Import 标签").
   if (row?.supkube?.imported === true) return 'Imported'
   if (row?.supkube?.imported === false && row?.supkube?.origin) return 'Local'
+  // Agent D 2026-06-01: ImportPolicy controller stamps supkube.io/imported
+  // K8s label on Backups it pulled from a shared BSL. Treat it as the
+  // authoritative signal regardless of the supkube.imported backend flag —
+  // works even when the older /backups payload didn't include the enrichment.
+  const labels = row?.metadata?.labels || {}
+  if (labels['supkube.io/imported'] === 'true') return 'Imported'
   // Fallback: K8s-version fingerprint for older backends without the flag.
   const fp = backupClusterFingerprint(row)
   if (!fp || fp === '||') return 'Local' // no annotations → assume local
   if (!currentClusterFingerprint.value) return 'Local' // baseline not set yet
   return fp === currentClusterFingerprint.value ? 'Local' : 'Imported'
+}
+
+// Agent D: pull source-cluster + fingerprint-status from labels for tooltips.
+const importMeta = (row) => {
+  const labels = row?.metadata?.labels || {}
+  return {
+    sourceCluster: labels['supkube.io/source-cluster'] || '',
+    fingerprintStatus: labels['supkube.io/fingerprint-status'] || ''  // valid | missing | invalid
+  }
 }
 
 const sourceTooltip = (row) => {
@@ -851,6 +882,50 @@ const handleCommand = (cmd, row) => {
     case 'restore': restoreFromBackup(row); break
     case 'export': /* placeholder — v0.8 */ break
     case 'delete': handleDelete(row); break
+    case 'force-delete': handleForceDelete(row); break
+  }
+}
+
+// v0.9.x #68: escape hatch when a Backup CR is stuck (finalizer wedged
+// or Velero DBR controller hung). Calls POST /backups/:name/force-delete
+// which strips finalizers + direct-deletes the CR + schedules orphan GC.
+// BSL tarball is NOT removed — the response message warns the user.
+const handleForceDelete = async (row) => {
+  const name = row?.metadata?.name
+  if (!name) return
+  try {
+    await ElMessageBox({
+      title: 'Force Delete (use only when normal delete is stuck)',
+      message:
+        `<p>This will <strong>strip finalizers</strong> from Backup <code>${name}</code> and delete the CR directly, bypassing Velero's DeleteBackupRequest cascade.</p>
+         <p style="margin-top: 10px;"><strong>What's bypassed:</strong></p>
+         <ul style="margin: 8px 0 0 0; padding-left: 18px; font-size: 13px; line-height: 1.7;">
+           <li>The BSL tarball will <strong>NOT</strong> be removed (use storage retention or manual cleanup)</li>
+           <li>Any in-flight Velero work on this Backup will be abandoned</li>
+         </ul>
+         <p style="margin-top: 10px;"><strong>Orphan GC</strong> will be scheduled to clean leaked VSC/cloud snapshots.</p>
+         <p style="margin: 10px 0 0 0; color: #c45656; font-size: 13px;">
+           ⚠ Only use this when a normal Delete has hung. This is a last-resort escape hatch.
+         </p>`,
+      dangerouslyUseHTMLString: true,
+      showCancelButton: true,
+      confirmButtonText: 'Force Delete',
+      cancelButtonText: t('common.cancel'),
+      type: 'warning',
+      confirmButtonClass: 'el-button--danger'
+    })
+  } catch { return }
+  try {
+    const resp = await forceDeleteBackup(name)
+    const bypassed = resp?.data?.bypassed || []
+    ElMessage({
+      type: 'success',
+      message: `Force-deleted ${name}. Bypassed: ${bypassed.join('; ') || 'nothing'}`,
+      duration: 6000
+    })
+    await fetchBackups()
+  } catch (e) {
+    ElMessage.error('Force delete failed: ' + (e.response?.data?.error || e.message))
   }
 }
 

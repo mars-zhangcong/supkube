@@ -111,8 +111,12 @@
             <el-icon><Clock /></el-icon>
             <template #title>{{ t('nav.policies') }}</template>
           </el-menu-item>
-          <el-menu-item index="/transform-sets">
+          <el-menu-item index="/transforms">
             <el-icon><Tools /></el-icon>
+            <template #title>{{ t('nav.transforms') }}</template>
+          </el-menu-item>
+          <el-menu-item index="/transform-sets">
+            <el-icon><Files /></el-icon>
             <template #title>{{ t('nav.transformSets') }}</template>
           </el-menu-item>
           <el-menu-item index="/backups">
@@ -218,7 +222,7 @@ import { SUPPORTED_LOCALES, setLocale } from './i18n'
 import {
   Monitor, Grid, FolderOpened, RefreshRight, Clock, Coin, Setting,
   Camera, MagicStick, ArrowLeft, ArrowRight, ArrowDown, DataLine,
-  Tools, SwitchButton, DocumentCopy, Connection, Plus
+  Files, Tools, SwitchButton, DocumentCopy, Connection, Plus
 } from '@element-plus/icons-vue'
 import { useAuth } from './composables/useAuth'
 import { useBranding } from './composables/useBranding'

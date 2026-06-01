@@ -5,14 +5,14 @@
 // Velero's BackupSyncController only syncs backups from BSLs *configured
 // on that cluster*. So we need to:
 //
-//   1. Inspect the source Backup CR to find which BSL it lives in.
-//   2. Refuse if the BSL is in-cluster local-only (supkube-local-store) —
-//      the target cluster physically can't reach it.
-//   3. Copy the BSL CR + its credential Secret to the target cluster (only
-//      when not already present — never overwrite admin-configured BSLs).
-//   4. Wait (with a 90s ceiling) for Velero's BackupSyncController on the
-//      target to surface the Backup CR; only then is it safe to apply
-//      the Restore CR.
+//  1. Inspect the source Backup CR to find which BSL it lives in.
+//  2. Refuse if the BSL is in-cluster local-only (supkube-local-store) —
+//     the target cluster physically can't reach it.
+//  3. Copy the BSL CR + its credential Secret to the target cluster (only
+//     when not already present — never overwrite admin-configured BSLs).
+//  4. Wait (with a 90s ceiling) for Velero's BackupSyncController on the
+//     target to surface the Backup CR; only then is it safe to apply
+//     the Restore CR.
 //
 // What we don't do (out of scope for MVP):
 //   - Sync VolumeSnapshotLocations (target cluster uses its own).
