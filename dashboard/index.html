@@ -132,6 +132,7 @@
     <button data-view="lineage">Lineage</button>
     <button data-view="matrix">Priority Matrix</button>
     <button data-view="pain">Customer Pain</button>
+    <button data-view="tests">🧪 测试</button>
   </nav>
   <div class="stamp">Snapshot: <span id="snapshot-time">—</span></div>
 </header>
@@ -232,6 +233,22 @@
 <section class="view" data-view="pain">
   <p style="color: var(--fg-2); font-size: 12px;">来源：2026-05-28 客户跨集群恢复 demo 现场反馈</p>
   <div class="pain-grid" id="pain-grid"></div>
+</section>
+
+<!-- ============== TESTS (持续冒烟) ============== -->
+<section class="view" data-view="tests">
+  <p style="color: var(--fg-2); font-size: 12px;">
+    持续冒烟测试：每次新版本 CD 到 <code>aks-jumborca-test</code> 后自动运行
+    （测试用例.md §1 P0 可自动化子集），结果发布到 <code>test-results</code> 分支。
+    数据源：<span id="tests-src">加载中…</span>
+  </p>
+  <div class="kpi-grid" id="tests-kpis"></div>
+  <h2 class="sec">最近一次冒烟 <span class="hint" id="tests-meta">—</span></h2>
+  <div id="tests-spark" style="background:var(--bg-2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px;"></div>
+  <table>
+    <thead><tr><th>用例</th><th>TC</th><th>结果</th><th>耗时</th><th>备注</th></tr></thead>
+    <tbody id="tests-body"></tbody>
+  </table>
 </section>
 
 </main>
@@ -448,6 +465,67 @@ document.addEventListener("click", e => {
 });
 
 render();
+</script>
+
+<script>
+/* ===== 持续冒烟测试面板（数据源：test-results 分支，由 CD 的 smoke-test job 发布）===== */
+(function () {
+  const REPO = "mars-zhangcong/supkube";
+  const BRANCH = "test-results";
+  const RAW = (f) => `https://raw.githubusercontent.com/${REPO}/${BRANCH}/${f}?t=${Date.now()}`;
+  const $ = (s) => document.querySelector(s);
+  const COLOR = { passed: "var(--green,#3fb950)", failed: "var(--red,#f85149)", skipped: "var(--fg-3,#8b949e)" };
+  const ICON  = { passed: "✅", failed: "❌", skipped: "⏭" };
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;" }[c]));
+
+  function renderLatest(d) {
+    $("#tests-src").innerHTML = `<a href="https://github.com/${REPO}/tree/${BRANCH}" target="_blank">${BRANCH} 分支</a>`;
+    const s = d.summary || {};
+    $("#tests-meta").textContent = `${d.version || "?"} · ${d.cluster || "?"} · ${d.timestamp || ""}`;
+    const pass = s.passed || 0, fail = s.failed || 0, skip = s.skipped || 0, total = s.total || 0;
+    const denom = Math.max(1, total - skip);
+    const rate = total ? Math.round(pass / denom * 100) : 0;
+    $("#tests-kpis").innerHTML = `
+      <div class="kpi ${fail ? "red" : "green"}"><div class="label">最近结果</div><div class="value">${fail ? "❌ FAIL" : "✅ PASS"}</div><div class="sub">${esc(d.version || "")}</div></div>
+      <div class="kpi green"><div class="label">Passed</div><div class="value">${pass}</div></div>
+      <div class="kpi red"><div class="label">Failed</div><div class="value">${fail}</div></div>
+      <div class="kpi"><div class="label">Skipped</div><div class="value">${skip}</div></div>
+      <div class="kpi blue"><div class="label">通过率</div><div class="value">${rate}%</div><div class="sub">不含 skipped</div></div>`;
+    $("#tests-body").innerHTML = (d.testRuns || []).map(t => `
+      <tr>
+        <td><strong>${esc(t.id)}</strong> ${esc(t.name)}</td>
+        <td><code>${esc(t.tc)}</code></td>
+        <td style="color:${COLOR[t.status] || ""}">${ICON[t.status] || ""} ${esc(t.status)}</td>
+        <td>${esc(t.durationSec)}s</td>
+        <td style="color:var(--fg-2);font-size:12px">${esc(t.notes)}</td>
+      </tr>`).join("");
+  }
+
+  function renderSpark(hist) {
+    const el = $("#tests-spark");
+    if (!Array.isArray(hist) || !hist.length) { el.innerHTML = '<span style="color:var(--fg-3)">暂无历史趋势</span>'; return; }
+    const W = 600, H = 60, pad = 4, n = hist.length;
+    const pts = hist.map(h => { const s = h.summary || {}; const tot = (s.total || 0) - (s.skipped || 0); return tot ? (s.passed || 0) / tot : 0; });
+    const x = i => pad + i * ((W - 2 * pad) / Math.max(1, n - 1));
+    const y = v => H - pad - v * (H - 2 * pad);
+    const path = pts.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+    const dots = pts.map((v, i) => { const fail = (hist[i].summary || {}).failed || 0; return `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="3" fill="${fail ? "var(--red,#f85149)" : "var(--green,#3fb950)"}"><title>${esc(hist[i].version || "")}: ${(v * 100).toFixed(0)}% pass${fail ? " (" + fail + " failed)" : ""}</title></circle>`; }).join("");
+    el.innerHTML = `<div style="font-size:12px;color:var(--fg-2);margin-bottom:6px">通过率趋势（近 ${n} 次 · 不含 skipped）</div>
+      <svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;height:auto;"><path d="${path}" fill="none" stroke="var(--blue,#58a6ff)" stroke-width="1.5"/>${dots}</svg>`;
+  }
+
+  function load() {
+    fetch(RAW("test-results.json")).then(r => r.ok ? r.json() : Promise.reject(r.status)).then(renderLatest)
+      .catch(() => {
+        $("#tests-src").textContent = "尚无测试结果";
+        $("#tests-body").innerHTML = '<tr><td colspan="5" style="color:var(--fg-3)">test-results 分支尚未生成 —— 第一次打 v* tag 触发 CD → smoke-test 后即出现。</td></tr>';
+      });
+    fetch(RAW("history.json")).then(r => r.ok ? r.json() : []).then(renderSpark).catch(() => renderSpark([]));
+  }
+  // 切到「测试」tab 时（重新）拉取，确保看到最新一次
+  document.querySelectorAll('#nav button[data-view="tests"]').forEach(b => b.addEventListener("click", load));
+  if (location.hash.includes("tests")) load();
+})();
 </script>
 
 </body>
