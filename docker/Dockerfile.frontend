@@ -1,5 +1,10 @@
 # Build stage
-FROM node:20-alpine AS builder
+# --platform=$BUILDPLATFORM (2026-06-01 ADR-042 follow-up):
+# builder stage 永远在 native runner 平台跑，避免 arm64 build 走 QEMU emulate。
+# Vite/esbuild 自动按 TARGET arch 下载 native binary，所以 output bundle 跨平台兼容。
+# Final stage (nginx:1.25-alpine) 仍是 TARGETPLATFORM。
+# 实测: 第一次 CD #1 frontend build 3m31s (vite 比 Go 略快，影响小但仍优化)。
+FROM --platform=$BUILDPLATFORM node:20-alpine AS builder
 
 WORKDIR /app
 
