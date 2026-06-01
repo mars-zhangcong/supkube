@@ -1,7 +1,8 @@
 # SupKube Roadmap
 
 > Last updated: **2026-06-01**
-> Current released version: **v0.9.1.13-alpha** （Import Policy ship；部署在 docker-desktop + aks-jumborca-dev）
+> Current released version: **v0.9.1.13-alpha** （Import Policy ship；部署在 aks-jumborca-dev 单集群；docker-desktop 已退役见 ADR-042）
+> Dev workflow: **ADR-042 起开发主体上云**——push to main → aks-dev 自动 / tag → aks-test / manual → aks-prod（待建）
 > Public distribution: **https://charts.supkube.com/** （ACR + Azure Blob + Cloudflare Worker）
 > Reference product: [Kasten K10 by Veeam](https://docs.kasten.io)
 

@@ -1,3 +1,22 @@
+# ===========================================================================
+# values.yaml — 单一权威 chart 配置（dev/test/prod 三集群共用）
+# ===========================================================================
+# 2026-06-01 ADR-042 之后：三集群（aks-jumborca-dev/test/prod）部署都基于本
+# 文件 + cd.yaml 的 helm `--set` 覆盖镜像 tag。
+#
+# **当前不分 values-dev.yaml / values-test.yaml / values-prod.yaml** —
+# 三环境只在镜像 tag 上不同，其它配置一致。如果将来出现"prod 要更多 replicas /
+# 不同 node affinity / 不同 fingerprint secret"等差异，按以下方式分层：
+#
+#   supkube-helm/supkube/
+#   ├─ values.yaml           ← 当前文件，基础默认
+#   ├─ values-dev.yaml       ← 仅 dev override（如 replicas=1, debug log）
+#   ├─ values-test.yaml      ← 仅 test override（如 跟 Kasten K10 共存的 ns 隔离）
+#   └─ values-prod.yaml      ← 仅 prod override（如 replicas=3, HA, prod secret）
+#
+# 然后 cd.yaml deploy-{env} 加 `-f values-{env}.yaml` 一行。延后到真有差异时再做。
+# ===========================================================================
+
 replicaCount: 1
 # ===========================================================================
 # v0.9.1 EULA + License + airgap registry override
