@@ -32,6 +32,10 @@ const DECISIONS = [
   { id: "D-26", date: "2026-05-31", text: "✅ PRD-003~007 全部评审通过，共 7 个 PRD 已评审就绪可研发。" },
   { id: "D-27", date: "2026-06-01", text: "✅ AI Backup Advisor 3 轮讨论收敛：finding #2 分数规则引擎算（可复现）+ finding #3 置信度三档不用百分比 + 缺失数据 status 枚举显式建模 + 采用 SupEye 四段 DSL（fact/observation/inferred/evidence）。立 PRD-011/012 + ADR-037。" },
   { id: "D-28", date: "2026-06-01", text: "📚 文档体系补强：建 术语表.md（Glossary 单源，收口 Resilience Score vs Posture / Layer 1-5 vs L1-L2 撞车）+ CHANGELOG.md + ENGINEERING.md（Rule A/B/C/D 落仓库）。Dashboard 重构：data.js 与视图分离 + 数据刷新到当日真相。" },
+  { id: "D-29", date: "2026-06-01", text: "✅ PRD-009 v2 Ship：Action Type pill（Snapshot Policy / Import Policy）+ ImportPolicy CRD + fingerprint HMAC（Writer/Validator/TrustStore）+ 直 S3 BackupLister。7-agent 并发交付。双集群 v0.9.1.10-alpha-dev-06010819 ship。任务 #88 关闭。教训 L-10/L-11/L-12 落 MEMORY.md。" },
+  { id: "D-30", date: "2026-06-01", text: "🔄 ADR-037/038 让号治理：PRD-008→ADR-039（审计存储）/ PRD-010→ADR-040（DR Topology SVG）。台账加 \"被复用过的旧号不得沿用\" 规则。出处：PRD-Review 第六份跨文档 finding。" },
+  { id: "D-31", date: "2026-06-01", text: "📚 项目级 MEMORY.md ship（363 行）：交互节奏 + Rule A-F 反例 + 13 条跨 session 教训速查 + 基础设施速查 + 维护约定。从 AI 个人 memory 迁入仓库，方便接力人 Review。" },
+  { id: "D-32", date: "2026-06-01", text: "🗂 Rule G + LEDGER.md 立：项目所有文档编号（PRD/ADR/TC/D/C）统一台账，取号 4 步 SOP（read→reserve→write→改状态），并发由 main agent 集中预分配号（Rule C v2 延伸），让号 forward-only，漂移检查 gen-data.mjs 兜底。落 ENGINEERING.md Rule G + MEMORY.md L-14 + ADR-041。本条由 Rule G 4 步演练首次占的 D 号（与 ADR-041 同批演练）。" },
 ];
 
 /* ---- PRD 状态（应与 PRD.md 索引表一致）---- */
@@ -61,6 +65,9 @@ const ADRS = [
   { id: "ADR-036", title: "SSE 项目级口径 + nginx ingress 配置", date: "2026-05-31", status: "草稿", note: "PRD-005 Live Tail" },
   { id: "ADR-037", title: "统一数据采集架构（CollectionContract + Collector/Server 分离 + Canonical DSL + 三档连接）", date: "2026-06-01", status: "草稿", note: "🆕 PRD-011 / PRD-012" },
   { id: "ADR-038", title: "ImportPolicy CRD + Controller（替代 backupSyncPeriod 60s 兜底）", date: "2026-06-01", status: "草稿", note: "🆕 PRD-009 v2 + #88/#157-163" },
+  { id: "ADR-039", title: "Activity 持久化与 audit event 存储选型（让号自 037）", date: "2026-06-01", status: "草稿", note: "🔄 PRD-008 让号 · PRD-Review 第六份 §二（占号待 PRD-008 Phase 0 落地）" },
+  { id: "ADR-040", title: "DR Topology SVG 视觉规范（让号自 038）", date: "2026-06-01", status: "草稿", note: "🔄 PRD-010 让号 · PRD-Review 第六份 §二（占号待 PRD-010 实施落地）" },
+  { id: "ADR-041", title: "项目编号统一台账 (LEDGER.md) + Rule G 取号 SOP", date: "2026-06-01", status: "草稿", note: "🆕 Rule G 首次演练取的号 · 跨 PRD/ADR/TC/D/C 全 series 防撞号 · 并发由 main agent 集中预分配" },
 ];
 
 /* ---- 本周行动 ---- */

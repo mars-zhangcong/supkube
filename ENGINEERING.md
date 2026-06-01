@@ -48,6 +48,28 @@
 
 所有 AI / Call Home 能力**只给建议，不自动执行**。"应用建议"只预填 Wizard，由客户确认后自己保存。软件**绝不**自动修改客户集群资源（ADR-033 §6）。
 
+### Rule G — 取号必先来 LEDGER（2026-06-01 新立）
+
+任何编号文档（PRD / ADR / TC / D / C 等）**新建前必须先去 [`LEDGER.md`](./LEDGER.md) 取号**——不能直接在 PRD.md / 架构设计.md / 测试用例.md 末尾看一眼最大号自己 +1，那样并行 Agent 必撞。
+
+**取号 SOP（最简版，完整版见 LEDGER.md §八）**：
+
+1. 打开 `LEDGER.md` §一速查表，找你的 series（PRD / ADR / TC-* / D / C），读 "下个空号"
+2. 改 LEDGER：(a) 详表加一行带号 + 主题 + 你（占号人）+ 时间 + 状态="占号"；(b) 速查表"已占最高号"和"下个空号"都 +1
+3. **然后**去 PRD.md / 架构设计.md / 测试用例.md / dashboard/data.js 写正文
+4. 正文写完，回 LEDGER 把状态从"占号"改成"草稿"
+
+**并行 Agent 场景**（Rule C v2 的延伸）：**main agent 启动并行 agent 前必须集中预分配号**，把每个号写进对应 agent 的 prompt（"你的号 = PRD-014，不要自己取号"）。让 N 个 background agent 各自跑去 LEDGER 取号 = race condition，禁止。
+
+**让号 / Renumbering**（2026-06-01 ADR-037/038 复发教训）：发现你占的号已被别处占用，**让号到下个空号**，不能抢；让号是 forward-only 的。已让号示例：PRD-008 让号 ADR-037→039；PRD-010 让号 ADR-038→040。
+
+**漂移检查**：每次更新 LEDGER 后跑 `node dashboard/gen-data.mjs` 必须 ✅ 无漂移。
+
+**反例**（这些都是历史踩过的坑）：
+- ❌ Agent A11 在 PRD.md 末尾看最大号 = PRD-008，自己 +1 写 PRD-009；同时 Agent B15 也看到 PRD-008 自己 +1 写 PRD-009 → 撞号
+- ❌ 不更新台账，靠下次 grep 全文找最大号 → 多文件分散后必漂
+- ❌ 跨 session 续工作，不查 LEDGER 直接照记忆里的号写 → 撞旧号
+
 ---
 
 ## 2. 单一来源清单（Single Source of Truth）
@@ -57,7 +79,8 @@
 | 信息 | 唯一权威来源 |
 |---|---|
 | 术语定义 | **术语表.md** |
-| ADR 编号 | **架构设计.md 顶部 ADR-LEDGER** |
+| **所有文档编号（取号源）** | **[LEDGER.md](./LEDGER.md)**（PRD / ADR / TC / D / C 等全 series 统一台账，2026-06-01 立） |
+| ADR 详细元数据（决策摘要 / Alternatives） | 架构设计.md 顶部 ADR-LEDGER 段（号源已迁 LEDGER.md，本段保留作详细元数据） |
 | 架构决策正文 | 架构设计.md §9 |
 | PRD 索引与正文 | **PRD.md** |
 | 评审结论与 finding 跟踪 | PRD-review/INDEX.md |
