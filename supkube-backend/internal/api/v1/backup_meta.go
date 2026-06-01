@@ -4,25 +4,25 @@
 // Backup CR we return — answers the user's three v0.8.5-aftermath
 // questions:
 //
-//   1. "Is this full or incremental?"  → DataPath chip
-//   2. "How big is this backup?"        → SizeBytes (resource tarball) +
-//                                          VolumeBytes (declared PV capacity)
-//   3. "What's the compression ratio?"  → (deferred to v0.9; needs Kopia
-//                                          integration — see ADR-021)
+//  1. "Is this full or incremental?"  → DataPath chip
+//  2. "How big is this backup?"        → SizeBytes (resource tarball) +
+//     VolumeBytes (declared PV capacity)
+//  3. "What's the compression ratio?"  → (deferred to v0.9; needs Kopia
+//     integration — see ADR-021)
 //
 // We do NOT mutate the upstream velerov1.Backup struct. Instead we wrap:
 //
-//   {
-//     "metadata": { ... },          ← velerov1.Backup as-is
-//     "spec":     { ... },
-//     "status":   { ... },
-//     "supkube": {                  ← our enrichment
-//       "dataPath":      "csi-snapshot",
-//       "volumeCount":   2,
-//       "volumeBytes":   6442450944,
-//       "tarballBytes":  18432
-//     }
-//   }
+//	{
+//	  "metadata": { ... },          ← velerov1.Backup as-is
+//	  "spec":     { ... },
+//	  "status":   { ... },
+//	  "supkube": {                  ← our enrichment
+//	    "dataPath":      "csi-snapshot",
+//	    "volumeCount":   2,
+//	    "volumeBytes":   6442450944,
+//	    "tarballBytes":  18432
+//	  }
+//	}
 //
 // The wrap keeps every existing frontend `row.metadata.name` reference
 // working, and isolates our additions under a single `supkube` key —
@@ -142,11 +142,11 @@ const (
 //
 // Decision tree (first match wins):
 //
-//   spec.snapshotMoveData == true              → data-mover
-//   spec.defaultVolumesToFsBackup == true      → filesystem
-//   spec.snapshotVolumes == true && csiCount>0 → csi-snapshot
-//   spec.snapshotVolumes == true && csiCount=0 → metadata-only (declared CSI but nothing snapshotted)
-//   else                                       → metadata-only
+//	spec.snapshotMoveData == true              → data-mover
+//	spec.defaultVolumesToFsBackup == true      → filesystem
+//	spec.snapshotVolumes == true && csiCount>0 → csi-snapshot
+//	spec.snapshotVolumes == true && csiCount=0 → metadata-only (declared CSI but nothing snapshotted)
+//	else                                       → metadata-only
 //
 // Why we trust status over spec: a backup may declare CSI but if all
 // included PVs were on storage classes without snapshot support, no
@@ -191,9 +191,9 @@ func classifyDataPath(b *velerov1.Backup) string {
 //
 // Three CR types feed the totals because a backup can take three paths:
 //
-//   CSI snapshot only  → VolumeSnapshotContent  status.restoreSize
-//   Filesystem backup  → PodVolumeBackup        status.progress.totalBytes
-//   Data Mover         → DataUpload             status.progress.totalBytes
+//	CSI snapshot only  → VolumeSnapshotContent  status.restoreSize
+//	Filesystem backup  → PodVolumeBackup        status.progress.totalBytes
+//	Data Mover         → DataUpload             status.progress.totalBytes
 //
 // A backup uses exactly one path (we reject "both" in CreateBackup), so
 // the sums don't double-count. Mixing PVB + DU for example is impossible
@@ -429,8 +429,14 @@ func applicationItemsBatch(ctx context.Context, backups []velerov1.Backup) map[s
 // data shipped to Blob but UI said "0 bytes").
 //
 // Returns a map keyed by backup name → (count, bytes).
-func collectVolumeMetadataBatch(ctx context.Context, cl client.Client) map[string]struct{ Count int; Bytes int64 } {
-	result := map[string]struct{ Count int; Bytes int64 }{}
+func collectVolumeMetadataBatch(ctx context.Context, cl client.Client) map[string]struct {
+	Count int
+	Bytes int64
+} {
+	result := map[string]struct {
+		Count int
+		Bytes int64
+	}{}
 	add := func(name string, bytes int64) {
 		v := result[name]
 		v.Count++

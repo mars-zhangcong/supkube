@@ -16,20 +16,20 @@ import (
 
 // ResourceItem represents a generic K8S resource
 type ResourceItem struct {
-	Kind      string `json:"kind"`
-	Name      string `json:"name"`
-	Namespace string `json:"namespace,omitempty"`
-	Status    string `json:"status,omitempty"`
-	Ready     string `json:"ready,omitempty"`
-	Restarts  int32  `json:"restarts,omitempty"`
-	Age       string `json:"age,omitempty"`
-	Type      string `json:"type,omitempty"`
-	ClusterIP string `json:"clusterIP,omitempty"`
-	Ports     string `json:"ports,omitempty"`
-	Capacity  string `json:"capacity,omitempty"`
+	Kind         string `json:"kind"`
+	Name         string `json:"name"`
+	Namespace    string `json:"namespace,omitempty"`
+	Status       string `json:"status,omitempty"`
+	Ready        string `json:"ready,omitempty"`
+	Restarts     int32  `json:"restarts,omitempty"`
+	Age          string `json:"age,omitempty"`
+	Type         string `json:"type,omitempty"`
+	ClusterIP    string `json:"clusterIP,omitempty"`
+	Ports        string `json:"ports,omitempty"`
+	Capacity     string `json:"capacity,omitempty"`
 	StorageClass string `json:"storageClass,omitempty"`
-	UpToDate  int32  `json:"upToDate,omitempty"`
-	Available int32  `json:"available,omitempty"`
+	UpToDate     int32  `json:"upToDate,omitempty"`
+	Available    int32  `json:"available,omitempty"`
 }
 
 // ApplicationDetail represents detailed resource info for a namespace
@@ -222,16 +222,16 @@ type PVCCapability struct {
 }
 
 type NamespaceStorageCapability struct {
-	Namespace        string          `json:"namespace"`
-	PVCs             []PVCCapability `json:"pvcs"`
-	AllCSICapable    bool            `json:"allCSICapable"`
-	IncompatibleCount int            `json:"incompatibleCount"`
+	Namespace         string          `json:"namespace"`
+	PVCs              []PVCCapability `json:"pvcs"`
+	AllCSICapable     bool            `json:"allCSICapable"`
+	IncompatibleCount int             `json:"incompatibleCount"`
 }
 
 // GetNamespaceStorageCapability returns the CSI-snapshot capability per PVC
 // in the namespace. A SC is "CSI snapshot capable" iff:
-//   1. Its provisioner is in the CSIDriver list (i.e. it's a CSI driver), AND
-//   2. There exists a VolumeSnapshotClass whose .driver matches the provisioner
+//  1. Its provisioner is in the CSIDriver list (i.e. it's a CSI driver), AND
+//  2. There exists a VolumeSnapshotClass whose .driver matches the provisioner
 //
 // Non-CSI provisioners (like docker.io/hostpath) always fail the check. SCs
 // with no VSC available also fail (driver exists but snapshot not configured).

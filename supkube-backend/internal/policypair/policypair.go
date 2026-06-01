@@ -327,19 +327,19 @@ func firePeerOrMark(ctx context.Context, runtimeCli client.Client, k8sCli kubern
 // buildExportBackup constructs the export-half Backup CR from the export
 // Schedule's template. Naming + annotation strategy:
 //
-//   name = <policy>-export-<same-suffix-as-snapshot-half>
-//          The snapshot half is named <policy>-YYYYMMDDhhmmss (Velero's
-//          default for cron-fired backups). We mirror that suffix so the
-//          two halves are alphabetically adjacent and visually obvious as
-//          a pair. The "-export-" infix distinguishes from snapshot half.
+//	name = <policy>-export-<same-suffix-as-snapshot-half>
+//	       The snapshot half is named <policy>-YYYYMMDDhhmmss (Velero's
+//	       default for cron-fired backups). We mirror that suffix so the
+//	       two halves are alphabetically adjacent and visually obvious as
+//	       a pair. The "-export-" infix distinguishes from snapshot half.
 //
 // annotations:
 //
-//   policy-run-instant = snapshot-half's creationTimestamp (RFC3339).
-//      Frontend uses this as the unified "Created At" for both rows.
-//   dual-rp-paired     = snapshot-half's name (back-reference)
-//   triggered-by       = "dual-pair-controller" (audit trail)
-//   csi-vsc-retain-policy = "retain" (Plan-C upgrade preserve)
+//	policy-run-instant = snapshot-half's creationTimestamp (RFC3339).
+//	   Frontend uses this as the unified "Created At" for both rows.
+//	dual-rp-paired     = snapshot-half's name (back-reference)
+//	triggered-by       = "dual-pair-controller" (audit trail)
+//	csi-vsc-retain-policy = "retain" (Plan-C upgrade preserve)
 //
 // labels mirror the export Schedule's labels so the Backup shows up
 // in PolicyAggregate's list-by-label query and the Activity feed.

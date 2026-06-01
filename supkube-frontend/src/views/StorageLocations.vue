@@ -298,11 +298,13 @@
           <!-- v0.9.1.5: same dynamic-label pattern as Azure section.
                When editIdentityDirty (bucket/region/endpoint changed),
                credentials are required and label reflects it. -->
-          <el-form-item :label="editIdentityDirty ? 'Access Key (REQUIRED — bucket changed)' : 'Update Access Key (optional)'">
+          <el-form-item :label="editIdentityDirty ? 'Access Key ID (REQUIRED — bucket changed)' : 'Update Access Key ID (optional)'">
             <el-input v-model="editForm.accessKey" :placeholder="editIdentityDirty ? 'Required — new credentials' : 'Leave empty to keep existing'" />
+            <span class="form-hint">Cloud IAM <strong>Access Key ID</strong> (e.g. AWS <code>AKIA...</code>, Alibaba <code>LTAI...</code>). <em>Not</em> a Kubernetes Secret name.</span>
           </el-form-item>
-          <el-form-item :label="editIdentityDirty ? 'Secret Key (REQUIRED — bucket changed)' : 'Update Secret Key (optional)'">
+          <el-form-item :label="editIdentityDirty ? 'Secret Access Key (REQUIRED — bucket changed)' : 'Update Secret Access Key (optional)'">
             <el-input v-model="editForm.secretKey" type="password" :placeholder="editIdentityDirty ? 'Required — new credentials' : 'Leave empty to keep existing'" show-password />
+            <span class="form-hint">The <strong>Secret Access Key</strong> that pairs with the Access Key ID above. Write-once: cloud providers can't re-read it after creation.</span>
           </el-form-item>
         </template>
 
@@ -409,11 +411,13 @@
             <el-switch v-model="createForm.s3ForcePathStyle" />
             <span style="margin-left: 8px; color: #999; font-size: 12px">Enable for MinIO / SupVault</span>
           </el-form-item>
-          <el-form-item label="Access Key">
-            <el-input v-model="createForm.accessKey" placeholder="Access Key ID" />
+          <el-form-item label="Access Key ID">
+            <el-input v-model="createForm.accessKey" placeholder="e.g. AKIA... (AWS) / LTAI... (Alibaba) / minio root user" />
+            <span class="form-hint">Cloud IAM <strong>Access Key ID</strong>. <em>Not</em> a Kubernetes Secret name — SupKube creates the K8s Secret for you.</span>
           </el-form-item>
-          <el-form-item label="Secret Key">
-            <el-input v-model="createForm.secretKey" type="password" placeholder="Secret Access Key" show-password />
+          <el-form-item label="Secret Access Key">
+            <el-input v-model="createForm.secretKey" type="password" placeholder="Secret Access Key (write-once)" show-password />
+            <span class="form-hint">The <strong>Secret Access Key</strong> that pairs with the Access Key ID above. Write-once: cloud providers can't re-read it after creation.</span>
           </el-form-item>
         </template>
 

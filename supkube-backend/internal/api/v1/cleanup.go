@@ -2,9 +2,9 @@
 //
 // Endpoints mounted under /api/v1:
 //
-//   GET  /settings/cleanup            — read current GC settings + last run
-//   PUT  /settings/cleanup            — admin: update settings
-//   POST /admin/cleanup/orphans       — admin: trigger immediate scan
+//	GET  /settings/cleanup            — read current GC settings + last run
+//	PUT  /settings/cleanup            — admin: update settings
+//	POST /admin/cleanup/orphans       — admin: trigger immediate scan
 //
 // All three endpoints are admin-only; RBAC enforcement lives in
 // internal/auth/rbac.go (added in the same release).
@@ -26,20 +26,20 @@ import (
 // the Settings UI can render a "Last run: X minutes ago, deleted Y" line
 // without a second request.
 type settingsResponse struct {
-	Enabled       bool             `json:"enabled"`
-	IntervalHours int              `json:"intervalHours"`
-	LastRun       *lastRunPayload  `json:"lastRun,omitempty"`
+	Enabled       bool            `json:"enabled"`
+	IntervalHours int             `json:"intervalHours"`
+	LastRun       *lastRunPayload `json:"lastRun,omitempty"`
 }
 
 type lastRunPayload struct {
-	StartedAt   time.Time `json:"startedAt"`
-	FinishedAt  time.Time `json:"finishedAt"`
-	Summary     string    `json:"summary"`
-	VSCDeleted  int       `json:"vscDeleted"`
-	VSDeleted   int       `json:"vsDeleted"`
-	PVBDeleted  int       `json:"pvbDeleted"`
-	DUDeleted   int       `json:"dataUploadDeleted"`
-	Err         string    `json:"error,omitempty"`
+	StartedAt  time.Time `json:"startedAt"`
+	FinishedAt time.Time `json:"finishedAt"`
+	Summary    string    `json:"summary"`
+	VSCDeleted int       `json:"vscDeleted"`
+	VSDeleted  int       `json:"vsDeleted"`
+	PVBDeleted int       `json:"pvbDeleted"`
+	DUDeleted  int       `json:"dataUploadDeleted"`
+	Err        string    `json:"error,omitempty"`
 }
 
 // scanResultToPayload converts the gc package's internal result type

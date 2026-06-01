@@ -1,0 +1,10 @@
+
+BSL: default
+  bucket  : velero
+
+BSL: myazureblob
+  bucket  : velero-dr
+string.
+
+BSL: supvault
+  bucket  : donglaili-mars-filesight-backup-bucket

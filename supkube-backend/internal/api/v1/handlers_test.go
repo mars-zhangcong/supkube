@@ -9,11 +9,23 @@ import (
 
 	"github.com/gin-gonic/gin"
 	v1 "github.com/supkube/supkube-backend/internal/api/v1"
+	"github.com/supkube/supkube-backend/internal/auth"
+	"github.com/supkube/supkube-backend/internal/version"
 )
 
 func setupRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
+
+	// In production these handlers sit behind the auth middleware, which
+	// populates the context with the authenticated user. The handlers' RBAC
+	// checks (auth.RequireNamespaceAccess) abort with 401 when no user is
+	// present, so we inject an admin here to exercise the handler logic
+	// itself rather than re-testing the auth gate (which has its own tests).
+	r.Use(func(c *gin.Context) {
+		c.Set("user", &auth.User{Subject: "test", Username: "test", Role: auth.RoleAdmin})
+		c.Next()
+	})
 
 	api := r.Group("/api/v1")
 	{
@@ -52,8 +64,11 @@ func TestGetStatus(t *testing.T) {
 	if resp["status"] != "ok" {
 		t.Errorf("expected status 'ok', got '%v'", resp["status"])
 	}
-	if resp["version"] != "0.1.0" {
-		t.Errorf("expected version '0.1.0', got '%v'", resp["version"])
+	// version.Version is "dev" unless overridden via -ldflags at build time
+	// (the Dockerfile injects the real release). Assert the handler is wired
+	// to the version package rather than hardcoding a literal that goes stale.
+	if resp["version"] != version.Version {
+		t.Errorf("expected version '%s' (version.Version), got '%v'", version.Version, resp["version"])
 	}
 }
 

@@ -81,14 +81,15 @@ type LocalStoreStatus struct {
 // GetLocalStoreStatus is GET /api/v1/local-store/status.
 //
 // Reads three sources and folds them into one response:
-//   1. Velero BSL "supkube-local-store" — bucket, endpoint, phase, message
-//   2. SupKube Deployment "supkube-local-store" — readiness
-//   3. PVC "supkube-local-store-data" — capacity
+//  1. Velero BSL "supkube-local-store" — bucket, endpoint, phase, message
+//  2. SupKube Deployment "supkube-local-store" — readiness
+//  3. PVC "supkube-local-store-data" — capacity
 //
 // All three sources can be absent independently:
 //   - BSL missing  → localStore.enabled was false at helm time
 //   - Deploy ready, BSL missing → admin manually deleted the BSL
 //   - Deploy missing, BSL present → admin manually scaled down
+//
 // We treat (BSL missing) as the canonical "not enabled" signal because
 // that's what the Helm chart guards on.
 func GetLocalStoreStatus(c *gin.Context) {

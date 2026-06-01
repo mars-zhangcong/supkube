@@ -7,9 +7,9 @@
 //
 // Settings ConfigMap shape (cm: supkube-settings in supkube namespace):
 //
-//   data:
-//     cleanup.enabled:        "true"  | "false"   (default true)
-//     cleanup.intervalHours:  "6"                  (default 6)
+//	data:
+//	  cleanup.enabled:        "true"  | "false"   (default true)
+//	  cleanup.intervalHours:  "6"                  (default 6)
 //
 // Activity events: every scan that finds OR deletes anything writes a
 // K8s Event in the supkube ns with reportingController=supkube.io/gc.
@@ -34,9 +34,9 @@ import (
 )
 
 const (
-	settingsConfigMap   = "supkube-settings"
-	settingsNamespace   = "supkube"
-	defaultIntervalHrs  = 6
+	settingsConfigMap  = "supkube-settings"
+	settingsNamespace  = "supkube"
+	defaultIntervalHrs = 6
 )
 
 // Settings is the parsed view of the ConfigMap. Always returns sensible
@@ -173,7 +173,7 @@ func emitEvent(ctx context.Context, k8sCli kubernetes.Interface, r ScanResult, t
 			GenerateName: "orphan-gc-",
 			Namespace:    settingsNamespace,
 			Labels: map[string]string{
-				"supkube.io/activity":  "true",  // ← Activity page picks this up
+				"supkube.io/activity":  "true", // ← Activity page picks this up
 				"supkube.io/component": "gc",
 				"supkube.io/trigger":   trigger, // periodic | manual | post-delete
 			},
@@ -227,4 +227,3 @@ func TriggerSoon(ctx context.Context, cl client.Client, k8sCli kubernetes.Interf
 		emitEvent(bg, k8sCli, r, "post-delete")
 	})
 }
-

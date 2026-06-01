@@ -68,22 +68,11 @@
         <template #label>
           <span class="obs-tab-label">
             <el-icon><Monitor /></el-icon> {{ t('observability.tabs.logs') }}
-            <el-tag size="small" type="warning" effect="plain" style="margin-left: 6px">v0.8.14</el-tag>
           </span>
         </template>
-        <!-- Placeholder until v0.8.14 Log Viewer ships. Customer sees
-             where it'll live + the value prop ahead of time. -->
-        <div class="obs-coming-soon">
-          <el-icon class="obs-cs-icon"><Monitor /></el-icon>
-          <h3>{{ t('observability.logViewer.comingTitle') }}</h3>
-          <p>{{ t('observability.logViewer.comingBody') }}</p>
-          <ul>
-            <li>{{ t('observability.logViewer.bullet1') }}</li>
-            <li>{{ t('observability.logViewer.bullet2') }}</li>
-            <li>{{ t('observability.logViewer.bullet3') }}</li>
-            <li>{{ t('observability.logViewer.bullet4') }}</li>
-          </ul>
-        </div>
+        <!-- v0.9.x #79: real Log Viewer (shipped). The placeholder card
+             that lived here is gone — see git history if you need it. -->
+        <LogViewer v-if="activeTab === 'logs'" />
       </el-tab-pane>
     </el-tabs>
   </div>
@@ -101,6 +90,7 @@ import { DataLine, MagicStick, Document, Monitor } from '@element-plus/icons-vue
 const ActivityView      = defineAsyncComponent(() => import('./Activity.vue'))
 const BackupAdvisorView = defineAsyncComponent(() => import('./BackupAdvisor.vue'))
 const AuditLogPanel     = defineAsyncComponent(() => import('../components/AuditLogPanel.vue'))
+const LogViewer         = defineAsyncComponent(() => import('../components/LogViewer.vue'))
 
 const { t } = useI18n()
 const route = useRoute()

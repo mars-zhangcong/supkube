@@ -1,0 +1,55 @@
+apiVersion: velero.io/v1
+kind: Backup
+metadata:
+  annotations:
+    supkube.io/dual-rp-paired: tc-pol-007-20260528055927
+    supkube.io/policy-run-instant: "2026-05-28T05:59:27Z"
+    supkube.io/triggered-by: dual-pair-controller
+    velero.io/csi-volumesnapshot-content-retain-policy: retain
+    velero.io/resource-timeout: 10m0s
+    velero.io/source-cluster-k8s-gitversion: v1.32.2
+    velero.io/source-cluster-k8s-major-version: "1"
+    velero.io/source-cluster-k8s-minor-version: "32"
+  creationTimestamp: "2026-05-28T05:59:44Z"
+  generation: 12
+  labels:
+    supkube.io/policy-name: tc-pol-007
+    supkube.io/policy-role: export
+    velero.io/schedule-name: tc-pol-007-export
+    velero.io/storage-location: myazureblob
+  name: tc-pol-007-export-20260528055927
+  namespace: velero
+  resourceVersion: "2549272"
+  uid: e77d56a6-fc3b-4851-964b-e903590110a4
+spec:
+  csiSnapshotTimeout: 10m0s
+  defaultVolumesToFsBackup: false
+  excludedClusterScopedResources:
+  - volumesnapshotcontents.snapshot.storage.k8s.io
+  excludedNamespaceScopedResources:
+  - volumesnapshots.snapshot.storage.k8s.io
+  hooks: {}
+  includedNamespaces:
+  - test-app
+  itemOperationTimeout: 4h0m0s
+  metadata: {}
+  snapshotMoveData: true
+  snapshotVolumes: true
+  storageLocation: myazureblob
+  ttl: 72h0m0s
+  volumeGroupSnapshotLabelKey: velero.io/volume-group
+  volumeSnapshotLocations:
+  - csi-default
+status:
+  backupItemOperationsAttempted: 2
+  backupItemOperationsCompleted: 2
+  completionTimestamp: "2026-05-28T06:01:43Z"
+  expiration: "2026-05-31T05:59:44Z"
+  formatVersion: 1.1.0
+  hookStatus: {}
+  phase: Completed
+  progress:
+    itemsBackedUp: 26
+    totalItems: 26
+  startTimestamp: "2026-05-28T05:59:44Z"
+  version: 1

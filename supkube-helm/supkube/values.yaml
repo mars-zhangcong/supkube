@@ -28,6 +28,26 @@ eula:
 # DR/multi-cluster/audit features.
 license:
   key: ""
+# v0.9.1.13 — Fingerprint shared secret for cross-cluster ImportPolicy trust.
+#
+# Used to HMAC-sign Velero Backup CRs as they cross cluster boundaries (a
+# cluster pulling RPs in via an ImportPolicy verifies the signature before
+# accepting). 32-byte base64-encoded value.
+#
+# Behavior:
+#   Empty (default) → helm generates a random secret on first install and
+#     KEEPS the same value across upgrades (template uses `lookup` to
+#     preserve it). Suitable for SINGLE-CLUSTER trust only — peer clusters
+#     would generate different secrets and never trust each other.
+#
+#   Set on every cluster → cross-cluster trust works. The SAME base64 value
+#     must be installed on every participating cluster:
+#       echo -n "$(openssl rand -base64 32)" > /tmp/sk-secret
+#       helm install supkube ... \
+#         --set fingerprint.sharedSecret="$(cat /tmp/sk-secret)"
+#     Repeat the --set on every cluster you want to mutually trust.
+fingerprint:
+  sharedSecret: ""
 # v0.8.14 LV8 — AirGapped install support (Kasten-style global.airgapped.repository).
 #
 # When customer's cluster can't reach public registries (Azure ACR / Docker
@@ -175,6 +195,15 @@ velero:
   # but is slower and misses CSI-aware semantics.
   configuration:
     features: EnableCSI
+    # v0.9.1.13 (Mars 2026-06-01 RPO clarification): we keep this at Velero
+    # default (60s). ImportPolicy CRD (supkube.io/v1) adds a fingerprint +
+    # source-cluster filter layer on top; Agent G (v0.9.1.13.1) added direct
+    # S3 polling so ImportPolicy can drive the effective sync rate down to
+    # 30s/60s without depending on Velero's period. Velero's native sync
+    # stays at 60s as a safety net — if SupKube ImportPolicy controller
+    # crashes, Velero still surfaces RPs (without fingerprint metadata).
+    # NOTE: setting this longer than 60s slows down RP visibility for BSLs
+    # NOT managed by an ImportPolicy (e.g. customer's hand-added BSL).
     backupSyncPeriod: 60s
     fsBackupTimeout: 4h
     # Default BSL. Customers add Cloud BSLs via the UI later; this block
@@ -182,22 +211,27 @@ velero:
     # default BSL with bogus credentials.
     backupStorageLocation: []
     volumeSnapshotLocation: []
-  # Plugins. Includes CSI (always), AWS (S3-compatible), Azure (Blob).
-  # GCP plugin is a v0.9 add — we don't preload it because the image is
-  # large and most customers don't need it.
+  # Plugins. AWS (S3-compatible) + Azure (Blob). GCP plugin is a v0.9 add —
+  # we don't preload it because the image is large and most customers don't
+  # need it.
+  #
+  # ⚠️ NO velero-plugin-for-csi here on purpose (v0.9.1.10, #102):
+  # Velero v1.14+ has the CSI plugin BUILT IN. Loading the standalone
+  # velero-plugin-for-csi alongside v1.18 causes a DUPLICATE controller
+  # registration → velero pod CrashLoopBackOff. (Hit this during the
+  # 2026-05-28 AKS demo.) CSI snapshots work out of the box via the
+  # EnableCSI feature flag in `configuration.features` below.
+  #
+  # Plugin versions track Velero ~4 minors behind: velero v1.18 → plugin
+  # v1.14.1 (verified against upstream release notes 2026-05-19).
   initContainers:
-    - name: velero-plugin-for-csi
-      image: velero/velero-plugin-for-csi:v0.7.0
-      volumeMounts:
-        - mountPath: /target
-          name: plugins
     - name: velero-plugin-for-aws
-      image: velero/velero-plugin-for-aws:v1.10.0
+      image: velero/velero-plugin-for-aws:v1.14.1
       volumeMounts:
         - mountPath: /target
           name: plugins
     - name: velero-plugin-for-microsoft-azure
-      image: velero/velero-plugin-for-microsoft-azure:v1.10.0
+      image: velero/velero-plugin-for-microsoft-azure:v1.14.1
       volumeMounts:
         - mountPath: /target
           name: plugins

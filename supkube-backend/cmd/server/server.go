@@ -3,14 +3,21 @@ package server
 import (
 	"context"
 	"log"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	v1 "github.com/supkube/supkube-backend/internal/api/v1"
 	"github.com/supkube/supkube-backend/internal/auth"
-	"github.com/supkube/supkube-backend/internal/gc"
-	"github.com/supkube/supkube-backend/internal/k8s"
 	"github.com/supkube/supkube-backend/internal/clusterhealth"
+	"github.com/supkube/supkube-backend/internal/csi"
+	"github.com/supkube/supkube-backend/internal/fingerprint"
+	"github.com/supkube/supkube-backend/internal/gc"
+	"github.com/supkube/supkube-backend/internal/importpolicy"
+	"github.com/supkube/supkube-backend/internal/k8s"
 	"github.com/supkube/supkube-backend/internal/policypair"
+	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 func Run() error {
@@ -78,6 +85,131 @@ func Run() error {
 		clusterhealth.Run(context.Background(), dynCli, k8sCli)
 	}()
 
+	// v0.9.x #84: CSI auto-config controller. On startup (and every 10
+	// min thereafter) walks installed CSIDrivers and creates a Velero-
+	// tagged VolumeSnapshotClass for each known driver that doesn't
+	// already have one. Fixes the #1 demo-blocker: Backup completes
+	// "successfully" but with no PV data because no VSC was wired up.
+	// See internal/csi/autoconfig.go for the known-driver table + the
+	// "we don't override user-installed VSCs" rule.
+	go func() {
+		k8sCli, err := k8s.GetClient()
+		if err != nil {
+			log.Printf("[csi-autoconfig] kubernetes client unavailable; auto-config disabled: %v", err)
+			return
+		}
+		dynCli, err := k8s.GetDynamicClient()
+		if err != nil {
+			log.Printf("[csi-autoconfig] dynamic client unavailable; auto-config disabled: %v", err)
+			return
+		}
+		csi.Run(context.Background(), k8sCli, dynCli, 10*time.Minute)
+	}()
+
+	// PRD-007 §4.4 ImportPolicy fingerprint — source-side signer + dest-
+	// side verifier + truststore. Source: ticker scans Velero Backups
+	// every 30s, stamps a .supkube-fingerprint.json into BSL alongside
+	// each Completed backup. Dest: ImportPolicy controller (Agent B)
+	// calls Validator before any import. Truststore + SecretLoader are
+	// shared. Failure to boot any one of these does NOT abort the whole
+	// server — fingerprint enforcement degrades gracefully to "missing"
+	// which the Validator then treats per the ImportPolicy mode.
+	go func() {
+		k8sCli, err := k8s.GetClient()
+		if err != nil {
+			log.Printf("[fingerprint] kubernetes client unavailable; fingerprint pipeline disabled: %v", err)
+			return
+		}
+		runtimeCli, err := k8s.GetRuntimeClient()
+		if err != nil {
+			log.Printf("[fingerprint] runtime client unavailable; fingerprint pipeline disabled: %v", err)
+			return
+		}
+		clusterID, clusterName := fingerprint.ResolveClusterIdentity(context.Background(), k8sCli)
+		if clusterID == "" {
+			log.Printf("[fingerprint] could not resolve source cluster ID (kube-system UID); writer disabled, validator still available")
+		} else {
+			log.Printf("[fingerprint] source cluster: %s (%s)", clusterName, clusterID)
+		}
+		secretLoader := fingerprint.NewK8sSecretLoader(k8sCli)
+		bslCli := fingerprint.NewBSLClient(runtimeCli)
+		writer := fingerprint.NewWriter(bslCli, secretLoader, clusterID, clusterName)
+		// Validator + TrustStore are constructed here and made available
+		// to the v1 API package via package-level setters (so the
+		// ImportPolicy controller / handlers can pick them up without
+		// reaching back into cmd/server).
+		validator := fingerprint.NewValidator(bslCli, secretLoader)
+		trustStore := fingerprint.NewTrustStore(k8sCli)
+		v1.SetFingerprintDeps(validator, trustStore)
+		if clusterID != "" {
+			fingerprint.NewRunner(writer, runtimeCli).Run(context.Background())
+		} else {
+			// Block forever; validator side still works via SetFingerprintDeps.
+			<-context.Background().Done()
+		}
+	}()
+
+	// PRD-007 §4.4 ImportPolicy controller (Agent B). Per-CR goroutine
+	// drives Continuous/Scheduled sync of BSL tarballs → Velero Backup
+	// CR in this cluster. Wires:
+	//   - BackupLister  → list BSL backups (v1: query Velero CR by storageLocation)
+	//   - BackupImporter→ create/patch Velero Backup CR with import labels
+	//   - Validator     → fingerprint validator (Agent C), via adapter
+	//   - bslExists     → handler-side BSL existence check (POST/PUT validation)
+	go func() {
+		runtimeCli, err := k8s.GetRuntimeClient()
+		if err != nil {
+			log.Printf("[importpolicy] runtime client unavailable; controller disabled: %v", err)
+			return
+		}
+		dynCli, err := k8s.GetDynamicClient()
+		if err != nil {
+			log.Printf("[importpolicy] dynamic client unavailable; controller disabled: %v", err)
+			return
+		}
+		k8sCli, err := k8s.GetClient()
+		if err != nil {
+			log.Printf("[importpolicy] kubernetes client unavailable; controller disabled: %v", err)
+			return
+		}
+		// sprint 2026-06-01 Agent G: 替换 lister/importer 为真 S3-driven 实现.
+		// 旧的 NewVeleroBackupLister/Importer 仍 exported 作为回退 (见函数注释
+		// 的 deprecation 标记), 出 S3 polling 问题时一行可换回去.
+		// 真正驱动 RPO 的是这个: 我们自己 LIST BSL, 不再受 Velero
+		// backupSyncPeriod (60-90s) 限制.
+		bslCli := fingerprint.NewBSLClient(runtimeCli)
+		// dedupe 用旧 veleroBackupLister wrap — 它查 Velero CR ns 内已有的
+		// Backup, 是 "race-safe" 的兜底.
+		dedupeSource := importpolicy.NewVeleroBackupLister(runtimeCli)
+		lister := importpolicy.NewS3BackupLister(bslCli, dedupeSource)
+		importer := importpolicy.NewS3BackupImporter(bslCli, runtimeCli)
+		validator := &fingerprintAdapter{inner: fingerprint.NewValidator(
+			fingerprint.NewBSLClient(runtimeCli),
+			fingerprint.NewK8sSecretLoader(k8sCli),
+		)}
+		bslCheck := func(ctx context.Context, name string) (bool, error) {
+			bsl := &velerov1.BackupStorageLocation{}
+			err := runtimeCli.Get(ctx, types.NamespacedName{Namespace: "velero", Name: name}, bsl)
+			switch {
+			case err == nil:
+				return true, nil
+			case apierrors.IsNotFound(err):
+				return false, nil
+			default:
+				return false, err
+			}
+		}
+		ctrl := &importpolicy.Controller{
+			DynCli:    dynCli,
+			Lister:    lister,
+			Importer:  importer,
+			Validator: validator,
+		}
+		importpolicy.RegisterController(ctrl, dynCli, bslCheck)
+		log.Printf("[importpolicy] controller started")
+		ctrl.Run(context.Background())
+	}()
+
 	// v0.8.5: Authentication. AuthCfg holds the OIDC verifier + OAuth2
 	// client; the actual discovery doc fetch is lazy (first request)
 	// so backend boot doesn't depend on Dex being ready.
@@ -136,6 +268,16 @@ func Run() error {
 		api.GET("/applications", v1.ListApplications)
 		api.GET("/applications/:namespace/details", v1.GetApplicationDetails)
 		api.GET("/applications/:namespace/storage-capability", v1.GetNamespaceStorageCapability)
+		// v0.9.x #84: status of the CSI auto-config controller. UI uses this
+		// to show "X VSCs auto-created, Y drivers unknown" on Settings →
+		// Storage tab. Read-only, viewer role is fine.
+		api.GET("/storage/csi-autoconfig", v1.GetCSIAutoConfigStatus)
+
+		// v0.9.x #79: Log Viewer — kills the "open a kubectl shell to see
+		// what broke" loop. See internal/api/v1/logs.go for the scope of
+		// v1 (read-only, 5s client poll, no live tail framework).
+		api.GET("/logs/components", v1.GetLogComponents)
+		api.GET("/logs", v1.GetLogs)
 		// v0.8.9.2: one-click Snapshot button on the Applications page.
 		// Distinct from POST /backups because it has zero config — pure
 		// cluster-local CSI snapshot with hard-coded sensible defaults.
@@ -170,6 +312,11 @@ func Run() error {
 		// every item in the breakdown response.
 		api.GET("/resources/yaml", v1.GetResourceYAML)
 		api.DELETE("/backups/:name", v1.DeleteBackup)
+		// v0.9.x #68: emergency escape for a Backup CR whose finalizer is
+		// wedged or whose DBR cascade has stalled. Strips finalizers +
+		// direct-delete + schedules orphan GC. See ForceDeleteBackup doc
+		// for what's bypassed vs. the normal DELETE path.
+		api.POST("/backups/:name/force-delete", v1.ForceDeleteBackup)
 
 		// Restores
 		api.GET("/restores", v1.ListRestores)
@@ -193,6 +340,14 @@ func Run() error {
 		api.GET("/transform-sets/:name", v1.GetTransformSet)
 		api.PUT("/transform-sets/:name", v1.UpdateTransformSet)
 		api.DELETE("/transform-sets/:name", v1.DeleteTransformSet)
+		// PRD-002 v1.3: atomic Transform CRUD (the layer below TransformSet).
+		// TransformSets reference Transforms by name; deleting a Transform
+		// that any TransformSet still references is refused with 409.
+		api.GET("/transforms", v1.ListTransforms)
+		api.POST("/transforms", v1.CreateTransform)
+		api.GET("/transforms/:name", v1.GetTransform)
+		api.PUT("/transforms/:name", v1.UpdateTransform)
+		api.DELETE("/transforms/:name", v1.DeleteTransform)
 		// v0.8.3: batched "Apply Suggested Fix" from Pre-flight. Frontend
 		// sends the FULL list of currently-applied fixes every time so the
 		// backend can merge into a single consolidated Transform Set
@@ -200,6 +355,13 @@ func Run() error {
 		// ConfigMap name is stable per restoreName so re-clicks update
 		// in place.
 		api.POST("/transform-sets/apply-conflict-fixes", v1.ApplyConflictFixes)
+		// PRD-002 v1.3 §4.3 (T1): dry-run preview of the compiled Velero
+		// resourceModifierRef CM for a given TransformSet + params combo.
+		// Doesn't create any CM — just returns the effective rules.yaml,
+		// the derived CM name, and the hash. Used by RestoreDrawer to let
+		// the user audit "what will actually be applied" before they
+		// trigger the Restore. Viewer-role (read-only computation).
+		api.POST("/transform-sets/:name/preview-resolution", v1.PreviewTransformSetResolution)
 
 		// Schedules
 		api.GET("/schedules", v1.ListSchedules)
@@ -257,7 +419,57 @@ func Run() error {
 		// v0.9.0.2 MCM Dashboard aggregator. Backend parallel fan-out
 		// + 5s timeout per remote; one round-trip for the SPA.
 		api.GET("/multicluster/summary", v1.GetMultiClusterSummary)
+
+		// PRD-007 §4.3 Layer 4 Backup Copy (#111). Phase 1: Preflight only
+		// (returns the {eligible, rejected} split with ERR_LAYER4_SNAPSHOT_UNSUPPORTED
+		// for CSI-snapshot-only backups whose volume data lives in the cloud
+		// provider's regional snapshot store, not the BSL). Phase 2 will
+		// implement the actual rclone-driven Transfer; for now POST /backup-copy
+		// returns 501. RBAC: Preflight = Editor, Transfer = Admin.
+		api.POST("/backup-copy/preflight", v1.BackupCopyPreflight)
+		api.POST("/backup-copy", v1.CreateBackupCopy)
+
+		// PRD-007 §4.4 Import Policy (Agent B). REST + RBAC entries
+		// (RBAC table extended via auth.RegisterPermissions inside
+		// RegisterRoutes — keeps importpolicy's permission rules
+		// co-located with handlers).
+		importpolicy.RegisterRoutes(api)
 	}
 
 	return r.Run(":8080")
+}
+
+// fingerprintAdapter bridges internal/fingerprint's Validator (Agent C)
+// to importpolicy's smaller Validator interface (Agent B). The two
+// FingerprintResult types differ in shape (fingerprint pkg carries the
+// full *Fingerprint pointer; importpolicy only needs status + cluster
+// id/name + reason for label + status updates). The adapter performs the
+// shape conversion plus normalises the status enum strings.
+type fingerprintAdapter struct {
+	inner fingerprint.Validator
+}
+
+func (a *fingerprintAdapter) ValidateBackup(ctx context.Context, bsl, name string, mode importpolicy.FingerprintMode) (*importpolicy.FingerprintResult, error) {
+	res, err := a.inner.ValidateBackup(ctx, bsl, name, fingerprint.FingerprintMode(mode))
+	if err != nil {
+		return nil, err
+	}
+	out := &importpolicy.FingerprintResult{
+		Status: string(res.Status),
+		Reason: res.Reason,
+	}
+	if res.Fingerprint != nil {
+		out.SourceClusterID = res.Fingerprint.SourceClusterID
+		out.SourceClusterName = res.Fingerprint.SourceClusterName
+	}
+	// importpolicy expects "valid"/"missing"/"invalid"; fingerprint pkg
+	// adds "hmac-invalid"/"tampered" — collapse them to "invalid" for the
+	// label so the SPA doesn't have to know about every sub-variant.
+	switch out.Status {
+	case "hmac-invalid", "tampered":
+		out.Status = "invalid"
+	case "disabled":
+		out.Status = "valid"
+	}
+	return out, nil
 }

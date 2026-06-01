@@ -1,8 +1,8 @@
 // Package version exposes the build-time version + stamp so /status can
 // return them. Set via -ldflags at build time:
 //
-//   go build -ldflags "-X github.com/supkube/supkube-backend/internal/version.Version=0.8.5-alpha-step6 \
-//                      -X github.com/supkube/supkube-backend/internal/version.BuildStamp=260522-2310" .
+//	go build -ldflags "-X github.com/supkube/supkube-backend/internal/version.Version=0.8.5-alpha-step6 \
+//	                   -X github.com/supkube/supkube-backend/internal/version.BuildStamp=260522-2310" .
 //
 // The Dockerfile does this automatically using a CACHEBUST arg → timestamp.
 // Falling back to "dev" / "local" when ldflags weren't passed keeps `go run`

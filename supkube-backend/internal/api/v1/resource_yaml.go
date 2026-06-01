@@ -46,11 +46,11 @@ var kindToGVR = map[string]schema.GroupVersionResource{
 	"ConfigMap": {Group: "", Version: "v1", Resource: "configmaps"},
 	"Secret":    {Group: "", Version: "v1", Resource: "secrets"},
 	// Networking
-	"Service":        {Group: "", Version: "v1", Resource: "services"},
-	"Endpoints":      {Group: "", Version: "v1", Resource: "endpoints"},
-	"EndpointSlice":  {Group: "discovery.k8s.io", Version: "v1", Resource: "endpointslices"},
-	"Ingress":        {Group: "networking.k8s.io", Version: "v1", Resource: "ingresses"},
-	"NetworkPolicy":  {Group: "networking.k8s.io", Version: "v1", Resource: "networkpolicies"},
+	"Service":       {Group: "", Version: "v1", Resource: "services"},
+	"Endpoints":     {Group: "", Version: "v1", Resource: "endpoints"},
+	"EndpointSlice": {Group: "discovery.k8s.io", Version: "v1", Resource: "endpointslices"},
+	"Ingress":       {Group: "networking.k8s.io", Version: "v1", Resource: "ingresses"},
+	"NetworkPolicy": {Group: "networking.k8s.io", Version: "v1", Resource: "networkpolicies"},
 	// Storage
 	"PersistentVolumeClaim": {Group: "", Version: "v1", Resource: "persistentvolumeclaims"},
 	// RBAC

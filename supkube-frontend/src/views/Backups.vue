@@ -233,6 +233,7 @@
                   <el-dropdown-item command="restore">{{ t('common.restore') }}</el-dropdown-item>
                   <el-dropdown-item command="export" disabled :title="t('common.comingSoon')">{{ t('common.export') }}</el-dropdown-item>
                   <el-dropdown-item command="delete" divided>{{ t('common.delete') }}</el-dropdown-item>
+                  <el-dropdown-item command="force-delete" style="color: var(--el-color-danger);">{{ t('restorePoints.forceDelete') || 'Force Delete (stuck)' }}</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
@@ -277,7 +278,19 @@
           <el-input v-model="createForm.ttl" placeholder="720h (30 days)" />
         </el-form-item>
         <el-form-item label="Storage Location (Profile)">
-          <el-input v-model="createForm.storageLocation" placeholder="default" />
+          <!-- v0.9.1.10 (#107): real BSL picker. "Auto" ('') lets the backend
+               resolve the effective BSL so the backup never fails with
+               "BSL default not found" on clusters whose BSL isn't named
+               "default" (e.g. AKS azure-blob). -->
+          <el-select v-model="createForm.storageLocation" style="width:100%" placeholder="Auto (use default storage location)">
+            <el-option label="Auto (use default storage location)" value="" />
+            <el-option
+              v-for="bsl in storageLocations"
+              :key="bsl.metadata.name"
+              :label="bsl.metadata.name + (bsl.spec?.default ? '  ★ default' : '')"
+              :value="bsl.metadata.name"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item label="Include Volumes">
           <el-switch v-model="createForm.snapshotVolumes" />
@@ -335,7 +348,7 @@ const viewingHtml = computed(() =>
   })
 )
 import { Plus, Search, Box, Monitor, MagicStick } from '@element-plus/icons-vue'
-import { getBackups, createBackup, deleteBackup, getNamespaces, getAction } from '../api/velero'
+import { getBackups, createBackup, deleteBackup, forceDeleteBackup, getNamespaces, getAction, getStorageLocations } from '../api/velero'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { normalizePhase, phaseTagType } from '../utils/phase'
 import RestoreDrawer from '../components/RestoreDrawer.vue'
@@ -373,6 +386,8 @@ const selectedRows = ref([])
 // flows in via :backup so the drawer can read includedNamespaces, name, etc.
 const restoreDrawerOpen = ref(false)
 const restoreTarget = ref(null)
+// v0.9.1.10 (#107): available BackupStorageLocations for the create dialog picker.
+const storageLocations = ref([])
 
 let pollTimer = null
 
@@ -382,7 +397,12 @@ const createForm = ref({
   excludedNamespaces: [],
   labelSelectorStr: '',
   ttl: '720h',
-  storageLocation: 'default',
+  // v0.9.1.10 (#107): default to '' = "Auto". Previously hardcoded to
+  // 'default', which the backend forwarded literally → Velero looked for a
+  // BSL named "default" that doesn't exist on AKS (only "azure-blob") →
+  // "BSL default not found". Empty lets the backend auto-resolve the
+  // effective BSL (default-flagged / sole / named-default).
+  storageLocation: '',
   snapshotVolumes: true,
   // v0.6: 'filesystem' = Restic/Kopia fs backup (defaultVolumesToFsBackup=true)
   //       'csi'        = CSI snapshot (snapshotVolumes=true + plain spec)
@@ -463,6 +483,21 @@ const typeChipTooltip = (row) => {
   const parts = []
   if (src === 'Imported') {
     parts.push(t('restorePoints.tooltipImported'))
+    // Agent D 2026-06-01: surface source-cluster + fingerprint signature
+    // (valid / missing / invalid) for Imported RPs. These labels are stamped
+    // by the ImportPolicy controller (Agent A/B/C backend); when absent
+    // the tooltip falls back to the legacy single-line wording.
+    const meta = importMeta(row)
+    if (meta.fingerprintStatus === 'valid') {
+      parts.push(t('importPolicy.signatureValid', { cluster: meta.sourceCluster || 'unknown' }))
+    } else if (meta.fingerprintStatus === 'invalid') {
+      parts.push(t('importPolicy.signatureInvalid'))
+    } else if (meta.fingerprintStatus === 'missing') {
+      parts.push(t('importPolicy.signatureMissing'))
+    } else if (meta.sourceCluster) {
+      // 没指纹信息但知道 source-cluster — 仍展示出来
+      parts.push(`source: ${meta.sourceCluster}`)
+    }
   } else {
     parts.push(t('restorePoints.tooltipLocal'))
   }
@@ -498,11 +533,26 @@ const sourceOf = (row) => {
   // the root cause of C-001 "没看到 Import 标签").
   if (row?.supkube?.imported === true) return 'Imported'
   if (row?.supkube?.imported === false && row?.supkube?.origin) return 'Local'
+  // Agent D 2026-06-01: ImportPolicy controller stamps supkube.io/imported
+  // K8s label on Backups it pulled from a shared BSL. Treat it as the
+  // authoritative signal regardless of the supkube.imported backend flag —
+  // works even when the older /backups payload didn't include the enrichment.
+  const labels = row?.metadata?.labels || {}
+  if (labels['supkube.io/imported'] === 'true') return 'Imported'
   // Fallback: K8s-version fingerprint for older backends without the flag.
   const fp = backupClusterFingerprint(row)
   if (!fp || fp === '||') return 'Local' // no annotations → assume local
   if (!currentClusterFingerprint.value) return 'Local' // baseline not set yet
   return fp === currentClusterFingerprint.value ? 'Local' : 'Imported'
+}
+
+// Agent D: pull source-cluster + fingerprint-status from labels for tooltips.
+const importMeta = (row) => {
+  const labels = row?.metadata?.labels || {}
+  return {
+    sourceCluster: labels['supkube.io/source-cluster'] || '',
+    fingerprintStatus: labels['supkube.io/fingerprint-status'] || ''  // valid | missing | invalid
+  }
 }
 
 const sourceTooltip = (row) => {
@@ -754,6 +804,18 @@ const fetchNamespaces = async () => {
   }
 }
 
+// v0.9.1.10 (#107): backing list for the Storage Location picker in the
+// create-backup dialog. Non-fatal on error — the form still works (Auto).
+const fetchStorageLocations = async () => {
+  try {
+    const res = await getStorageLocations()
+    storageLocations.value = res.data.items || []
+  } catch (e) {
+    console.error('Failed to load storage locations:', e)
+    storageLocations.value = []
+  }
+}
+
 const parseLabelSelector = (str) => {
   if (!str || !str.trim()) return undefined
   const labels = {}
@@ -793,7 +855,8 @@ const handleCreate = async () => {
       excludedNamespaces: createForm.value.excludedNamespaces.length > 0 ? createForm.value.excludedNamespaces : undefined,
       labelSelector: parseLabelSelector(createForm.value.labelSelectorStr),
       ttl: createForm.value.ttl || '720h',
-      storageLocation: createForm.value.storageLocation || 'default',
+      // v0.9.1.10 (#107): empty → omit so the backend auto-resolves the BSL.
+      storageLocation: createForm.value.storageLocation || undefined,
       snapshotVolumes: isCSI,
       defaultVolumesToFsBackup: isFS
     }
@@ -802,7 +865,7 @@ const handleCreate = async () => {
     showCreateDialog.value = false
     createForm.value = {
       name: '', includedNamespaces: [], excludedNamespaces: [], labelSelectorStr: '',
-      ttl: '720h', storageLocation: 'default', snapshotVolumes: true, volumeMode: 'filesystem'
+      ttl: '720h', storageLocation: '', snapshotVolumes: true, volumeMode: 'filesystem'
     }
     await fetchBackups()
     startPolling()
@@ -819,6 +882,50 @@ const handleCommand = (cmd, row) => {
     case 'restore': restoreFromBackup(row); break
     case 'export': /* placeholder — v0.8 */ break
     case 'delete': handleDelete(row); break
+    case 'force-delete': handleForceDelete(row); break
+  }
+}
+
+// v0.9.x #68: escape hatch when a Backup CR is stuck (finalizer wedged
+// or Velero DBR controller hung). Calls POST /backups/:name/force-delete
+// which strips finalizers + direct-deletes the CR + schedules orphan GC.
+// BSL tarball is NOT removed — the response message warns the user.
+const handleForceDelete = async (row) => {
+  const name = row?.metadata?.name
+  if (!name) return
+  try {
+    await ElMessageBox({
+      title: 'Force Delete (use only when normal delete is stuck)',
+      message:
+        `<p>This will <strong>strip finalizers</strong> from Backup <code>${name}</code> and delete the CR directly, bypassing Velero's DeleteBackupRequest cascade.</p>
+         <p style="margin-top: 10px;"><strong>What's bypassed:</strong></p>
+         <ul style="margin: 8px 0 0 0; padding-left: 18px; font-size: 13px; line-height: 1.7;">
+           <li>The BSL tarball will <strong>NOT</strong> be removed (use storage retention or manual cleanup)</li>
+           <li>Any in-flight Velero work on this Backup will be abandoned</li>
+         </ul>
+         <p style="margin-top: 10px;"><strong>Orphan GC</strong> will be scheduled to clean leaked VSC/cloud snapshots.</p>
+         <p style="margin: 10px 0 0 0; color: #c45656; font-size: 13px;">
+           ⚠ Only use this when a normal Delete has hung. This is a last-resort escape hatch.
+         </p>`,
+      dangerouslyUseHTMLString: true,
+      showCancelButton: true,
+      confirmButtonText: 'Force Delete',
+      cancelButtonText: t('common.cancel'),
+      type: 'warning',
+      confirmButtonClass: 'el-button--danger'
+    })
+  } catch { return }
+  try {
+    const resp = await forceDeleteBackup(name)
+    const bypassed = resp?.data?.bypassed || []
+    ElMessage({
+      type: 'success',
+      message: `Force-deleted ${name}. Bypassed: ${bypassed.join('; ') || 'nothing'}`,
+      duration: 6000
+    })
+    await fetchBackups()
+  } catch (e) {
+    ElMessage.error('Force delete failed: ' + (e.response?.data?.error || e.message))
   }
 }
 
@@ -984,6 +1091,7 @@ onMounted(() => {
   }
   fetchBackups()
   fetchNamespaces()
+  fetchStorageLocations()
 })
 onUnmounted(() => {
   stopPolling()

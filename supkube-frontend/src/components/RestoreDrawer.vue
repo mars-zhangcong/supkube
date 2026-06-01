@@ -251,27 +251,108 @@
         </div>
 
         <div v-else class="conflicts-list">
+          <!--
+            PRD-001 v2 (#104, finding #1 — 2026-05-31) Checklist form:
+              - blocker  → red ✗  + no "ignore" checkbox (must resolve)
+              - warning  → yellow ⚠ + "ignore this warning" checkbox
+                           (second-step confirm before flipping on)
+              - applied  → green ✓  (Apply Fix landed)
+              - ignored  → muted   (user explicitly waived this warning)
+            Each row gets a "→ Go to Transform" CTA that hops to the
+            TransformSets editor pre-loaded with this conflict's payload
+            (PRD-002 Transforms.vue placeholder for now).
+          -->
           <div
             v-for="(c, idx) in conflicts"
             :key="idx"
             class="conflict-card"
-            :class="`severity-${c.severity}`"
+            :class="[
+              `severity-${effectiveSeverity(c)}`,
+              appliedFixes[idx] ? 'is-resolved' : '',
+              ignoredWarnings[idx] ? 'is-ignored' : ''
+            ]"
           >
             <div class="conflict-header">
               <el-icon class="conflict-icon">
-                <WarningFilled v-if="c.severity === 'blocker'" />
-                <InfoFilled v-else />
+                <CircleCheckFilled v-if="appliedFixes[idx]" />
+                <CircleCloseFilled v-else-if="effectiveSeverity(c) === 'blocker'" />
+                <WarningFilled v-else />
               </el-icon>
               <div class="conflict-body">
                 <div class="conflict-title">
+                  <el-tag
+                    size="small"
+                    :type="effectiveSeverity(c) === 'blocker' ? 'danger' : 'warning'"
+                    effect="plain"
+                    class="severity-tag"
+                  >
+                    {{ effectiveSeverity(c) === 'blocker'
+                        ? t('restoreDrawer.severityBlocker')
+                        : t('restoreDrawer.severityWarning') }}
+                  </el-tag>
                   <span class="conflict-kind">{{ t(`restoreDrawer.conflictKind.${c.kind}`) }}</span>
                   <span class="conflict-target">
                     — {{ c.artifact.kind }} <code>{{ c.artifact.namespace }}/{{ c.artifact.name }}</code>
                   </span>
                 </div>
                 <div class="conflict-detail">{{ c.message }}</div>
+                <!-- PRD-001 v2 (#104): TransformSets that the backend
+                     matched against this conflict kind+payload. Empty
+                     slice = no matching TS; the Go-to-Transform button
+                     then opens the editor in "author new" mode. -->
+                <div v-if="c.matchingTransformSets && c.matchingTransformSets.length > 0" class="matching-ts">
+                  <span class="matching-ts-label">{{ t('restoreDrawer.matchingTransformSets') }}:</span>
+                  <el-tag
+                    v-for="ts in c.matchingTransformSets"
+                    :key="ts"
+                    size="small"
+                    type="info"
+                    effect="plain"
+                    class="matching-ts-tag"
+                  >{{ ts }}</el-tag>
+                </div>
               </div>
             </div>
+
+            <!-- Row-level actions: ignore (warnings only), apply fix,
+                 go to transform. -->
+            <div class="conflict-actions">
+              <!-- Ignore warning checkbox — warning only, never blocker.
+                   :disabled when blocker so even DOM-tampering can't
+                   silently bypass (defense in depth; final gate is on
+                   the computed `canSubmit`). -->
+              <el-checkbox
+                v-if="effectiveSeverity(c) === 'warning' && !appliedFixes[idx]"
+                :model-value="!!ignoredWarnings[idx]"
+                @change="toggleIgnoreWarning(idx, c)"
+              >
+                {{ t('restoreDrawer.ignoreThisWarning') }}
+              </el-checkbox>
+              <el-checkbox
+                v-else-if="effectiveSeverity(c) === 'blocker'"
+                :model-value="false"
+                disabled
+              >
+                <span class="ignore-disabled-hint">{{ t('restoreDrawer.ignoreBlockerDisabled') }}</span>
+              </el-checkbox>
+
+              <span class="conflict-actions-spacer"></span>
+
+              <!-- "→ Go to Transform" — required for blockers, optional
+                   for warnings (always show — the editor is the deep
+                   path). Stub: PRD-002 §4.4 builds the Transforms page;
+                   today it lands on a placeholder. -->
+              <el-button
+                size="small"
+                type="primary"
+                plain
+                @click.stop="goToTransform(c)"
+              >
+                {{ t('restoreDrawer.goToTransform') }}
+                <el-icon class="el-icon--right"><ArrowRight /></el-icon>
+              </el-button>
+            </div>
+
             <div v-if="c.suggestedTransform" class="suggested-fix">
               <div class="suggested-fix-label">{{ t('restoreDrawer.suggestedFix') }}</div>
               <pre class="suggested-fix-code">{{ formatTransform(c.suggestedTransform) }}</pre>
@@ -296,9 +377,29 @@
               </div>
             </div>
           </div>
-          <el-checkbox v-if="hasBlockers" v-model="ignoreBlockers" class="pf-ignore-toggle">
-            {{ t('restoreDrawer.ignoreBlockers') }}
-          </el-checkbox>
+
+          <!-- PRD-001 v2 (#104): no global "ignore all blockers"
+               checkbox. Replaced by a status footer that surfaces the
+               blocker count + ignored-warning count so the user sees
+               exactly what's gating Restore. -->
+          <div class="pf-status-footer">
+            <span v-if="hasBlockers" class="pf-status-blocker">
+              <el-icon><CircleCloseFilled /></el-icon>
+              {{ t('restoreDrawer.mustResolveBlocker', { n: unresolvedBlockers.length }) }}
+            </span>
+            <span v-else-if="unacknowledgedWarnings.length > 0" class="pf-status-warning">
+              <el-icon><WarningFilled /></el-icon>
+              {{ t('restoreDrawer.mustAcknowledgeWarning', { n: unacknowledgedWarnings.length }) }}
+            </span>
+            <span v-else-if="ignoredWarningCount > 0" class="pf-status-ok">
+              <el-icon><CircleCheckFilled /></el-icon>
+              {{ t('restoreDrawer.allConflictsHandled', { n: ignoredWarningCount }) }}
+            </span>
+            <span v-else class="pf-status-ok">
+              <el-icon><CircleCheckFilled /></el-icon>
+              {{ t('restoreDrawer.allConflictsResolved') }}
+            </span>
+          </div>
         </div>
       </section>
 
@@ -306,7 +407,12 @@
       <section class="section">
         <div class="spec-header">
           <h4 class="section-title spec-title">
-            {{ t('restoreDrawer.specTitle') }} ({{ artifactsList.length }})
+            <!-- v0.9.x #91: Imported + 0 artifacts → show "Whole tarball"
+                 instead of "(0)" which previously made customers think the
+                 wizard was broken. Banner below explains the semantics. -->
+            {{ t('restoreDrawer.specTitle') }}
+            <span v-if="isImported && artifactsList.length === 0">({{ t('restoreDrawer.specWholeTarball') || 'Whole tarball' }})</span>
+            <span v-else>({{ artifactsList.length }})</span>
             <el-icon class="collapse-icon" :class="{ open: specOpen }" @click="specOpen = !specOpen">
               <ArrowUp v-if="specOpen" />
               <ArrowDown v-else />
@@ -314,7 +420,11 @@
           </h4>
         </div>
         <div v-if="specOpen">
-          <div class="spec-summary">
+          <!-- v0.9.x #91: hide the per-artifact selector controls when we
+               can't enumerate artifacts (Imported RPs). The banner that
+               follows handles the explanation; showing "Restoring 0 of 0"
+               + Select All / Deselect All would just confuse the user. -->
+          <div v-if="!(isImported && artifactsList.length === 0)" class="spec-summary">
             <span>{{ t('restoreDrawer.specRestoring', { selected: includedCount, total: artifactsList.length }) }}</span>
             <span class="spec-actions">
               <button class="link-btn" type="button" @click="selectAll(true)">
@@ -418,12 +528,14 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import {
-  ArrowLeft, ArrowUp, ArrowDown, CircleCheckFilled, CirclePlus,
+  ArrowLeft, ArrowRight, ArrowUp, ArrowDown,
+  CircleCheckFilled, CircleCloseFilled, CirclePlus,
   Document, Folder, InfoFilled, Loading, Operation,
   RefreshLeft, RefreshRight, WarningFilled
 } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox, ElNotification } from 'element-plus'
 import {
   getNamespaces, createNamespace,
   getBackupArtifacts, createRestore, preflightRestore,
@@ -432,6 +544,7 @@ import {
 import { useCluster } from '../composables/useCluster'
 
 const { t } = useI18n()
+const router = useRouter()
 const cluster = useCluster()
 // v0.9.0 MC3: targetCluster defaults to "this-cluster" → existing local-restore
 // behavior. The Target Cluster section only renders when ≥2 clusters are
@@ -489,7 +602,12 @@ const preflight = ref(null)            // PreflightResponse
 const preflightLoading = ref(false)
 const preflightError = ref('')
 const deepCheck = ref(false)
-const ignoreBlockers = ref(false)
+// PRD-001 v2 (#104, finding #1 — 2026-05-31): the old global
+// `ignoreBlockers` checkbox is gone. Blockers can NEVER be ignored; only
+// individual `warning`-severity conflicts can be checked off by the user,
+// each requiring a second-step confirm. Maps conflict-index → true once
+// the user has confirmed the ignore for that specific warning.
+const ignoredWarnings = ref({})
 let preflightDebounceTimer = null
 
 // v0.8.2 Transform Set state.
@@ -515,19 +633,40 @@ const includedCount = computed(() => artifactsList.value.filter(a => a._included
 
 // v0.7.12 Pre-flight computeds
 const conflicts = computed(() => preflight.value?.conflicts || [])
-// v0.8.3 fix: a conflict that has an Apply Fix applied is no longer a
-// blocker for the Restore. Without this, the "我已了解 — 忽略阻断" checkbox
-// stays mandatory even after the user fixes everything.
-const hasBlockers = computed(() =>
-  conflicts.value.some((c, idx) => c.severity === 'blocker' && !appliedFixes.value[idx])
+// PRD-001 v2 (#104): treat severity as authoritative-from-backend and
+// fall back to `blocker` for any conflict that lacks the field (old
+// backends or future kinds the server forgot to tag). This is the SAME
+// conservative default the backend applies — duplicated client-side so
+// upgrades are safe in either direction. The frontend MUST NOT compute
+// severity from `kind` or other fields (finding #2: no client-side
+// severity calculation, no client-side override).
+const effectiveSeverity = (c) => (c?.severity === 'warning' ? 'warning' : 'blocker')
+
+// v0.8.3 fix preserved: a conflict that has an Apply Fix applied is no
+// longer a blocker for the Restore (the fix patch will run at restore
+// time). PRD-001 v2 (#104, finding #1): blockers are NEVER ignorable via
+// a checkbox — the only outlet is Apply Fix or Go-to-Transform.
+const unresolvedBlockers = computed(() =>
+  conflicts.value.filter((c, idx) => effectiveSeverity(c) === 'blocker' && !appliedFixes.value[idx])
 )
+const hasBlockers = computed(() => unresolvedBlockers.value.length > 0)
+
+// Warnings the user hasn't yet acknowledged (each requires its own
+// per-row checkbox + confirm).
+const unacknowledgedWarnings = computed(() =>
+  conflicts.value.filter((c, idx) => effectiveSeverity(c) === 'warning' && !appliedFixes.value[idx] && !ignoredWarnings.value[idx])
+)
+const ignoredWarningCount = computed(() =>
+  conflicts.value.filter((c, idx) => effectiveSeverity(c) === 'warning' && ignoredWarnings.value[idx]).length
+)
+
 const preflightVisible = computed(() => !!targetNs.value && !!props.backup)
 
 const pfSummaryText = computed(() => {
   if (!preflight.value) return ''
   const n = conflicts.value.length
   if (n === 0) return t('restoreDrawer.preflightZeroConflicts')
-  const blockers = conflicts.value.filter(c => c.severity === 'blocker').length
+  const blockers = conflicts.value.filter(c => effectiveSeverity(c) === 'blocker').length
   const warnings = n - blockers
   if (blockers && warnings) return t('restoreDrawer.preflightMixed', { blockers, warnings })
   if (blockers) return t('restoreDrawer.preflightBlockerCount', { n: blockers })
@@ -579,8 +718,15 @@ const cantSubmitReason = computed(() => {
   // whole-tarball restore is fine.
   if (includedCount.value === 0 && !isImported.value && artifactsList.value.length > 0)
                                              return t('restoreDrawer.disabled.noArtifactsSelected')
-  if (hasBlockers.value && !ignoreBlockers.value)
-                                             return t('restoreDrawer.disabled.preflightBlockers')
+  // PRD-001 v2 (#104): blockers are non-ignorable. Surface the count so
+  // the user knows exactly how many rows they still need to resolve
+  // (Apply Fix or Go to Transform — no override checkbox).
+  if (hasBlockers.value)
+                                             return t('restoreDrawer.disabled.mustResolveBlocker', { n: unresolvedBlockers.value.length })
+  // Warnings exist that the user hasn't explicitly ignored yet — they
+  // must tick the per-row "ignore this warning" checkbox.
+  if (unacknowledgedWarnings.value.length > 0)
+                                             return t('restoreDrawer.disabled.mustAcknowledgeWarning', { n: unacknowledgedWarnings.value.length })
   if (preflightLoading.value)                return t('restoreDrawer.disabled.preflightRunning')
   if (submitting.value)                      return t('restoreDrawer.disabled.submitting')
   return ''
@@ -595,10 +741,13 @@ const canSubmit = computed(() => {
   // server-side. If artifactsList IS populated, require at least one
   // selected as before.
   if (artifactsList.value.length > 0 && includedCount.value === 0) return false
-  // v0.7.12: Pre-flight blockers gate the Restore button. The user can
-  // override with the "Ignore conflicts and continue" checkbox — the
-  // Restore will likely fail but we don't paternalistically lock them out.
-  if (hasBlockers.value && !ignoreBlockers.value) return false
+  // PRD-001 v2 (#104, finding #1 — 2026-05-31): Pre-flight blockers gate
+  // the Restore button with NO override path. The override checkbox was
+  // removed; the only ways forward are Apply Fix (server-side patch) or
+  // Go-to-Transform (deep solve in TransformSets editor). Every warning
+  // must be individually acknowledged via its per-row checkbox.
+  if (hasBlockers.value) return false
+  if (unacknowledgedWarnings.value.length > 0) return false
   if (preflightLoading.value) return false
   return !submitting.value
 })
@@ -656,7 +805,7 @@ async function onOpened() {
   specOpen.value = true
   preflight.value = null
   preflightError.value = ''
-  ignoreBlockers.value = false
+  ignoredWarnings.value = {}
   selectedTransformSet.value = ''
   appliedFixes.value = {}
 
@@ -702,28 +851,83 @@ function goManageTransformSets() {
   window.open('/transform-sets', '_blank')
 }
 
-// v0.8.3: Batched "Apply Suggested Fix" handler.
+// PRD-001 v2 (#104): "→ Go to Transform" CTA. Each conflict row gets a
+// button that hops to the Transforms editor pre-loaded with the conflict
+// kind + payload, so the user can author or pick a TransformSet that
+// resolves it. PRD-002 (§4.4) builds out the Transforms.vue page; until
+// then the route is a placeholder — what matters is the wire format
+// (router.push with `?fromConflict=&payload=`) is correct.
 //
-// Why batched: Velero's Restore.spec.resourceModifierRef points to exactly
-// ONE ConfigMap. If we created a separate Transform Set per conflict
-// (v0.8.2 behavior), only the last-clicked fix would actually run at
-// restore time — the others would be lost. So every click sends the
-// *full current list* of applied fixes; the backend writes one
-// consolidated Transform Set ConfigMap and we attach that to the Restore.
+// The payload is base64-encoded JSON so it round-trips through the URL
+// without escaping headaches (conflict.details may contain quotes, etc).
+function goToTransform(conflict) {
+  let payloadB64 = ''
+  try {
+    payloadB64 = btoa(unescape(encodeURIComponent(JSON.stringify(conflict))))
+  } catch (e) {
+    // Should never happen, but if encoding fails we still want to land
+    // on the page — the user can re-trigger Pre-flight from there.
+    console.warn('Failed to base64-encode conflict payload:', e)
+  }
+  router.push({
+    path: '/transforms',
+    query: {
+      fromConflict: conflict.kind,
+      payload: payloadB64,
+      restoreName: restoreName.value
+    }
+  })
+}
+
+// PRD-001 v2 (#104, finding #1): warnings are ignorable but only behind a
+// second-step confirm. The checkbox is two-state (off → ON requires
+// confirm; ON → off is silent rollback). Without the confirm gate, a
+// stray click could silently degrade the restore.
+async function toggleIgnoreWarning(idx, conflict) {
+  const currentlyIgnored = !!ignoredWarnings.value[idx]
+  if (currentlyIgnored) {
+    // Un-ignoring is a safe direction — no confirm needed.
+    const next = { ...ignoredWarnings.value }
+    delete next[idx]
+    ignoredWarnings.value = next
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      t('restoreDrawer.ignoreWarningConfirm', { kind: t(`restoreDrawer.conflictKind.${conflict.kind}`) }),
+      t('restoreDrawer.ignoreWarningTitle'),
+      {
+        type: 'warning',
+        confirmButtonText: t('restoreDrawer.ignoreWarningOk'),
+        cancelButtonText: t('common.cancel')
+      }
+    )
+    ignoredWarnings.value = { ...ignoredWarnings.value, [idx]: true }
+  } catch {
+    // User cancelled — keep checkbox unchecked. No state change.
+  }
+}
+
+// PRD-002 v1.3 (2026-05-31): "Apply Suggested Fix" now creates an atomic
+// TRANSFORM (not a TransformSet). The response shape changed:
+//   { transformName, created, ruleCount }   (was: { transformSetName, ... })
+// Velero binds Restores to TransformSets — not Transforms — so the user
+// must wire the new Transform into a TransformSet themselves. We help by
+// closing the drawer and navigating to /transforms?name=<new> with the
+// auto-generated Transform highlighted; from there they can review the
+// rules and "Add to TransformSet" before re-opening this drawer to actually
+// trigger the Restore.
 //
-// The TS name is derived from restoreName so re-opens of the same drawer
-// hit the same CM (which we delete on cancel anyway since the Restore
-// itself never gets created).
+// We still send the full batch of currently-applied fixes so a single
+// Transform consolidates every accepted fix (Velero only honors one
+// resourceModifierRef per Restore — same constraint as v0.8.x).
 async function applyFix(conflict, idx) {
   applyingFixIndex.value = idx
   try {
-    // Optimistically add this conflict to the "applied" set so the batch
-    // we send below includes it.
     const tentativeFixes = {
       ...appliedFixes.value,
       [idx]: '__pending__'
     }
-    // Build the batch from every currently-applied fix (including new one).
     const fixesBatch = []
     for (const [i, _name] of Object.entries(tentativeFixes)) {
       const c = conflicts.value[Number(i)]
@@ -738,15 +942,30 @@ async function applyFix(conflict, idx) {
       restoreName: restoreName.value,
       fixes: fixesBatch
     })
-    const name = res.data.transformSetName
-    // Update local state with the actual TS name. Every fix entry shares
-    // the same consolidated TS name — that's the design.
+    // Field renamed: transformSetName → transformName. Falling back keeps
+    // us bug-compatible if an older backend ever responds, but the new
+    // backend is what's deployed.
+    const name = res.data.transformName || res.data.transformSetName
     const updated = {}
     for (const i of Object.keys(tentativeFixes)) updated[i] = name
     appliedFixes.value = updated
-    selectedTransformSet.value = name
+    // We deliberately do NOT auto-select a Transform Set anymore — the new
+    // Transform isn't bound to any TransformSet yet. Clear any stale pick.
+    selectedTransformSet.value = ''
     await loadTransformSets()
-    ElMessage.success(t('restoreDrawer.fixCreatedToast', { name }))
+
+    ElNotification({
+      title: t('restoreDrawer.fixCreatedToast', { name }),
+      type: 'success',
+      duration: 6000,
+      position: 'bottom-right'
+    })
+    // Close this drawer and jump to the Transforms page filtered to the
+    // new auto-generated Transform. The Transforms page reads ?name= and
+    // opens the viewer drawer for that Transform — ready for the user to
+    // review the rules and add it to a Transform Set.
+    visibleProxy.value = false
+    router.push({ path: '/transforms', query: { name } })
   } catch (e) {
     ElMessage.error(e.response?.data?.error || e.message)
   } finally {
@@ -810,9 +1029,11 @@ async function runPreflight(force) {
       deepCheck: deepCheck.value
     })
     preflight.value = res.data
-    // Reset the override checkbox when results change so the user
-    // re-affirms after every re-check.
-    if (!hasBlockers.value) ignoreBlockers.value = false
+    // PRD-001 v2 (#104): conflict set may have shifted on re-check, so
+    // wipe per-row warning acknowledgements — user must re-confirm each
+    // warning against the fresh result. (Indices aren't stable across
+    // re-checks; the safe move is to reset, not migrate.)
+    ignoredWarnings.value = {}
   } catch (e) {
     preflightError.value = e.response?.data?.error || e.message
     preflight.value = null
@@ -882,9 +1103,44 @@ async function handleSubmit() {
       targetCluster: isCrossCluster.value ? targetCluster.value : undefined
     }
     await createRestore(payload)
-    ElMessage.success(t('restoreDrawer.submitted', { name: restoreName.value }))
+
+    // v0.9.1.10 (#105) — "发起 Restore 后零反馈" fix.
+    //
+    // The old flow flashed a 3-second ElMessage toast then closed the drawer,
+    // dumping the user back on the Restore Points list. The Restore CR they
+    // just created lives in the Activity stream — which they weren't looking
+    // at — so from their seat "什么都没发生". (Mars hit this in the 2026-05-28
+    // demo and couldn't tell whether a restore had been created at all.)
+    //
+    // Now:
+    //   - Local restore  → persistent notification + auto-route to the live,
+    //     restore-filtered Activity stream so progress is undeniable.
+    //   - Cross-cluster  → the Restore CR runs on the REMOTE cluster's Velero
+    //     and does NOT surface in this cluster's Activity, so navigating here
+    //     would reproduce the "nothing happened" bug. Instead we show a
+    //     persistent notice telling the user to switch clusters.
+    const submittedName = restoreName.value
     visibleProxy.value = false
-    emit('restored', restoreName.value)
+    emit('restored', submittedName)
+
+    if (isCrossCluster.value) {
+      ElNotification({
+        title: t('restoreDrawer.submittedXTitle'),
+        message: t('restoreDrawer.submittedXBody', { name: submittedName, cluster: targetCluster.value }),
+        type: 'success',
+        duration: 0,            // persistent — no local progress view to land on
+        position: 'bottom-right'
+      })
+    } else {
+      ElNotification({
+        title: t('restoreDrawer.submittedTitle'),
+        message: t('restoreDrawer.submittedBody', { name: submittedName, ns: targetNs.value }),
+        type: 'success',
+        duration: 4500,
+        position: 'bottom-right'
+      })
+      router.push({ path: '/observability', query: { tab: 'activity', type: 'Restore' } })
+    }
   } catch (e) {
     ElMessage.error(e.response?.data?.error || e.message)
   } finally {
@@ -1452,6 +1708,63 @@ watch(() => props.visible, (v) => {
   padding-top: 8px;
   border-top: 1px dashed #ebeef5;
 }
+
+/* PRD-001 v2 (#104) — Checklist row actions, severity tags, status footer */
+.severity-tag {
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.matching-ts {
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: var(--sk-text-caption);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.matching-ts-label { margin-right: 2px; }
+.matching-ts-tag { font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 11px; }
+.conflict-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed #ebeef5;
+}
+.conflict-actions-spacer { flex: 1; }
+.ignore-disabled-hint {
+  color: var(--sk-text-caption);
+  font-size: 12px;
+}
+.conflict-card.is-resolved {
+  opacity: 0.7;
+  border-color: #c2e7b0 !important;
+  background: #f4faf0 !important;
+}
+.conflict-card.is-resolved .conflict-icon { color: var(--sk-status-success); }
+.conflict-card.is-ignored {
+  opacity: 0.75;
+  background: #fbfbfb !important;
+}
+.pf-status-footer {
+  margin-top: 6px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: #f5f7fa;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pf-status-blocker { color: var(--sk-status-error); font-weight: 500; }
+.pf-status-warning { color: var(--sk-status-warning); font-weight: 500; }
+.pf-status-ok { color: var(--sk-status-success); font-weight: 500; }
+:global(html.dark) .conflict-card.is-resolved { background: #1a2c14 !important; border-color: #2a5a1f !important; }
+:global(html.dark) .conflict-card.is-ignored { background: #1f2026 !important; }
+:global(html.dark) .pf-status-footer { background: #1f2026; }
+:global(html.dark) .conflict-actions { border-top-color: #2c2f36; }
 :global(html.dark) .conflict-card.severity-blocker { background: #2a1a1d; border-color: #6e2a30; }
 :global(html.dark) .conflict-card.severity-warning { background: #2b1f0c; border-color: #6e5217; }
 :global(html.dark) .conflict-card.severity-info { background: #1f2026; border-color: #3a3d44; }

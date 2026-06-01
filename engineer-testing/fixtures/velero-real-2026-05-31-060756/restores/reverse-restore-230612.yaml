@@ -1,0 +1,45 @@
+apiVersion: velero.io/v1
+kind: Restore
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"velero.io/v1","kind":"Restore","metadata":{"annotations":{},"labels":{"supkube.io/managed-by":"supkube"},"name":"reverse-restore-230612","namespace":"velero"},"spec":{"backupName":"reverse-demo-aks2local-224734","includedNamespaces":["test-app-restore"],"namespaceMapping":{"test-app-restore":"reverse-restored-2"},"restorePVs":true}}
+  creationTimestamp: "2026-05-28T15:06:12Z"
+  finalizers:
+  - restores.velero.io/external-resources-finalizer
+  generation: 8
+  labels:
+    supkube.io/managed-by: supkube
+  name: reverse-restore-230612
+  namespace: velero
+  resourceVersion: "2599485"
+  uid: 497342f4-85b5-40b1-9902-d8f06cf85fde
+spec:
+  backupName: reverse-demo-aks2local-224734
+  excludedResources:
+  - nodes
+  - events
+  - events.events.k8s.io
+  - backups.velero.io
+  - restores.velero.io
+  - resticrepositories.velero.io
+  - csinodes.storage.k8s.io
+  - volumeattachments.storage.k8s.io
+  - backuprepositories.velero.io
+  includedNamespaces:
+  - test-app-restore
+  itemOperationTimeout: 4h0m0s
+  namespaceMapping:
+    test-app-restore: reverse-restored-2
+  restorePVs: true
+status:
+  completionTimestamp: "2026-05-28T15:08:16Z"
+  hookStatus: {}
+  phase: Completed
+  progress:
+    itemsRestored: 22
+    totalItems: 22
+  restoreItemOperationsAttempted: 2
+  restoreItemOperationsCompleted: 2
+  startTimestamp: "2026-05-28T15:06:15Z"
+  warnings: 1

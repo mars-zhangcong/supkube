@@ -99,18 +99,18 @@ type ArtifactStats struct {
 // the Vue side can render with v-if on type without TypeScript discriminated
 // unions.
 type Action struct {
-	ID              string         `json:"id"`              // CR name (unique within type+namespace)
-	Type            string         `json:"type"`            // Backup / Restore / Export
-	Status          string         `json:"status"`          // running / completed / failed / partial / skipped
-	Phases          []Phase        `json:"phases"`
-	StartTime       *time.Time     `json:"startTime,omitempty"`
-	EndTime         *time.Time     `json:"endTime,omitempty"`
-	DurationSeconds int            `json:"durationSeconds,omitempty"`
+	ID              string     `json:"id"`     // CR name (unique within type+namespace)
+	Type            string     `json:"type"`   // Backup / Restore / Export
+	Status          string     `json:"status"` // running / completed / failed / partial / skipped
+	Phases          []Phase    `json:"phases"`
+	StartTime       *time.Time `json:"startTime,omitempty"`
+	EndTime         *time.Time `json:"endTime,omitempty"`
+	DurationSeconds int        `json:"durationSeconds,omitempty"`
 
 	// Related entities — only the fields that apply to the Type are populated.
-	Policy          *Ref `json:"policy,omitempty"`          // Backup → Schedule, if scheduled
-	ProtectedObject *Ref `json:"protectedObject,omitempty"` // Backup → namespace
-	RestorePoint    *Ref `json:"restorePoint,omitempty"`    // Restore → source Backup
+	Policy          *Ref   `json:"policy,omitempty"`          // Backup → Schedule, if scheduled
+	ProtectedObject *Ref   `json:"protectedObject,omitempty"` // Backup → namespace
+	RestorePoint    *Ref   `json:"restorePoint,omitempty"`    // Restore → source Backup
 	TargetNamespace string `json:"targetNamespace,omitempty"` // Restore → mapping target
 
 	// Counters from .status.
@@ -328,15 +328,15 @@ func GetAction(c *gin.Context) {
 
 func backupToAction(b *velerov1.Backup, localSchedules map[string]bool) Action {
 	a := Action{
-		ID:      b.Name,
-		Type:    ActionTypeBackup,
-		Status:  mapVeleroPhaseToStatus(string(b.Status.Phase)),
-		Phases:  derivePhasesForBackup(b),
-		Errors:  b.Status.Errors,
+		ID:       b.Name,
+		Type:     ActionTypeBackup,
+		Status:   mapVeleroPhaseToStatus(string(b.Status.Phase)),
+		Phases:   derivePhasesForBackup(b),
+		Errors:   b.Status.Errors,
 		Warnings: b.Status.Warnings,
-		RawKind: "Backup",
-		RawName: b.Name,
-		Origin:  detectBackupOrigin(b, localSchedules),
+		RawKind:  "Backup",
+		RawName:  b.Name,
+		Origin:   detectBackupOrigin(b, localSchedules),
 	}
 
 	// Timing — Velero populates StartTimestamp once the controller picks
@@ -478,11 +478,11 @@ func detectBackupOrigin(b *velerov1.Backup, localSchedules map[string]bool) stri
 // many internal phases (`WaitingForPluginOperations`, `Uploading`, etc.)
 // that we collapse into ~5 user-visible steps:
 //
-//	1. Validating
-//	2. Snapshotting Application Components
-//	3. Uploading to BSL
-//	4. Finalizing
-//	5. Complete (terminal)
+//  1. Validating
+//  2. Snapshotting Application Components
+//  3. Uploading to BSL
+//  4. Finalizing
+//  5. Complete (terminal)
 //
 // Each step gets one of: pending (not yet) / running (now) / completed (✓)
 // / failed (✗) based on where the CR sits.
@@ -568,15 +568,15 @@ func derivePhasesForBackup(b *velerov1.Backup) []Phase {
 
 func restoreToAction(r *velerov1.Restore) Action {
 	a := Action{
-		ID:      r.Name,
-		Type:    ActionTypeRestore,
-		Status:  mapVeleroPhaseToStatus(string(r.Status.Phase)),
-		Phases:  derivePhasesForRestore(r),
-		Errors:  r.Status.Errors,
+		ID:       r.Name,
+		Type:     ActionTypeRestore,
+		Status:   mapVeleroPhaseToStatus(string(r.Status.Phase)),
+		Phases:   derivePhasesForRestore(r),
+		Errors:   r.Status.Errors,
 		Warnings: r.Status.Warnings,
-		RawKind: "Restore",
-		RawName: r.Name,
-		Origin:  "manual",
+		RawKind:  "Restore",
+		RawName:  r.Name,
+		Origin:   "manual",
 	}
 	// v0.8.3: same StartTime fallback as backupToAction — failed-validation
 	// Restores never get StartTimestamp.

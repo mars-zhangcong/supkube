@@ -320,8 +320,8 @@ func VerifyStorageLocation(c *gin.Context) {
 // CreateStorageLocationWithSecret creates a BSL and its associated
 // credential Secret. Two providers supported (v0.8.7):
 //
-//   provider: "aws"   — S3 / MinIO / Tencent COS / Aliyun OSS / any S3-API
-//   provider: "azure" — Azure Blob Storage (storage account key auth)
+//	provider: "aws"   — S3 / MinIO / Tencent COS / Aliyun OSS / any S3-API
+//	provider: "azure" — Azure Blob Storage (storage account key auth)
 //
 // The request shape uses ONE struct with optional fields for each
 // provider; the dispatch happens inside on req.Provider. We deliberately
@@ -580,20 +580,20 @@ func rotateBSLSecret(name string, bsl *velerov1.BackupStorageLocation, credentia
 
 // UpdateStorageLocation updates a BSL's mutable fields (v0.8.7.2):
 //
-//   metadata.name           — IMMUTABLE (K8s API rejects)
-//   spec.provider           — IMMUTABLE (different SDK / config keys)
-//   spec.objectStorage.bucket   — EDITABLE — credentials bind to the
-//                                 ACCOUNT (IAM identity for AWS, storage
-//                                 account for Azure), NOT the bucket.
-//                                 Kasten K10 allows this and we mirror.
-//   spec.objectStorage.prefix   — editable
-//   spec.config.storageAccount  — EDITABLE — but caller must also send
-//                                 a new key on the same request, since
-//                                 keys ARE tied to a specific SA. We
-//                                 refuse the update if the SA changes
-//                                 and no new key is supplied.
-//   spec.config.* (others)      — editable, MERGED not replaced
-//   credentials Secret          — editable (key rotation)
+//	metadata.name           — IMMUTABLE (K8s API rejects)
+//	spec.provider           — IMMUTABLE (different SDK / config keys)
+//	spec.objectStorage.bucket   — EDITABLE — credentials bind to the
+//	                              ACCOUNT (IAM identity for AWS, storage
+//	                              account for Azure), NOT the bucket.
+//	                              Kasten K10 allows this and we mirror.
+//	spec.objectStorage.prefix   — editable
+//	spec.config.storageAccount  — EDITABLE — but caller must also send
+//	                              a new key on the same request, since
+//	                              keys ARE tied to a specific SA. We
+//	                              refuse the update if the SA changes
+//	                              and no new key is supplied.
+//	spec.config.* (others)      — editable, MERGED not replaced
+//	credentials Secret          — editable (key rotation)
 //
 // Why merge config not replace: a UI sending only "prefix" should not
 // wipe storageAccount/resourceGroup. Pre-v0.8.7.1 it did exactly that.

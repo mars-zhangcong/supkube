@@ -54,16 +54,16 @@ import (
 // ScanResult records what a single GC run found and acted on. Useful for
 // the Settings UI's "last run summary" + Activity event payload.
 type ScanResult struct {
-	StartedAt   time.Time
-	FinishedAt  time.Time
+	StartedAt  time.Time
+	FinishedAt time.Time
 	// Counts of orphans found AND deleted. If we found 5 but only deleted
 	// 3 (because 2 had a still-existing parent we missed), Found=5,
 	// Deleted=3. In practice these match because we re-check parent
 	// existence right before each delete.
-	VSCFound, VSCDeleted     int
-	VSFound, VSDeleted       int
-	PVBFound, PVBDeleted     int
-	DUFound, DUDeleted       int
+	VSCFound, VSCDeleted int
+	VSFound, VSDeleted   int
+	PVBFound, PVBDeleted int
+	DUFound, DUDeleted   int
 	// First error encountered (the scan continues past errors but
 	// records the first one for UI display).
 	Err error

@@ -12,15 +12,16 @@
 // the BSL-referenced credentials Secret, and calls HeadObject on the
 // resource tarball at:
 //
-//   s3://<bucket>/<prefix>/backups/<name>/<name>.tar.gz
+//	s3://<bucket>/<prefix>/backups/<name>/<name>.tar.gz
 //
 // Returns Content-Length, or an error string the UI can display.
 //
 // Scope (v0.8.6)
 // ──────────────
-//   ✅ provider: aws  (S3 / MinIO / Tencent COS / Aliyun OSS — all S3-API)
-//   ❌ provider: gcp  (different SDK; v0.9)
-//   ❌ provider: azure (different SDK; v0.9)
+//
+//	✅ provider: aws  (S3 / MinIO / Tencent COS / Aliyun OSS — all S3-API)
+//	❌ provider: gcp  (different SDK; v0.9)
+//	❌ provider: azure (different SDK; v0.9)
 //
 // Performance
 // ───────────
@@ -38,12 +39,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	awsConfig "github.com/aws/aws-sdk-go-v2/config"
 	awsCreds "github.com/aws/aws-sdk-go-v2/credentials"
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"gopkg.in/ini.v1"
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
+	"gopkg.in/ini.v1"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -224,12 +225,12 @@ func bslBucketAndPrefix(bsl *velerov1.BackupStorageLocation) (string, string) {
 // buildS3Client constructs an aws-sdk-go-v2 S3 client from a BSL.
 //
 // Three things drive the config:
-//   1. credentials Secret (BSL.spec.credential.{name,key}) — typically
-//      "[default]\naws_access_key_id=...\naws_secret_access_key=...";
-//      we parse it as INI rather than relying on the shared-creds env
-//   2. region (BSL.spec.config["region"])
-//   3. endpoint override (BSL.spec.config["s3Url"]) for MinIO / COS / OSS
-//   4. path-style addressing (BSL.spec.config["s3ForcePathStyle"]="true")
+//  1. credentials Secret (BSL.spec.credential.{name,key}) — typically
+//     "[default]\naws_access_key_id=...\naws_secret_access_key=...";
+//     we parse it as INI rather than relying on the shared-creds env
+//  2. region (BSL.spec.config["region"])
+//  3. endpoint override (BSL.spec.config["s3Url"]) for MinIO / COS / OSS
+//  4. path-style addressing (BSL.spec.config["s3ForcePathStyle"]="true")
 func buildS3Client(ctx context.Context, cl client.Client, bsl *velerov1.BackupStorageLocation) (*s3.Client, error) {
 	cred := bsl.Spec.Credential
 	if cred == nil || cred.Name == "" {

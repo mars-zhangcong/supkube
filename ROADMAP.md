@@ -1,7 +1,7 @@
 # SupKube Roadmap
 
-> Last updated: **2026-05-26**
-> Current released version: **v0.9.1.2-alpha** （部署在 docker-desktop + aks-jumborca-dev，可公开 `helm install`）
+> Last updated: **2026-06-01**
+> Current released version: **v0.9.1.13-alpha** （Import Policy ship；部署在 docker-desktop + aks-jumborca-dev）
 > Public distribution: **https://charts.supkube.com/** （ACR + Azure Blob + Cloudflare Worker）
 > Reference product: [Kasten K10 by Veeam](https://docs.kasten.io)
 
@@ -13,6 +13,90 @@
 2. **客户能装上**: `helm repo add supkube https://charts.supkube.com/` → `helm install` 在任何 amd64/arm64 K8s 集群跑通；ACR 匿名拉镜像；charts.supkube.com 走 Cloudflare Worker 反代 Azure Blob。
 3. **当前阶段**: 从"功能堆砌"转到"商业化 + 合规 + 售前支持工具链"。当前 sprint = **v0.8.14 Log Viewer + Download Logs + AirGapped 真支持**。
 4. **导航**：用下面的"优先级矩阵"决定下一步做什么；用"已完成 Sprint 列表"看历史；用 [PRODUCT-TIERS.md](PRODUCT-TIERS.md) 解释商业模型。
+
+---
+
+## 📌 2026-05-31 一天产出总结
+
+> 集中沉淀：P0 Demo Sprint 5/5 收尾 + 6 个 PRD (PRD-001~006) 评审/修订 + 4 个 ADR 草稿 + SECURITY.md §6 + dev workflow + Memory 规则升级。**总计 9 类、~25 个交付物**。
+
+### 1) Quick Win Log Viewer 7 项 ship（任务 #79 followup）
+
+| 子项 | 实现 |
+|---|---|
+| LogViewer.vue 重写 | 顶部错误摘要卡 + Prev/Next Error 跳转 + Expand Context (±5 行) + 时间格式切换 (Abs/Rel) + Live Tail Lock + 搜索词荧光笔 + 全屏模式 |
+| 双集群部署 | docker-desktop arm64 + AKS amd64，buildStamp `260530-1543` |
+
+### 2) P0 Demo Sprint 完成 5/5（D-16 锁定的 2 周 sprint 提前收）
+
+| 任务 | 子项 | 状态 |
+|---|---|---|
+| **#87** | BSL Secret Key 字段澄清 | ✅ |
+| **#68** | Force-delete 卡住的 Backup CR | ✅ |
+| **#91** | Imported RP 0 artifacts UX 闭环 | ✅ |
+| **#84** | Velero 真自带 + ACR + CSI 自动配置 | ✅ |
+| **#79** | Log Viewer v1（含 v1.5 Quick Win 7 项） | ✅ |
+
+### 3) PRD 工作（详见下方"PRD 工作流"段）
+
+7 个 PRD 当日状态：
+
+| PRD | 状态 | 当日变化 |
+|---|---|---|
+| **PRD-001** 跨集群还原前置检查 | 已评审 → **改正中** | 落 T3 拓扑校验 + 4 finding |
+| **PRD-002** Transform 一等公民 (v1.2) | 已评审 → **改正中** | T1 编译契约 + Phase 0 迁移测试 + Event 流统计 |
+| **PRD-003** AI Advisor inside SupKube | 排队评审（重要不紧急） | 已落 T4：默认 Ollama + Score 规则化 + 置信度三档 |
+| **PRD-004** MCP Server "Supkube Skills" | 草稿 → **改正中** | T2 改 Streamable HTTP（ADR-034）+ HitL 服务端持久化 |
+| **PRD-005** Log Viewer + AirGap Diagnostic Bundle | 草稿（修订） | X1-X4 全落 + 4 specific |
+| **PRD-006** Activity Timeline 一等公民 | 草稿（修订） | X1 引用 PRD-005 §4.8 + Velero 矩阵 + 删 ETA |
+| **PRD-007** 3-2-1-1-0 完整数据韧性 | **草稿（新立项）** | Mars 主动询问后立，Agent 后台起草中 |
+
+### 4) ADR-LEDGER 台账 + 4 个 ADR 草稿
+
+- **架构设计.md 顶部新加 ADR 号台账**（单一来源，X2 撞号根治）
+- **ADR-033** AI Advisor 架构（163 行）— PRD-003/004 Engine 共享
+- **ADR-034** MCP 协议选型 = Streamable HTTP（188 行）— PRD-004 T2 闭环
+- **ADR-035** 结构化日志 + ERR_* 错误代码体系（193 行）— PRD-005 v2.2
+- **ADR-036** SSE 项目级口径 + nginx ingress 配置（170 行）— PRD-005 Live Tail
+- **ADR-003 v0.9.x 修订段**（Mars 已加，编译契约书面化，T1 闭环）
+
+### 5) SECURITY.md v0.2 新增 §6 AI 数据处理与出境治理
+
+7 子节：范围 / 合规默认（本地 Ollama）/ 强制脱敏管线（sanitize.go 单一来源）/ 出境白名单 / 审计 / 客户可关闭（opt-in）/ 与既有章关系
++ §2 加 LLM Provider 风险一行 + §8 FAQ 加"我的数据会出境吗" + 文档版本 v0.1 → v0.2
+
+### 6) 评审（PRD-Review 系列）
+
+- **PRD-Review-2026-05-31.md**（PRD-001~004，8 finding T1-T4）
+- **PRD-Review-2026-05-31-PRD005-006.md**（PRD-005/006，8 finding X1-X4 + 多 Med）
+- **ADR-Review-2026-05-31.md**（Agent 后台中，ADR-033~036）
+- **8 finding 全部闭环**：T1 由 Blocker 降 High（ADR-003 v0.9.x 修订段）/ T2 Blocker 由 ADR-034 解 / T3 PRD-001/002 加拓扑校验 / T4 由 SECURITY.md §6 + ADR-033 解 / X1 由 deep-link schema 权威解 / X2 由 ADR-LEDGER + ADR-035 重号解 / X3 由 ADR-036 解 / X4 由 SECURITY.md §6 + ADR-033 解
+
+### 7) dev workflow 工具（任务 #119）
+
+- **hack/dev-deploy.sh** 双集群部署脚本（775 行，6 Phase）
+- 内含：dual-arch build + dual-cluster rollout + 4 步真验证 + ACR token TTL preflight + fail-fast + dry-run
+- `bash -n` syntax OK + `chmod +x` done
+- 详见下方"dev workflow"段
+
+### 8) Memory 规则新增（跨 session 永久）
+
+| 规则 | 内容 |
+|---|---|
+| **规则 A** | **PRD 先于代码（绝对规则）**。例外：单文件 bug / UX 微调 / 文档 / dev workflow 脚本 |
+| **规则 B** | 多任务并行开 3 Agent（multi-agent parallelism） |
+| **规则 C** 🆕 | 并行 Agent 写共享契约时必须有"单一来源"（X1 教训：deep-link schema 不能 PRD-005/006 各写各的） |
+| **feedback_verify_before_ship.md** | 跨 session 验证规则 + 子规则"验完整 user journey, 不验单 endpoint" + "软件不能问用户'自己存在与否'" |
+
+### 9) Task 推进（今天）
+
+**完成**：#68 / #79 / #84 / #87 / #91（P0 Sprint 5/5）+ #117（PRD-006 草稿）+ #118（PRD-005 草稿）+ #119（dev-deploy.sh）+ #120（PRD.md 修订）+ #121（SECURITY.md §6）+ #122（ADR 草稿 ×4）
+
+**新立 in_progress**：#123（PRD-007，Agent 1 后台）+ #124（ADR-Review，Agent 2 后台）+ #125（本任务 ROADMAP + dashboard 同步）
+
+**待 Agent 1 PRD-007 完成后建**：#126（PRD-007 落地 task，关联 ADR-031）
+
+**现有 task 关联到 PRD**：#96（Activity Timeline）→ PRD-006；#114（Transform 一等公民）→ PRD-002；#115（AI Advisor）→ PRD-003；#116（MCP Server）→ PRD-004
 
 ---
 
@@ -30,20 +114,23 @@
         │                              │                              │
         │  P0 重要紧急 (Do Now)        │  P2 紧急不重要 (Quick Wins)  │
         │  ──────────────────────      │  ─────────────────────────   │
-        │  · v0.8.14 Log Viewer        │  · CI/CD GitHub Actions      │
-        │  · v0.9.2 License Manager    │  · Backend version 注入收尾  │
-        │  · v0.9.1.3 Storage Class    │  · DOCSITE (VitePress 起步)  │
-        │    Mgmt 集群管理 tab         │  · v0.9.0.5 #68 Force-Delete │
+        │  · v0.9.2 License Manager    │  · CI/CD GitHub Actions      │
+        │  · v0.9.1.5 Storage Class    │  · Backend version 注入收尾  │
+        │    Mgmt 集群管理 tab         │  · DOCSITE (VitePress 起步)  │
+        │  · PRD-001/002 改正中 →研发  │                              │
+        │    (#104 CSI 一键适配重启)   │                              │
         │                              │                              │
 重要 ◀──┼──────────────────────────────┼──────────────────────────────┼──▶ 不重要
         │                              │                              │
         │  P1 重要不紧急 (Schedule)    │  P3 不紧急不重要 (Wait)      │
         │  ──────────────────────      │  ─────────────────────────   │
-        │  · v0.9.6 BPMN 灾备演练 ★    │  · v0.9.7 KubeVirt VM        │
-        │  · v0.9.4 EntraID + Vault    │  · Sentinel webhook          │
-        │  · v0.9.5 Kyverno            │  · Case API 完整集成         │
-        │  · v0.9.3 文件浏览           │  · TELEMETRY 数据收集        │
-        │  · v0.9.8 MCP Server ↑       │  · OCI 镜像备份 (ghcr/quay)  │
+        │  · PRD-007 ★ 数据韧性 (新)   │  · v0.9.7 KubeVirt VM        │
+        │  · PRD-003 AI Advisor ↑      │  · Sentinel webhook          │
+        │  · PRD-004 MCP Server ↑      │  · Case API 完整集成         │
+        │  · v0.9.6 BPMN 灾备演练 ★    │  · TELEMETRY 数据收集        │
+        │  · v0.9.4 EntraID + Vault    │  · OCI 镜像备份 (ghcr/quay)  │
+        │  · v0.9.5 Kyverno            │                              │
+        │  · v0.9.3 文件浏览           │                              │
         │  · v0.9.10 Catalog Service   │                              │
         │  · v0.8.15 Backup integrity  │                              │
         │  · v0.8.16 Swagger API       │                              │
@@ -56,18 +143,28 @@
 
   ★ = Premium tier 独创卖点
   ↑ = 本次 review 升优先级（原 v0.9.8 → 提到 P1 因 Veeam Intelligence 落地证明 AI 已成标配）
+
+  ✅ 2026-05-31 已从 P0 出栈进入"已完成": v0.8.14 Log Viewer (#79) / v0.9.0.5 Force-Delete (#68)
+                                          / #91 Imported RP / #87 BSL UX / #84 Velero 真自带 + ACR + CSI
 ```
 
 ### P0 — 重要紧急（必须在 v1.0 GA 前完成）
 
 | Item | PV | CR | ME | 总 | 工程量 | Sprint | 当前状态 |
 |---|---|---|---|---|---|---|---|
-| **Log Viewer + Download Logs + AirGap 真支持** | 5 | 5 | 5 | **15** | 7d | v0.8.14 | 🟢 进行中 (#79) |
+| ~~**Log Viewer + Download Logs + AirGap 真支持**~~ | 5 | 5 | 5 | **15** | 7d | v0.8.14 | ✅ **2026-05-31 ship** (#79 + Quick Win v1.5 7 项) |
+| ~~**#68 Force-Delete 卡住的 Backup**~~ | 3 | 4 | 3 | **10** | 0.5d | v0.9.0.5 | ✅ **2026-05-31 ship** (#68) |
+| ~~**#87 BSL Secret Key UX**~~ | 3 | 4 | 3 | **10** | 0.5d | v0.9.1.x | ✅ **2026-05-31 ship** (#87) |
+| ~~**#91 Imported RP 0 artifacts UX 闭环**~~ | 4 | 4 | 3 | **11** | 1d | v0.9.1.6 | ✅ **2026-05-31 ship** (#91) |
+| ~~**#84 Velero 真自带 + ACR + CSI 自动配置**~~ | 5 | 4 | 4 | **13** | 3d | v0.9.1.3 | ✅ **2026-05-31 ship** (#84) |
 | **License Manager 前端** | 5 | 5 | 4 | **14** | 3d | v0.9.2 | 🔲 (#63) |
 | **存储管理 tab (快照位置迁入集群管理；BSL 保持主菜单)** | 4 | 5 | 4 | **13** | 1d | v0.9.1.5 | 🔲 客户已提，task #86 |
-| **#68 Force-Delete 卡住的 Backup** | 3 | 4 | 3 | **10** | 0.5d | v0.9.0.5 | 🔲 (#68) |
+| **PRD-001 跨集群还原前置检查** (改正中 → 研发) | 5 | 5 | 3 | **13** | 5d | v0.9.x | 🟢 **改正中**（finding 闭环后转研发）(#104) |
+| **PRD-002 Transform 一等公民 (v1.2)** (改正中 → 研发) | 5 | 4 | 3 | **12** | 7d | v0.9.x | 🟢 **改正中**（T1/Phase 0/Event 流闭环）(#114) |
 
-**为何 P0**：以上 4 项**任何一个未完成都直接卡商业化路径**。Log Viewer 是客户出问题排障的唯一手段；License Manager 是收钱前提；存储管理 tab 是客户提的（架构正解：BSL 是全局共享 Storage Profile 留主菜单，VSL 是集群本地配置归集群管理）；Force-Delete 是真实故障数据可能踩到的点。
+**为何 P0**：上方斜删除项 = **2026-05-31 一天 P0 Demo Sprint 全部清空**（5/5），D-16 锁定的 2 周 sprint 提前收。当前 P0 剩 License Manager + 存储管理 tab + 两个改正中 PRD（PRD-001/002）—— **改正中**意味着 finding 闭环后自动转研发中，不需要再排队评审。
+
+> **下一阶段 (~2026-06-13 之后)**：#104 CSI 一键适配重启（PRD-001/002 finding 闭环后即可），叙事衔接 P0 Demo 收尾。
 
 **v0.8.14 scope 扩张说明 (2026-05-26 客户反馈后)**：原 5d Log Viewer 扩到 7d，新增 LV4 改名（Upload to Support → Download Logs）+ LV8 真 AirGap 支持。详见 §v0.8.14 sprint 表。原因：本地化 + AirGapped 客户群（中国/日本中型企业）是同一群人，他们既不能上传 log（无公网出口）也不能拉公网镜像（防火墙）。两件事在同一 sprint 一起做，叙事完整。
 
@@ -75,20 +172,23 @@
 
 | Item | PV | CR | ME | 总 | 工程量 | Sprint | 当前状态 |
 |---|---|---|---|---|---|---|---|
+| **PRD-007 3-2-1-1-0 完整数据韧性 ★🆕** | 5 | 5 | 5 | **15** | 14d | v0.9.x+ | 🟢 **草稿中**（Agent 1 后台，2026-05-31 立项，task #126 待建） |
 | **BPMN 应用级恢复演练 ★** | 5 | 3 | 5 | **13** | 7d | v0.9.6 | 🔲 Premium 独创 |
 | **EntraID + Vault (合规 P1)** | 4 | 4 | 5 | **13** | 5d | v0.9.4 | 🔲 标书必备 |
+| **PRD-003 AI Advisor inside SupKube ↑** | 4 | 3 | 5 | **12** | 8d | v0.9.x | 🟡 **排队评审**（Mars 长期评审，task #115） |
+| **PRD-004 MCP Server (Streamable HTTP) ↑** | 4 | 3 | 5 | **12** | 5d | v0.9.9 | 🟡 **改正中**（ADR-034 T2 闭环，task #116） |
 | **Kyverno (合规 P2)** | 4 | 4 | 4 | **12** | 3d | v0.9.5 | 🔲 |
 | **细粒度文件浏览 + 恢复** | 4 | 4 | 4 | **12** | 5d | v0.9.3 | 🔲 |
-| **MCP Server (AI 集成) ↑** | 4 | 3 | 5 | **12** | 4d | v0.9.8 | 🔲 升优先级 |
 | **Catalog Service + Fleet Lifecycle** | 5 | 4 | 3 | **12** | 8d | v0.9.10 | 🔲 客户战略需求 |
 | **Backup integrity check** | 3 | 3 | 4 | **10** | 2d | v0.8.15 | 🔲 |
 | **Swagger REST API** | 3 | 3 | 4 | **10** | 2d | v0.8.16 | 🔲 |
 | **Configuration Backup (dogfooding)** | 4 | 2 | 3 | **9** | 5d | v0.9.11 | 🔲 |
 
 **P1 排序逻辑**：
-- **BPMN v0.9.6** 仍是最高 P1 — 这是 Premium 独创卖点，长期看决定旗舰 SKU 能不能定价上去。
+- **PRD-007 数据韧性 (🆕 2026-05-31 立项)** 直接 PV=5/CR=5/ME=5 满分进 P1 顶部：Mars 主动询问后立项，整合 ADR-031 5 层模型 + Layer 4 Backup Copy + Layer 5 DR Drill，是 Kasten/Veeam 级定位的核心叙事。
+- **BPMN v0.9.6** 是最高 P1 中的"老牌独创卖点" — Premium 套餐定价锚点。
 - **EntraID + Vault v0.9.4** 排在前面是因为**标书必备**——金融/政企客户没这个直接 disqualify。
-- **MCP Server ↑** 从原 v0.9.8 P3 升到 P1：Veeam Intelligence 已在 VBR 落地，AI 已成 backup 产品标配。
+- **PRD-003 / PRD-004 (AI Advisor + MCP Server)** 从原 v0.9.8 P3 升到 P1：Veeam Intelligence 已在 VBR 落地，AI 已成 backup 产品标配。PRD-003 排队评审中，PRD-004 改正中（ADR-034 锁 Streamable HTTP）。
 - **Catalog Service v0.9.10** 来自客户战略需求（统一管理 install + preflight + debug），架构早定避免后期重写。
 
 ### P2 — 紧急不重要（顺手做，不阻塞主线）
@@ -374,7 +474,8 @@ GET    /api/v1/license/usage-history → [{ month, peakNodeCount }]
 
 | Sprint | 完成日期 | 主要内容 | Git tag |
 |---|---|---|---|
-| **v0.9.1.2** | 2026-05-26 | **UI 重构**：Sidebar 10→7 (Observability hub 合并 Activity/Advisor/Audit/Log Viewer)；备份顾问→可观测性，数据还原→应用还原；缩进对齐第三修 (CSS Grid)；存储位置 + 快照位置 退出侧边栏 (集群管理 tab 化 v0.9.1.3 做)；+ PRODUCT-TIERS.md (~430 行 商业模型) + hack/DEMO-cross-cluster-restore.md (~550 行 客户演示指南) | `v0.9.1.2-alpha` |
+| **v0.9.1.13 Import Policy** | 2026-06-01 | **#88 Import 半 ship**：ImportPolicy CRD（mode=Continuous 60s 默认 / Scheduled cron） + HMAC-SHA256 fingerprint enforce/warn/disabled 三态 + UI Policies "Action Type=Import" 表单 + 列表行 status (lastSyncAt / importedCount / rejectedCount) + Pause/Resume/Run-once kebab + sharedSecret helm `--set` 跨集群同步 + 文档闭环（USER_MANUAL §24 / 测试用例.md §9.5 TC-IMP-001~004 / ADR-038 / PRD-009 v2 §4.5 / PRD-007 §4.4）。打败 Kasten：worst RPO 默认 6 min vs Kasten 10 min。Layer 4 Backup Copy 半（数据复制到第 2 云）仍 backlog。 | `v0.9.1.13-alpha` |
+| **2026-05-31 P0 Demo Sprint** | 2026-05-31 | **5/5 收官**：#87 BSL Secret Key UX + #68 Force-delete + #91 Imported RP UX 闭环 + #84 Velero 真自带 + ACR + CSI 自动 + #79 Log Viewer v1（+ Quick Win v1.5 7 项：错误摘要卡 / Prev-Next Error / Expand Context ±5 行 / 时间 Abs-Rel / Live Tail Lock / 搜索荧光 / 全屏）。双集群部署 buildStamp `260530-1543`。**+ 大块文档产出**：PRD-001~006 评审/修订 + PRD-007 立项 + ADR-033~036（714 行）+ ADR-LEDGER 单一来源 + SECURITY.md v0.2 §6 AI 出境治理 + hack/dev-deploy.sh 775 行 + Memory 规则 A/B/C + Verify-before-ship 永久规则 | `v0.9.1.9-alpha` |
 | **v0.9.1.0** | 2026-05-26 | **Install UX**：preflight.sh (10 项 cluster 检查) + EULA gate + USER_MANUAL §23 Install Reference + image.registry airgap override | `v0.9.1.0-alpha` |
 | **v0.9.0.4** | 2026-05-26 | **Multi-arch**：docker buildx amd64+arm64 manifest list；Dockerfile TARGETARCH；客户零参数适配 ARM64 集群 | `v0.9.0.4-alpha` |
 | **v0.9.0.3** | 2026-05-25/26 | **制品分发闭环**：ACR (Standard SKU + anonymous pull) + Azure Blob Static Website + Cloudflare Worker (`charts.supkube.com`) + hack/publish-release.sh + 相对 URL index.yaml；SemVer 翻译 | `v0.9.0.3-alpha` |
@@ -409,12 +510,131 @@ GET    /api/v1/license/usage-history → [{ month, peakNodeCount }]
 | Hooks 引擎 | v0.9 | **直接集成 Kanister**（不自研） |
 | 多集群架构 | v0.9.0 | **Hub-Spoke**；Cluster CRD = `clusters.supkube.io`；kubeconfig 存 K8s Secret；60s health controller |
 | 认证方案 | v0.8.5 | **OIDC via Dex**（不自建本地用户系统）；4 角色 RBAC；4 IdP 集成 |
-| 本地快照战略 | v0.8.12 | **方案 B**：放弃 "L1 Snapshot Only"（Velero v1.18 无条件删 VSC 打破承诺）；改 Local MinIO BSL = "fast local copy"，Cloud BSL = "off-site copy"；Object Lock 实现 3-2-1-1-0 的 "1 immutable" |
+| 本地快照战略 | v0.8.12 → **ADR-031 纠错 (2026-05-30)** | v0.8.12 选 Local MinIO BSL = "fast local copy" + Cloud BSL = "off-site copy" + Object Lock = "1 immutable"（**仍正确**）。⚠ 但当时"放弃快照"的前提是**误诊**：2026-05-30 双驱动实测（AKS Azure Disk + docker-desktop csi-hostpath）证明 `snapshotMoveData=false` 的**存储快照保留且可还原**（K8s 对象消失 ≠ 数据丢失）。**本地快照 = 独立的 Layer 1（SupKube 自管、非 Velero），与本地 BSL 并存，不是被取代**。详见 ADR-031 |
+| 数据韧性模型 | **ADR-031 (2026-05-30)** | **5 层 3-2-1-1-0**（本地快照 / 本地BSL / 云BSL / 第2云 Backup Copy / 虚拟实验室）；核心转向**"拍一次快照 → 复制到多处"**解决 Snapshot↔Export 时间差 (Q1) + 事后按需导出 (Q2)；产品定位转 **Kasten/Veeam 级数据韧性平台**。详见 ADR-031 |
 | 制品分发架构 | v0.9.0.3 | **Azure 一栈**：ACR (Standard, anonymous pull) + Blob Static Website + Cloudflare Worker 反代；index.yaml 相对 URL → 未来切 CDN/域名零成本 |
 | 镜像架构 | v0.9.0.4 | **multi-arch buildx** (linux/amd64 + linux/arm64)；客户零 `--platform` 参数 |
 | EULA + License | v0.9.1.0 | helm template fail-fast gate + 接受后写 `cm/supkube-eula` 留存元数据；license key alpha 阶段任意字符串通过 |
 | 编排引擎 (v0.9.7) | TBD | **BPMN.io 画布 + Activity + Kanister Blueprint** 三层 |
 | 还原扫描引擎 (v0.9.6) | 2026-05-28 | **双引擎并联**：yara-x (Rust, Apache-2.0, 无 cgo) + ClamAV；规则源 = Yara-Rules 公共仓库 + 客户 ConfigMap；ScanResult CRD + Backup 打 `quarantine` label；扫描 Job = 临时 ns 还原 + 双引擎并行 + 上报清理。详见 ADR-030 |
+
+---
+
+## 🛡 数据韧性权威模型（ADR-031, 2026-05-30）
+
+> 沉淀今天这一大轮：双驱动快照实测纠错 + 5 层 3-2-1-1-0 + Q1/Q2 答案 + 6 点韧性路径。详细论证见 **架构设计.md ADR-031**。
+>
+> **→ PRD-007（草稿, 2026-05-31）** 把 5 层 + Object Lock + Lifecycle + Layer 4 Backup Copy + Layer 5 DR Drill 整合为**客户面 PRD**（Agent 1 后台起草中）。ADR-031 是架构权威，PRD-007 是客户/产品视角的同一件事——用户能"看到" 5 层、能配置每层、能演练 Layer 5。
+
+### 5 层 3-2-1-1-0（权威模型）
+
+| 层 | 名称 | 实现 | 3-2-1-1-0 角色 |
+|---|---|---|---|
+| 1 | **本地快照** | SupKube **自管** CSI VolumeSnapshot（留 in-cluster 对象 + Retain），**非 Velero** | 第 1 份（秒级回滚） |
+| 2 | 本地存储库 | Velero → 集群内 MinIO BSL | 第 2 份 + 介质 1 |
+| 3 | 云端存储库 | Velero → 云 BSL | 第 3 份 + 介质 2 + 异地 |
+| 4 | **第 2 云 Backup Copy** | **复制已有备份**到另一朵云（非重发） | 冗余 + 不可变 |
+| 5 | 虚拟实验室 | Clone NS / 指定集群还原 + 校验脚本 | 0 错误（Verified Restore） |
+
+**核心架构转向**："**拍一次快照 → 复制/派生到多处**"（Q1 时间差 + Q2 事后导出 同时解）。两条落地路径(c)Backup-object 复制 / (b)快照派生，推荐 (c) 先做。
+
+### 由 ADR-031 派生的新任务 / Sprint 调整
+
+| 任务 | 范畴 | 状态 |
+|---|---|---|
+| **#109** 集群备份就绪 pre-flight（含 frankenstein 检测） | v0.9.x | 🆕 已建 |
+| **#110** 客户面 Lifecycle Management 闭环（Check → 版本 → 可升级 → 确认 → 执行）— Operator 路径 ADR 讨论中 | v0.9.x | 🆕 已建 |
+| **Layer 4 Backup Copy**（object-to-object 复制到第 2 云，Velero BackupSync 自动识别） | v0.9.x | 🆕 待建 task |
+| ~~**#88 拆分**：Import（身份流转）↔ Backup Copy（数据复制到第 2 云）~~ → **Import 半已 ship**：ImportPolicy CRD + Continuous/Scheduled mode + HMAC fingerprint enforce/warn/disabled + UI Policies "Action Type=Import"；Backup Copy 半仍 backlog | v0.9.1.13 (Import) / Layer 4 Backup Copy v0.9.x 待启动 | ✅ **2026-06-01 ship Import 半 (v0.9.1.13)** — task #88 + #157-163；TC-IMP-001~004；USER_MANUAL §24；ADR-038 |
+| **#104 CSI 一键适配（方案 C）** — 实测厘清后恢复推进 | in_progress | 🟢 继续 |
+| **#102 frankenstein 修复** — AKS dev 已升 chart 12.0.1；test=K10 / docker-desktop 已干净 → 无需别升 | v0.9.x | ✅ 完成 |
+| **Layer 1 实现**：SupKube 自管 CSI VS（非 Velero），秒级 rollback | v0.9.x+ | 🟡 待启动；**定位转 Kasten/Veeam 级** |
+
+### 数据韧性 6 点路径（Mars 2026-05-30）
+
+| 考量 | 能力 | 与现有底座 | 性质 |
+|---|---|---|---|
+| 1. CDP / RPO≈0 + 一致性 | 持续数据保护（应用级日志：PG WAL / MySQL binlog） | Velero 不做 | 🔬 研究（一致性核心） |
+| 2. 复制 5-min RPO（源备-目还） | 暖备 DR | MC4 + 高频 schedule | 🟢 可建 |
+| 3. CRC 一致性检查（计划任务）+ 通过 RP 加图标 | 备份校验（0-错误支柱） | v0.8.15 + Advisor #106 | 🟢 可建 |
+| 4. YARA + 还原到异站（转换规则） | 还原扫描 + Transform | #92 YARA + #104 | 🟡 已规划 |
+| 5. 备份待办清单 + DR 演练 plan | 工作流 + Layer 5 虚拟实验室 | 跨集群还原 + 新演练引擎 | 🟡 可建 |
+| 5b. 站内信 + 通知 | 通知中心 | 全新横切 | 🟢 可建 |
+
+**一致性三档**：crash-consistent（裸快照）/ app-consistent（fsfreeze + Velero backup hooks，已有原语）/ transaction-consistent（DB 日志，RPO≈0 唯一真路）。
+
+---
+
+## 📋 PRD 工作流（2026-05-31 沉淀）
+
+> **规则 A（绝对）**：所有影响 UX 的 Feature 必须先过 PRD。例外：单文件 bug / UX 微调 / 文档 / dev workflow 脚本。
+> **流程**：草稿 → 排队评审 → 评审中 → {改正中 ｜ 驳回 ｜ 已评审} → 研发中 → 待验收 → Shipped → 归档
+> **单一来源**：所有 PRD 在 `PRD.md`；评审记录在 `PRD-Review/` 子目录；ADR 编号在**架构设计.md 顶部 ADR-LEDGER**（防 X2 撞号）。
+
+### 7 个 PRD 当前状态（按编号）
+
+| PRD | 标题 | 状态 | Task | 关键 finding 闭环 |
+|---|---|---|---|---|
+| **PRD-001** | 跨集群还原前置检查闭环（轻量 List + Checkmark） | 改正中 | #104 | T3 拓扑校验 + 4 finding |
+| **PRD-002** | Transform 一等公民（两层：Transform 库 + TransformSet）v1.2 | 改正中 | #114 | T1 编译契约（ADR-003 v0.9.x 修订段）+ Phase 0 测试 + Event 流统计 |
+| **PRD-003** | AI Advisor inside SupKube（推荐型 · 非自治） | 排队评审 | #115 | T4 默认 Ollama（合规默认）+ Score 规则化 + 置信度三档 |
+| **PRD-004** | MCP Server "Supkube Skills"（Streamable HTTP + 5 Skills + Apache-2.0） | 改正中 | #116 | T2 改 Streamable HTTP（ADR-034 锁，不用 SSE 跟 ADR-015 对齐）+ HitL 服务端持久化 |
+| **PRD-005** | Log Viewer + AirGap Diagnostic Bundle | 草稿（修订） | #118 | X1-X4 全落（X1 deep-link 权威 + X2 ADR-035 重号 + X3 ADR-036 SSE + X4 SECURITY §6） |
+| **PRD-006** | Activity Timeline 一等公民（Action Details + Velero CLI 对齐） | 草稿（修订） | #117 | X1 引用 PRD-005 §4.8 + X4 脱敏 + Velero 版本矩阵 + 删 ETA |
+| **PRD-007** 🆕 | 3-2-1-1-0 完整数据韧性（5 层 + Object Lock + Layer 4 Backup Copy + DR Drill） | 草稿 | #126（待建） | 起草中（Agent 后台），整合 ADR-031 + #88 + #109 + #111 + LBS 系列 |
+
+### ADR-LEDGER 编号台账（2026-05-31 建立单一来源）
+
+| ADR | 标题 | 行数 | 关联 |
+|---|---|---|---|
+| **ADR-003 v0.9.x** 修订段 | Transform 两层模型编译契约书面化 | — | PRD-002 T1 闭环 |
+| **ADR-030** | 还原扫描双引擎（yara-x + ClamAV） | — | v0.9.6 |
+| **ADR-031** | 5 层 3-2-1-1-0 数据韧性模型（纠 ADR-028 误诊） | — | PRD-007 |
+| **ADR-032** | Lifecycle Management 走 Operator 路径 | — | #110 / #111 |
+| **ADR-033** | AI Advisor 架构（Engine 共享 / 推荐型 / 非自治） | 163 | PRD-003 + PRD-004 共享 |
+| **ADR-034** | MCP 协议选型 = Streamable HTTP（非 SSE） | 188 | PRD-004 T2 闭环（跟 ADR-015 对齐） |
+| **ADR-035** | 结构化日志 + ERR_* 错误代码体系 | 193 | PRD-005 v2.2（X2 撞号原案号已重号） |
+| **ADR-036** | SSE 项目级口径 + nginx ingress 配置 | 170 | PRD-005 Live Tail（X3 闭环） |
+
+> **2026-05-31 新 ADR 总行数**：163 + 188 + 193 + 170 = **714 行**
+
+### PRD-Review 节奏
+
+- **PRD-Review-YYYY-MM-DD.md**：每轮评审一份文档（PRD-001~004 一份、PRD-005~006 一份）。
+- **finding 等级**：Blocker / High / Med / Low / Info。Blocker 必闭环再放行。
+- **2026-05-31 finding 全部闭环**：T1-T4（PRD-001~004）+ X1-X4（PRD-005~006）。
+- **ADR-Review-2026-05-31.md**（Agent 后台中）：ADR-033~036 同步评审。
+
+---
+
+## 🛠 dev workflow（2026-05-31 升级）
+
+### hack/dev-deploy.sh（任务 #119）
+
+**775 行 bash 双集群部署脚本**，6 Phase 完整闭环：
+
+| Phase | 内容 |
+|---|---|
+| **P1** ACR token preflight | TTL 检查 + auto-refresh + fail-fast |
+| **P2** dual-arch build | `docker buildx` linux/amd64 + linux/arm64 |
+| **P3** push to ACR | manifest list + tag policy |
+| **P4** dual-cluster rollout | docker-desktop arm64 + AKS amd64 并行 |
+| **P5** 4 步真验证 | `curl /status` buildStamp / kubectl rollout / API smoke / Web UI |
+| **P6** report | 失败任一 Phase 全 fail-fast + 输出 buildStamp |
+
+**特性**：`--dry-run` 支持 + `bash -n` syntax OK + `chmod +x` done。
+
+### Verify-before-ship（永久规则，feedback_verify_before_ship.md）
+
+5 次 false-complete pattern 之后定死：
+
+| 规则 | 内容 |
+|---|---|
+| **核心** | **build pass ≠ deploy 完成**，必须 `curl /status` 看 buildStamp + 走完整 user journey 才算 ship |
+| **子规则 1** | 验完整 user journey，不验单 endpoint（避免"endpoint 200 但 UI 报错") |
+| **子规则 2** | 软件不能问用户"自己存在与否"（不能用问用户的方式确认 deploy 成功） |
+
+跨 session 永久。所有"完成"声明必须能复现 buildStamp 对比。
 
 ---
 

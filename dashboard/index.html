@@ -6,109 +6,65 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <style>
   :root {
-    --bg: #0e1116;
-    --bg-2: #161b22;
-    --bg-3: #1f2630;
-    --border: #2a313c;
-    --fg: #e6edf3;
-    --fg-2: #9aa4af;
-    --fg-3: #6b7681;
-    --accent: #6aa6ff;
-    --accent-2: #4f8df9;
-    --p0: #ff5d5d;
-    --p1: #ffb35d;
-    --p2: #ffe35d;
-    --p3: #5dd0ff;
-    --todo: #6b7681;
-    --in_progress: #4f8df9;
-    --in_review: #b97aff;
-    --done: #4ad28a;
-    --closed: #6b7681;
+    --bg: #0e1116; --bg-2: #161b22; --bg-3: #1f2630; --border: #2a313c;
+    --fg: #e6edf3; --fg-2: #9aa4af; --fg-3: #6b7681;
+    --accent: #6aa6ff; --accent-2: #4f8df9;
+    --p0: #ff5d5d; --p1: #ffb35d; --p2: #ffe35d; --p3: #5dd0ff;
+    --todo: #6b7681; --in_progress: #4f8df9; --in_review: #b97aff; --done: #4ad28a; --closed: #6b7681;
+    --blocked: #ff5d5d;
     --shadow: 0 2px 8px rgba(0,0,0,.35);
   }
   * { box-sizing: border-box; }
   html, body { background: var(--bg); color: var(--fg); margin: 0; font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft Yahei", sans-serif; }
   a { color: var(--accent); text-decoration: none; }
   a:hover { text-decoration: underline; }
-  header {
-    display: flex; align-items: center; gap: 16px;
-    padding: 12px 20px; border-bottom: 1px solid var(--border);
-    background: var(--bg-2); position: sticky; top: 0; z-index: 10;
-  }
+  header { display: flex; align-items: center; gap: 16px; padding: 12px 20px; border-bottom: 1px solid var(--border); background: var(--bg-2); position: sticky; top: 0; z-index: 10; }
   header .brand { font-weight: 700; font-size: 15px; letter-spacing: .5px; }
   header .brand .v { color: var(--fg-3); font-weight: 400; margin-left: 6px; font-size: 12px; }
-  header nav { display: flex; gap: 4px; margin-left: 18px; }
-  header nav button {
-    background: transparent; color: var(--fg-2); border: 1px solid transparent;
-    padding: 6px 12px; border-radius: 6px; cursor: pointer; font: inherit;
-  }
+  header nav { display: flex; gap: 4px; margin-left: 18px; flex-wrap: wrap; }
+  header nav button { background: transparent; color: var(--fg-2); border: 1px solid transparent; padding: 6px 12px; border-radius: 6px; cursor: pointer; font: inherit; }
   header nav button:hover { background: var(--bg-3); color: var(--fg); }
   header nav button.active { background: var(--bg-3); color: var(--fg); border-color: var(--border); }
   header .stamp { margin-left: auto; color: var(--fg-3); font-size: 12px; }
 
-  .filters {
-    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-    padding: 10px 20px; background: var(--bg-2); border-bottom: 1px solid var(--border);
-  }
+  .filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 20px; background: var(--bg-2); border-bottom: 1px solid var(--border); }
   .filters label { color: var(--fg-3); font-size: 12px; margin-right: 4px; }
-  .filters select, .filters input {
-    background: var(--bg-3); color: var(--fg); border: 1px solid var(--border);
-    padding: 5px 8px; border-radius: 5px; font: inherit;
-  }
+  .filters select, .filters input { background: var(--bg-3); color: var(--fg); border: 1px solid var(--border); padding: 5px 8px; border-radius: 5px; font: inherit; }
   .filters .stats { margin-left: auto; color: var(--fg-2); font-size: 12px; }
 
   main { padding: 20px; }
 
-  /* Overview cards */
-  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 24px; }
-  .kpi {
-    background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px;
-    padding: 14px 16px; box-shadow: var(--shadow);
-  }
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; margin-bottom: 24px; }
+  .kpi { background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; box-shadow: var(--shadow); }
   .kpi .label { color: var(--fg-3); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
   .kpi .value { font-size: 28px; font-weight: 600; margin-top: 4px; }
   .kpi .sub { color: var(--fg-2); font-size: 12px; margin-top: 4px; }
-  .kpi.red .value { color: var(--p0); }
-  .kpi.orange .value { color: var(--p1); }
-  .kpi.yellow .value { color: var(--p2); }
-  .kpi.blue .value { color: var(--p3); }
-  .kpi.green .value { color: var(--done); }
+  .kpi.red .value { color: var(--p0); } .kpi.orange .value { color: var(--p1); } .kpi.yellow .value { color: var(--p2); } .kpi.blue .value { color: var(--p3); } .kpi.green .value { color: var(--done); } .kpi.purple .value { color: var(--in_review); }
 
-  /* Kanban */
+  h2.sec { font-size: 15px; color: var(--fg-2); margin-top: 30px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  h2.sec .hint { font-size: 11px; color: var(--fg-2); font-weight: normal; }
+
   .kanban { display: grid; grid-template-columns: repeat(5, minmax(220px, 1fr)); gap: 12px; overflow-x: auto; }
-  .col-head {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 8px 10px; background: var(--bg-2); border: 1px solid var(--border);
-    border-radius: 8px 8px 0 0; font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase;
-  }
+  .col-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px 8px 0 0; font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; }
   .col-head .count { background: var(--bg-3); padding: 2px 8px; border-radius: 10px; color: var(--fg-2); font-weight: 500; }
   .col-body { background: var(--bg-2); border: 1px solid var(--border); border-top: none; border-radius: 0 0 8px 8px; min-height: 80vh; padding: 8px; display: flex; flex-direction: column; gap: 8px; }
-  .col.todo .col-head { border-left: 3px solid var(--todo); }
-  .col.in_progress .col-head { border-left: 3px solid var(--in_progress); }
-  .col.in_review .col-head { border-left: 3px solid var(--in_review); }
-  .col.done .col-head { border-left: 3px solid var(--done); }
-  .col.closed .col-head { border-left: 3px solid var(--closed); }
+  .col.todo .col-head { border-left: 3px solid var(--todo); } .col.in_progress .col-head { border-left: 3px solid var(--in_progress); } .col.in_review .col-head { border-left: 3px solid var(--in_review); } .col.done .col-head { border-left: 3px solid var(--done); } .col.closed .col-head { border-left: 3px solid var(--closed); }
 
-  .card {
-    background: var(--bg-3); border: 1px solid var(--border); border-radius: 6px;
-    padding: 10px 12px; cursor: pointer; transition: transform .08s ease, border-color .08s ease;
-  }
+  .card { background: var(--bg-3); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; cursor: pointer; transition: transform .08s ease, border-color .08s ease; }
   .card:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .card.is-blocked { border-color: var(--blocked); }
   .card .card-top { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 11px; color: var(--fg-3); }
   .card .id { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
   .card .title { font-size: 13px; line-height: 1.4; color: var(--fg); }
   .card .meta { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
 
   .chip { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; line-height: 1.4; }
-  .chip.p0 { background: rgba(255,93,93,.15); color: var(--p0); }
-  .chip.p1 { background: rgba(255,179,93,.15); color: var(--p1); }
-  .chip.p2 { background: rgba(255,227,93,.15); color: var(--p2); }
-  .chip.p3 { background: rgba(93,208,255,.15); color: var(--p3); }
+  .chip.p0 { background: rgba(255,93,93,.15); color: var(--p0); } .chip.p1 { background: rgba(255,179,93,.15); color: var(--p1); } .chip.p2 { background: rgba(255,227,93,.15); color: var(--p2); } .chip.p3 { background: rgba(93,208,255,.15); color: var(--p3); }
   .chip.cat { background: rgba(106,166,255,.12); color: var(--accent); }
   .chip.ver { background: rgba(74,210,138,.12); color: var(--done); font-family: ui-monospace, Menlo, monospace; }
   .chip.est { background: var(--bg-2); color: var(--fg-2); font-family: ui-monospace, Menlo, monospace; }
+  .chip.blocked { background: rgba(255,93,93,.18); color: var(--blocked); font-weight: 600; }
 
-  /* List */
   table { width: 100%; border-collapse: collapse; background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
   th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); font-size: 13px; vertical-align: top; }
   th { background: var(--bg-3); font-weight: 600; color: var(--fg-2); position: sticky; top: 105px; cursor: pointer; user-select: none; }
@@ -119,88 +75,65 @@
   td.title { font-weight: 500; }
 
   .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
-  .status-dot.todo { background: var(--todo); }
-  .status-dot.in_progress { background: var(--in_progress); }
-  .status-dot.in_review { background: var(--in_review); }
-  .status-dot.done { background: var(--done); }
-  .status-dot.closed { background: var(--closed); }
+  .status-dot.todo { background: var(--todo); } .status-dot.in_progress { background: var(--in_progress); } .status-dot.in_review { background: var(--in_review); } .status-dot.done { background: var(--done); } .status-dot.closed { background: var(--closed); }
 
-  /* Gantt */
   .gantt { background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 12px; overflow-x: auto; }
   .gantt-wrap { min-width: 1100px; }
-  .gantt-header { display: grid; grid-template-columns: 180px repeat(20, 1fr); gap: 1px; background: var(--border); border-radius: 4px; overflow: hidden; }
+  .gantt-header, .gantt-row { display: grid; grid-template-columns: 180px repeat(20, 1fr); gap: 1px; background: var(--border); }
+  .gantt-header { border-radius: 4px; overflow: hidden; }
   .gantt-header > div { background: var(--bg-3); padding: 6px 8px; font-size: 11px; color: var(--fg-2); text-align: center; }
   .gantt-header > div:first-child { text-align: left; font-weight: 600; }
-  .gantt-row { display: grid; grid-template-columns: 180px repeat(20, 1fr); gap: 1px; background: var(--border); margin-top: 1px; align-items: center; }
+  .gantt-row { margin-top: 1px; align-items: center; }
   .gantt-row > .lane { background: var(--bg-3); padding: 8px 10px; font-size: 12px; font-weight: 600; color: var(--fg); border-right: 2px solid var(--accent-2); }
   .gantt-row > .cell { background: var(--bg-2); height: 32px; position: relative; }
-  .gantt-bar {
-    position: absolute; top: 5px; bottom: 5px;
-    border-radius: 4px; padding: 0 6px; display: flex; align-items: center;
-    font-size: 11px; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    box-shadow: 0 1px 3px rgba(0,0,0,.4);
-  }
-  .gantt-bar.done { background: linear-gradient(90deg, #4ad28a, #2fa66c); }
-  .gantt-bar.in_progress { background: linear-gradient(90deg, #4f8df9, #3a6fd0); }
-  .gantt-bar.in_review { background: linear-gradient(90deg, #b97aff, #8e54d6); }
-  .gantt-bar.todo { background: linear-gradient(90deg, #4a5563, #3a434f); }
-  .gantt-bar.closed { background: var(--closed); }
+  .gantt-bar { position: absolute; top: 5px; bottom: 5px; border-radius: 4px; padding: 0 6px; display: flex; align-items: center; font-size: 11px; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 1px 3px rgba(0,0,0,.4); }
+  .gantt-bar.done { background: linear-gradient(90deg, #4ad28a, #2fa66c); } .gantt-bar.in_progress { background: linear-gradient(90deg, #4f8df9, #3a6fd0); } .gantt-bar.in_review { background: linear-gradient(90deg, #b97aff, #8e54d6); } .gantt-bar.todo { background: linear-gradient(90deg, #4a5563, #3a434f); } .gantt-bar.closed { background: var(--closed); }
 
-  /* Matrix */
   .matrix { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
   .quadrant { background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
   .quadrant h3 { margin: 0 0 10px; font-size: 14px; }
-  .quadrant.p0 { border-left: 4px solid var(--p0); }
-  .quadrant.p1 { border-left: 4px solid var(--p1); }
-  .quadrant.p2 { border-left: 4px solid var(--p2); }
-  .quadrant.p3 { border-left: 4px solid var(--p3); }
+  .quadrant.p0 { border-left: 4px solid var(--p0); } .quadrant.p1 { border-left: 4px solid var(--p1); } .quadrant.p2 { border-left: 4px solid var(--p2); } .quadrant.p3 { border-left: 4px solid var(--p3); }
   .quadrant ul { margin: 0; padding-left: 18px; }
   .quadrant li { margin: 4px 0; color: var(--fg-2); }
   .quadrant li strong { color: var(--fg); font-weight: 500; }
 
-  /* Customer pain */
   .pain-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
-  .pain {
-    background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px;
-    padding: 12px 14px; display: grid; grid-template-columns: 80px 1fr 1fr 110px; gap: 14px; align-items: center;
-  }
+  .pain { background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; display: grid; grid-template-columns: 80px 1fr 1fr 130px; gap: 14px; align-items: center; }
   .pain .pid { font-family: ui-monospace, Menlo, monospace; color: var(--p1); font-weight: 600; }
   .pain .quote { color: var(--fg); font-style: italic; }
-  .pain .quote::before { content: '"'; color: var(--fg-3); }
-  .pain .quote::after { content: '"'; color: var(--fg-3); }
+  .pain .quote::before { content: '"'; color: var(--fg-3); } .pain .quote::after { content: '"'; color: var(--fg-3); }
   .pain .link { color: var(--fg-2); font-size: 12px; }
 
-  .view { display: none; }
-  .view.active { display: block; }
+  /* Lineage */
+  .lin-row { display: grid; grid-template-columns: 1.3fr .7fr 1.1fr 1.1fr 1.2fr 110px; gap: 8px; align-items: center; background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+  .lin-head { background: var(--bg-3); font-size: 11px; color: var(--fg-3); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
+  .lin-node { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+  .lin-arrow { color: var(--fg-3); }
+  .lin-row .motive { color: var(--fg); }
 
-  .toast {
-    position: fixed; bottom: 24px; right: 24px;
-    background: var(--bg-3); border: 1px solid var(--border); border-radius: 6px;
-    padding: 10px 14px; color: var(--fg); box-shadow: var(--shadow); font-size: 12px;
-    opacity: 0; transform: translateY(10px); transition: opacity .2s, transform .2s;
-  }
+  .view { display: none; } .view.active { display: block; }
+
+  .toast { position: fixed; bottom: 24px; right: 24px; max-width: 420px; background: var(--bg-3); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; color: var(--fg); box-shadow: var(--shadow); font-size: 12px; opacity: 0; transform: translateY(10px); transition: opacity .2s, transform .2s; }
   .toast.show { opacity: 1; transform: translateY(0); }
 
-  footer {
-    padding: 20px; color: var(--fg-3); font-size: 11px; text-align: center;
-    border-top: 1px solid var(--border); margin-top: 30px;
-  }
+  footer { padding: 20px; color: var(--fg-3); font-size: 11px; text-align: center; border-top: 1px solid var(--border); margin-top: 30px; }
   footer code { background: var(--bg-3); padding: 2px 6px; border-radius: 4px; }
 </style>
 </head>
 <body>
 
 <header>
-  <div class="brand">SupKube <span class="v">项目仪表板 · v0.9.1.5-alpha</span></div>
+  <div class="brand">SupKube <span class="v" id="brand-ver">项目仪表板</span></div>
   <nav id="nav">
     <button data-view="overview" class="active">Overview</button>
     <button data-view="kanban">Kanban</button>
     <button data-view="list">List</button>
     <button data-view="gantt">Roadmap</button>
+    <button data-view="lineage">Lineage</button>
     <button data-view="matrix">Priority Matrix</button>
     <button data-view="pain">Customer Pain</button>
   </nav>
-  <div class="stamp">Snapshot: <span id="snapshot-time">2026-05-28</span></div>
+  <div class="stamp">Snapshot: <span id="snapshot-time">—</span></div>
 </header>
 
 <div class="filters">
@@ -221,21 +154,32 @@
 <!-- ============== OVERVIEW ============== -->
 <section class="view active" data-view="overview">
   <div class="kpi-grid">
-    <div class="kpi"><div class="label">Current Release</div><div class="value">v0.9.1.5</div><div class="sub">alpha · 2026-05-28 publish 待发</div></div>
-    <div class="kpi red"><div class="label">P0 Open</div><div class="value" id="kpi-p0">—</div><div class="sub">阻塞客户使用</div></div>
-    <div class="kpi orange"><div class="label">P1 Open</div><div class="value" id="kpi-p1">—</div><div class="sub">严重体验缺陷</div></div>
-    <div class="kpi yellow"><div class="label">P2 Open</div><div class="value" id="kpi-p2">—</div><div class="sub">架构债务</div></div>
-    <div class="kpi blue"><div class="label">In Progress</div><div class="value" id="kpi-inprog">—</div></div>
-    <div class="kpi green"><div class="label">Done (90d)</div><div class="value" id="kpi-done">—</div></div>
-    <div class="kpi"><div class="label">Sprint 容量</div><div class="value" id="kpi-cap">—</div><div class="sub">人天剩余</div></div>
-    <div class="kpi"><div class="label">客户痛点</div><div class="value" id="kpi-pain">7</div><div class="sub">demo 反馈</div></div>
+    <div class="kpi"><div class="label">Current Release</div><div class="value" id="kpi-ver">—</div><div class="sub" id="kpi-ver-sub"></div></div>
+    <div class="kpi green"><div class="label">★ 今日新增</div><div class="value" id="kpi-today">—</div><div class="sub" id="kpi-today-date"></div></div>
+    <div class="kpi red"><div class="label">P0 Open · 重要紧急</div><div class="value" id="kpi-p0">—</div><div class="sub">阻塞客户使用</div></div>
+    <div class="kpi orange"><div class="label">P1 Open · 重要不紧急</div><div class="value" id="kpi-p1">—</div><div class="sub">严重体验缺陷</div></div>
+    <div class="kpi yellow"><div class="label">P2 Open · 紧急不重要</div><div class="value" id="kpi-p2">—</div><div class="sub">架构债务 / 顺手做</div></div>
+    <div class="kpi red"><div class="label">🚧 Blocked</div><div class="value" id="kpi-blocked">—</div><div class="sub">被依赖卡住</div></div>
+    <div class="kpi blue"><div class="label">In Progress / Review</div><div class="value" id="kpi-inprog">—</div></div>
+    <div class="kpi green"><div class="label">完成率</div><div class="value" id="kpi-rate">—</div><div class="sub" id="kpi-rate-sub"></div></div>
+    <div class="kpi"><div class="label">Open Backlog</div><div class="value" id="kpi-cap">—</div><div class="sub">未完成估算 · 人天</div></div>
+    <div class="kpi"><div class="label">客户痛点</div><div class="value" id="kpi-pain">—</div><div class="sub">demo 反馈</div></div>
   </div>
 
-  <h2 style="font-size: 15px; color: var(--fg-2); margin-top: 30px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">本周行动 (2026-05-28 ~ 2026-06-03)</h2>
+  <h2 class="sec">完成趋势 <span class="hint">（按结束周累计完成任务数）</span></h2>
+  <div id="trend" style="background:var(--bg-2);border:1px solid var(--border);border-radius:8px;padding:14px;"></div>
+
+  <h2 class="sec">本周行动</h2>
   <ul id="weekly" style="line-height: 1.9; padding-left: 20px;"></ul>
 
-  <h2 style="font-size: 15px; color: var(--fg-2); margin-top: 30px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">今日决策记录</h2>
+  <h2 class="sec">今日决策记录</h2>
   <ul id="decisions" style="line-height: 1.9; padding-left: 20px;"></ul>
+
+  <h2 class="sec">PRD 状态 <span class="hint">（流程：草稿→排队评审→评审中→{改正中｜驳回｜已评审}→研发中→待验收→Shipped→归档 · 点击跳 PRD.md）</span></h2>
+  <ul id="prds" style="line-height: 1.9; padding-left: 20px;"></ul>
+
+  <h2 class="sec">ADR 台账 <span class="hint">（单一编号来源 = 架构设计.md 顶部 ADR-LEDGER · 点击跳 架构设计.md）</span></h2>
+  <ul id="adrs" style="line-height: 1.9; padding-left: 20px;"></ul>
 </section>
 
 <!-- ============== KANBAN ============== -->
@@ -252,37 +196,36 @@
 <!-- ============== LIST ============== -->
 <section class="view" data-view="list">
   <table>
-    <thead>
-      <tr>
-        <th data-sort="id">ID</th>
-        <th data-sort="priority">P</th>
-        <th data-sort="status">Status</th>
-        <th data-sort="version">Version</th>
-        <th data-sort="title">Title</th>
-        <th data-sort="category">Category</th>
-        <th data-sort="estimate_days">Est</th>
-        <th data-sort="owner">Owner</th>
-        <th>Tags</th>
-      </tr>
-    </thead>
+    <thead><tr>
+      <th data-sort="id">ID</th><th data-sort="priority">P</th><th data-sort="status">Status</th>
+      <th data-sort="version">Version</th><th data-sort="title">Title</th><th data-sort="category">Category</th>
+      <th data-sort="estimate_days">Est</th><th data-sort="owner">Owner</th><th data-sort="discovered">发现日期</th><th>Tags</th>
+    </tr></thead>
     <tbody id="list-body"></tbody>
   </table>
 </section>
 
 <!-- ============== GANTT ============== -->
 <section class="view" data-view="gantt">
-  <p style="color: var(--fg-2); font-size: 12px;">参照 Veeam VDC Rolling Quarter — 每行 = 一个 sprint / version；列 = 周次 (W22 → W41)。</p>
+  <p style="color: var(--fg-2); font-size: 12px;">每行 = 一个 version / sprint；列 = 周次 (W22 → W41)。条形按该 version 任务的真实起止周。</p>
   <div class="gantt"><div class="gantt-wrap" id="gantt-wrap"></div></div>
+</section>
+
+<!-- ============== LINEAGE ============== -->
+<section class="view" data-view="lineage">
+  <p style="color: var(--fg-2); font-size: 12px;">需求血缘：从客户痛点/动机一路追到测试用例。这是 SupKube 的纪律资产 —— 每个需求都可追溯。点击任意节点跳源文档。</p>
+  <div id="lineage-grid"></div>
 </section>
 
 <!-- ============== MATRIX ============== -->
 <section class="view" data-view="matrix">
   <div class="matrix">
-    <div class="quadrant p0"><h3>🔴 P0 — 重要紧急（阻塞客户）</h3><ul id="mtx-p0"></ul></div>
-    <div class="quadrant p1"><h3>🟡 P1 — 重要不紧急（三月内）</h3><ul id="mtx-p1"></ul></div>
-    <div class="quadrant p2"><h3>🟠 P2 — 紧急不重要（顺手做）</h3><ul id="mtx-p2"></ul></div>
+    <div class="quadrant p0"><h3>🔴 P0 — 重要且紧急（阻塞客户）</h3><ul id="mtx-p0"></ul></div>
+    <div class="quadrant p1"><h3>🟠 P1 — 重要不紧急（三月内）</h3><ul id="mtx-p1"></ul></div>
+    <div class="quadrant p2"><h3>🟡 P2 — 紧急不重要 / 架构债务（顺手做）</h3><ul id="mtx-p2"></ul></div>
     <div class="quadrant p3"><h3>🔵 P3 — 不紧急不重要（触发再做）</h3><ul id="mtx-p3"></ul></div>
   </div>
+  <p style="color: var(--fg-3); font-size: 11px; margin-top: 12px;">优先级口径统一来源 = 术语表.md §7.1。</p>
 </section>
 
 <!-- ============== CUSTOMER PAIN ============== -->
@@ -294,119 +237,37 @@
 </main>
 
 <footer>
-  Data source: <code>audit/PROJECT-AUDIT-2026-05-28.md</code> + <code>ROADMAP.md</code> ·
-  Edit <code>TASKS</code> in <code>dashboard/index.html</code> until Plane API is wired ·
-  Generated 2026-05-28
+  数据层：<code>dashboard/data.js</code>（与视图分离）· 半自动同步：<code>node dashboard/gen-data.mjs</code> 从 <code>PRD.md</code> + ADR-LEDGER 重生成 PRDS/ADRS ·
+  单一来源纪律见 <code>ENGINEERING.md §2</code>
 </footer>
 
 <div class="toast" id="toast"></div>
 
+<script src="data.js"></script>
 <script>
 /* ====================================================================
-   DATA — 单一事实源（每日盘点后更新）
-   Future: 切到 Plane REST API → fetch('/api/v1/workspaces/.../issues/')
+   RENDERING — 纯视图，数据来自 window.SUPKUBE_DATA（dashboard/data.js）
 ==================================================================== */
-const SNAPSHOT_DATE = "2026-05-28";
+const D = window.SUPKUBE_DATA;
+const { META, DECISIONS, PRDS, ADRS, WEEKLY, CUSTOMER_PAIN, LINEAGE, TASKS, SOURCE_LINKS } = D;
+const SNAPSHOT_DATE = META.SNAPSHOT_DATE;
 
-const DECISIONS = [
-  { id: "D-01", text: "改用 DevOps + K8s-native 流程，告别瀑布；每日站会盘点" },
-  { id: "D-02", text: "项目管理 = Plane（自托管 K8s）；知识库 = Wiki.js（自托管 K8s）" },
-  { id: "D-03", text: "还原扫描 = YARA + ClamAV 双引擎（不走 Kasten 单引擎路线）；插入 v0.9.6；详见 ADR-030" },
-  { id: "D-04", text: "KubeVirt VM 备份估算从 8d 下调到 5d；插入 v0.9.8（Velero KubeVirt plugin 已处理 90%）" },
-  { id: "D-05", text: "v0.9.6 安全扫描 + v0.9.7 还原演练 = 'Verified Restore' 完整闭环，Premium 套餐定价锚点" },
-  { id: "D-06", text: "建项目仪表板 HTML（Kanban + List + Gantt 三视图）作为日常复盘工具；远期切 Plane" }
-];
-
-const WEEKLY = [
-  { p: "P0", text: "commit + push 当前所有未提交改动（hotfix + ROADMAP + ADR-030 + AUDIT）", due: "今日" },
-  { p: "P0", text: "publish 0.9.1.5-alpha（demo hotfix）", due: "明日" },
-  { p: "P0", text: "部署 Plane + Wiki.js 到 AKS", due: "本周内" },
-  { p: "P0", text: "把现有任务 + 客户痛点 + P0~P3 全部导入 Plane", due: "Plane 上线后" },
-  { p: "P1", text: "启动 v0.9.1.3-VELERO-BUNDLED sprint (P0-1 根治)", due: "下周" },
-  { p: "P1", text: "写 CHANGELOG.md（0.9.0 起）", due: "本周内" },
-  { p: "P2", text: "评估 GitHub Actions CI（最小化 build + lint）", due: "月底" }
-];
-
-const CUSTOMER_PAIN = [
-  { id: "C-001", quote: "没有看到 Import 的标签", link: "P0-5 + Imported chip UI", status: "hotfix 待发" },
-  { id: "C-002", quote: "没有了以前的一键适配检查...举个例子，Storage Class 已经不一样了", link: "P1-1 + P1-5", status: "task #89" },
-  { id: "C-003", quote: "没有创建新的 import 还原点的地方...请你借鉴一下 Kasten", link: "Export/Import 指纹模型", status: "task #88" },
-  { id: "C-004", quote: "点击不了 Restore", link: "Restore button 无 tooltip", status: "hotfix 待发" },
-  { id: "C-005", quote: "我们的客户也不想脱离这个页面", link: "跨集群自动 SC mapping", status: "task #89" },
-  { id: "C-006", quote: "KubeVirt VM 备份能力", link: "新需求", status: "v0.9.8 / task #93" },
-  { id: "C-007", quote: "还原时安全扫描", link: "新需求", status: "v0.9.6 / task #92 (YARA + ClamAV)" },
-  { id: "C-008", quote: "Activity 点开没有详细步骤与用时（对标 Arcami）", link: "Action Details 时间线 + 耗时", status: "v0.9.x / task #96 (3d)" },
-  { id: "C-009", quote: "Data Usage Report 没有，Dashboard 也没展现（对标 Kasten K10）", link: "Prometheus + Dashboard 卡 + Dedup 率", status: "v0.9.x / task #97 (6d)" },
-  { id: "C-010", quote: "Multi-Cluster 下拉切换后 Dashboard / 数据视图不变化", link: "currentClusterId 不联动", status: "P0 demo blocker / task #98 (1.5d)" }
-];
-
-const TASKS = [
-  // ── P0 demo blockers ────────────────────────────────────────────────
-  { id: "P0-1", version: "v0.9.1.3", title: "Velero 真自带（CRD + plugin + 镜像入 ACR）", status: "todo", priority: "P0", category: "Infra", estimate_days: 3, owner: "claude", start_week: 23, end_week: 24, tags: ["customer-pain", "velero-bundle"] },
-  { id: "P0-2", version: "v0.9.1.4", title: "Dex issuer URL 硬编码 localhost 修复（动态注入 ingress host）", status: "todo", priority: "P0", category: "Backend", estimate_days: 1.5, owner: "claude", start_week: 23, end_week: 23, tags: ["customer-pain", "auth"] },
-  { id: "P0-3", version: "v0.9.1.4", title: "AKS / 公有云 NodePort 默认改 LoadBalancer-aware", status: "todo", priority: "P0", category: "Infra", estimate_days: 0.5, owner: "claude", start_week: 23, end_week: 23, tags: ["customer-pain"] },
-  { id: "P0-4", version: "v0.9.1.4", title: "CRD ownership 冲突自动 adopt", status: "todo", priority: "P0", category: "Infra", estimate_days: 1, owner: "claude", start_week: 23, end_week: 23, tags: ["customer-pain"] },
-  { id: "P0-5", version: "v0.9.1.6", title: "跨集群 Imported RP 后端 ListBackupArtifacts 修复", status: "in_progress", priority: "P0", category: "Backend", estimate_days: 2, owner: "claude", start_week: 22, end_week: 23, tags: ["customer-pain", "task-91"] },
-
-  // ── P1 体验缺陷 ──────────────────────────────────────────────────────
-  { id: "P1-1", version: "v0.9.1.7", title: "Restore Wizard 嵌入一键预检 + 修复（SC mapping）", status: "todo", priority: "P1", category: "Frontend", estimate_days: 2, owner: "claude", start_week: 24, end_week: 24, tags: ["customer-pain", "task-89"] },
-  { id: "P1-2", version: "v0.9.1.5", title: "0.9.1.5-alpha demo hotfix publish", status: "in_review", priority: "P1", category: "Bug", estimate_days: 0.5, owner: "claude", start_week: 22, end_week: 22, tags: ["hotfix"] },
-  { id: "P1-3", version: "v0.9.1.5", title: "集群管理 / 存储管理 tab（只迁 VSL）", status: "todo", priority: "P1", category: "Frontend", estimate_days: 1, owner: "claude", start_week: 23, end_week: 23, tags: ["task-86"] },
-  { id: "P1-4", version: "v0.9.1.6", title: "Kasten 风格 Export/Import 指纹模型", status: "todo", priority: "P1", category: "Backend", estimate_days: 5, owner: "claude", start_week: 24, end_week: 25, tags: ["task-88", "customer-pain"] },
-  { id: "P1-5", version: "v0.9.1.7", title: "Restore PartiallyFailed 自动 SC mapping 引导", status: "todo", priority: "P1", category: "Frontend", estimate_days: 1.5, owner: "claude", start_week: 24, end_week: 24, tags: ["task-89", "customer-pain"] },
-
-  // ── P2 architecture debt ────────────────────────────────────────────
-  { id: "P2-1", version: "v1.0-GA", title: "GitHub Actions CI（build + lint + test）", status: "todo", priority: "P2", category: "Infra", estimate_days: 3, owner: "tbd", start_week: 28, end_week: 28, tags: ["ci"] },
-  { id: "P2-2", version: "v1.0-GA", title: "E2E 测试自动化（TC-* 测试用例）", status: "todo", priority: "P2", category: "Infra", estimate_days: 5, owner: "tbd", start_week: 29, end_week: 30, tags: ["e2e"] },
-  { id: "P2-3", version: "v0.9.x", title: "客户端遥测（安装/使用上报）", status: "todo", priority: "P2", category: "Backend", estimate_days: 3, owner: "tbd", start_week: 30, end_week: 30, tags: ["telemetry"] },
-  { id: "P2-4", version: "v0.9.x", title: "Wiki.js 文档站（USER_MANUAL 8000+ 行拆分）", status: "todo", priority: "P2", category: "Docs", estimate_days: 2, owner: "mars", start_week: 23, end_week: 24, tags: ["wiki"] },
-  { id: "P2-5", version: "v1.0-GA", title: "License key 真校验（HMAC / Ed25519）", status: "todo", priority: "P2", category: "Backend", estimate_days: 2, owner: "tbd", start_week: 32, end_week: 32, tags: ["license"] },
-  { id: "P2-6", version: "v0.9.1.5", title: "CHANGELOG.md（0.9.0 起所有发布）", status: "todo", priority: "P2", category: "Docs", estimate_days: 0.5, owner: "claude", start_week: 22, end_week: 22, tags: ["docs"] },
-
-  // ── P3 long-term / commercial ───────────────────────────────────────
-  { id: "P3-1", version: "post-GA", title: "商业化收费机制（License Manager backend）", status: "todo", priority: "P3", category: "Backend", estimate_days: 10, owner: "tbd", start_week: 35, end_week: 37, tags: ["business"] },
-  { id: "P3-2", version: "post-GA", title: "产品官网 supkube.com", status: "todo", priority: "P3", category: "Docs", estimate_days: 5, owner: "tbd", start_week: 34, end_week: 35, tags: ["marketing"] },
-  { id: "P3-3", version: "post-GA", title: "品牌视觉资产（Logo / Favicon / 设计系统）", status: "todo", priority: "P3", category: "Frontend", estimate_days: 3, owner: "tbd", start_week: 34, end_week: 34, tags: ["brand"] },
-  { id: "P3-4", version: "v0.9.9", title: "MCP Server (AI 集成)", status: "todo", priority: "P3", category: "Backend", estimate_days: 4, owner: "tbd", start_week: 33, end_week: 33, tags: ["ai", "mcp"] },
-
-  // ── 已规划 sprint (planned features) ─────────────────────────────────
-  { id: "S-79", version: "v0.8.14", title: "Log Viewer + Download Logs + AirGapped 真支持", status: "in_progress", priority: "P1", category: "Feature", estimate_days: 7, owner: "claude", start_week: 22, end_week: 23, tags: ["sprint"] },
-  { id: "S-84", version: "v0.9.1.3", title: "Velero bundled + 镜像入 ACR + CSI 自动", status: "todo", priority: "P0", category: "Infra", estimate_days: 3, owner: "claude", start_week: 23, end_week: 24, tags: ["sprint", "duplicate-of-P0-1"] },
-  { id: "S-92", version: "v0.9.6", title: "还原时安全扫描 YARA + ClamAV 双引擎", status: "todo", priority: "P1", category: "Feature", estimate_days: 9, owner: "tbd", start_week: 27, end_week: 28, tags: ["sprint", "premium", "yara", "clamav"] },
-  { id: "S-93", version: "v0.9.8", title: "KubeVirt VM 备份恢复", status: "todo", priority: "P2", category: "Feature", estimate_days: 5, owner: "tbd", start_week: 30, end_week: 31, tags: ["sprint", "kubevirt"] },
-  { id: "S-97", version: "v0.9.7", title: "应用级恢复演练 (BPMN + Kanister)", status: "todo", priority: "P2", category: "Feature", estimate_days: 7, owner: "tbd", start_week: 29, end_week: 30, tags: ["sprint", "premium"] },
-  { id: "S-98", version: "v0.9.4", title: "企业安全栈 Phase 1: EntraID + Vault", status: "todo", priority: "P2", category: "Backend", estimate_days: 5, owner: "tbd", start_week: 25, end_week: 26, tags: ["sprint", "security"] },
-  { id: "S-99", version: "v0.9.5", title: "企业安全栈 Phase 2: Kyverno", status: "todo", priority: "P2", category: "Backend", estimate_days: 3, owner: "tbd", start_week: 26, end_week: 26, tags: ["sprint", "security"] },
-
-  // ── 已完成里程碑 ─────────────────────────────────────────────────────
-  { id: "M-A", version: "v0.9.1.2", title: "UI 重构 (Sidebar 10→7 + Observability hub)", status: "done", priority: "P1", category: "Frontend", estimate_days: 3, owner: "claude", start_week: 21, end_week: 21, tags: ["milestone"] },
-  { id: "M-B", version: "v0.9.1.0", title: "Install UX (preflight + EULA + USER_MANUAL §23)", status: "done", priority: "P1", category: "Infra", estimate_days: 2, owner: "claude", start_week: 21, end_week: 21, tags: ["milestone"] },
-  { id: "M-C", version: "v0.9.0.4", title: "Multi-arch (amd64 + arm64)", status: "done", priority: "P1", category: "Infra", estimate_days: 1, owner: "claude", start_week: 21, end_week: 21, tags: ["milestone"] },
-  { id: "M-D", version: "v0.9.0.3", title: "制品分发闭环 (ACR + Azure Blob + Cloudflare)", status: "done", priority: "P0", category: "Infra", estimate_days: 2, owner: "claude", start_week: 21, end_week: 21, tags: ["milestone"] },
-  { id: "M-E", version: "v0.9.0-MC", title: "Multi-Cluster Manager + 跨集群恢复 Wizard", status: "done", priority: "P0", category: "Feature", estimate_days: 7, owner: "claude", start_week: 20, end_week: 21, tags: ["milestone", "kasten-style"] },
-
-  // ── 2026-05-28 demo 后追加 ──────────────────────────────────────────
-  { id: "P0-6", version: "v0.9.1.5", title: "Multi-Cluster 下拉切换不联动 Dashboard (demo blocker)", status: "todo", priority: "P0", category: "Bug", estimate_days: 1.5, owner: "claude", start_week: 22, end_week: 22, tags: ["customer-pain", "task-98", "C-010"] },
-  { id: "T-95", version: "tools", title: "Plane + Wiki.js 部署 aks-tools (DevOps 落地)", status: "todo", priority: "P0", category: "Infra", estimate_days: 2, owner: "mars", start_week: 22, end_week: 23, tags: ["devops", "task-95"] },
-  { id: "T-96", version: "v0.9.x", title: "Activity 步骤时间线 + 耗时 (对标 Arcami)", status: "todo", priority: "P1", category: "Feature", estimate_days: 3, owner: "claude", start_week: 25, end_week: 25, tags: ["customer-pain", "task-96", "C-008"] },
-  { id: "T-97", version: "v0.9.x", title: "Data Usage Report + Prometheus + Dashboard 卡", status: "todo", priority: "P1", category: "Feature", estimate_days: 6, owner: "claude", start_week: 25, end_week: 26, tags: ["customer-pain", "task-97", "C-009", "prometheus"] }
-];
-
-/* ====================================================================
-   RENDERING
-==================================================================== */
 const $ = sel => document.querySelector(sel);
 const $$ = sel => [...document.querySelectorAll(sel)];
 
-document.getElementById("snapshot-time").textContent = SNAPSHOT_DATE;
+$("#snapshot-time").textContent = SNAPSHOT_DATE;
+$("#brand-ver").textContent = "项目仪表板 · " + META.CURRENT_VERSION;
+$("#kpi-ver").textContent = META.CURRENT_VERSION.replace(/-alpha$/, "");
+$("#kpi-ver-sub").textContent = META.CURRENT_SUB;
+$("#kpi-today-date").textContent = SNAPSHOT_DATE + " 产出";
 
-// Populate filter dropdowns
+// Filter dropdowns
 const categories = [...new Set(TASKS.map(t => t.category))].sort();
 const versions = [...new Set(TASKS.map(t => t.version))].sort();
 $("#f-category").innerHTML = '<option value="">All</option>' + categories.map(c => `<option>${c}</option>`).join("");
 $("#f-version").innerHTML = '<option value="">All</option>' + versions.map(v => `<option>${v}</option>`).join("");
 
-// Nav switching
+// Nav
 $$("#nav button").forEach(b => b.addEventListener("click", () => {
   $$("#nav button").forEach(x => x.classList.remove("active"));
   b.classList.add("active");
@@ -414,35 +275,33 @@ $$("#nav button").forEach(b => b.addEventListener("click", () => {
   $$("section.view").forEach(s => s.classList.toggle("active", s.dataset.view === v));
 }));
 
-// Filters
 function applyFilters() {
-  const p = $("#f-priority").value;
-  const s = $("#f-status").value;
-  const c = $("#f-category").value;
-  const v = $("#f-version").value;
+  const p = $("#f-priority").value, s = $("#f-status").value, c = $("#f-category").value, v = $("#f-version").value;
   const q = ($("#f-search").value || "").toLowerCase();
   return TASKS.filter(t =>
-    (!p || t.priority === p) &&
-    (!s || t.status === s) &&
-    (!c || t.category === c) &&
-    (!v || t.version === v) &&
-    (!q || (t.id + " " + t.title + " " + (t.tags || []).join(" ")).toLowerCase().includes(q))
-  );
+    (!p || t.priority === p) && (!s || t.status === s) && (!c || t.category === c) && (!v || t.version === v) &&
+    (!q || (t.id + " " + t.title + " " + (t.tags || []).join(" ")).toLowerCase().includes(q)));
 }
-
 function statusLabel(s) { return { todo: "Todo", in_progress: "In Progress", in_review: "In Review", done: "Done", closed: "Closed" }[s] || s; }
-
 function chip(cls, txt) { return `<span class="chip ${cls}">${txt}</span>`; }
 
+function prdStateBadge(state) {
+  const colors = { "草稿": "#9aa0a6", "排队评审": "#1e88e5", "待评审": "#1e88e5", "评审中": "#fb8c00", "改正中": "#fdd835", "驳回": "#e53935", "已评审": "#43a047", "研发中": "#5e35b1", "待验收": "#00897b", "Shipped": "#2e7d32", "归档": "#bdbdbd" };
+  return `<span style="background:${colors[state]||'#9aa0a6'};color:#fff;padding:2px 8px;border-radius:3px;font-size:11px;font-weight:600;">${state}</span>`;
+}
+function dateBadge(d) {
+  if (!d) return '<span style="color:var(--fg-3)">—</span>';
+  if (d === SNAPSHOT_DATE) return `<span class="chip" style="background:rgba(74,210,138,.18);color:var(--done);font-weight:600">★ 今日 ${d.slice(5)}</span>`;
+  return `<span style="color:var(--fg-3);font-size:11px;font-family:ui-monospace,Menlo,monospace">${d}</span>`;
+}
+
 function cardHTML(t) {
-  return `<div class="card" data-id="${t.id}" title="${t.title}">
+  return `<div class="card ${t.blocked ? "is-blocked" : ""}" data-id="${t.id}" title="${t.title}">
     <div class="card-top"><span class="id">${t.id}</span> · ${t.version || "—"}</div>
     <div class="title">${t.title}</div>
     <div class="meta">
-      ${chip(t.priority.toLowerCase(), t.priority)}
-      ${chip("cat", t.category)}
-      ${chip("est", t.estimate_days + "d")}
-      ${t.owner ? chip("ver", t.owner) : ""}
+      ${chip(t.priority.toLowerCase(), t.priority)} ${chip("cat", t.category)} ${chip("est", t.estimate_days + "d")}
+      ${t.owner ? chip("ver", t.owner) : ""} ${t.blocked ? chip("blocked", "🚧 Blocked") : ""}
     </div>
   </div>`;
 }
@@ -451,90 +310,121 @@ function render() {
   const filtered = applyFilters();
   $("#stats").textContent = `${filtered.length} / ${TASKS.length} tasks`;
 
-  // KPIs
   const open = t => t.status !== "done" && t.status !== "closed";
+  const doneCount = TASKS.filter(t => t.status === "done").length;
   $("#kpi-p0").textContent = TASKS.filter(t => t.priority === "P0" && open(t)).length;
   $("#kpi-p1").textContent = TASKS.filter(t => t.priority === "P1" && open(t)).length;
   $("#kpi-p2").textContent = TASKS.filter(t => t.priority === "P2" && open(t)).length;
+  $("#kpi-blocked").textContent = TASKS.filter(t => t.blocked && open(t)).length;
   $("#kpi-inprog").textContent = TASKS.filter(t => t.status === "in_progress" || t.status === "in_review").length;
-  $("#kpi-done").textContent = TASKS.filter(t => t.status === "done").length;
-  const cap = TASKS.filter(open).reduce((a, t) => a + (t.estimate_days || 0), 0);
-  $("#kpi-cap").textContent = cap.toFixed(1) + "d";
+  $("#kpi-rate").textContent = Math.round(doneCount / TASKS.length * 100) + "%";
+  $("#kpi-rate-sub").textContent = `${doneCount} / ${TASKS.length} done`;
+  $("#kpi-cap").textContent = TASKS.filter(open).reduce((a, t) => a + (t.estimate_days || 0), 0).toFixed(1) + "d";
+  const todayTasks = TASKS.filter(t => t.discovered === SNAPSHOT_DATE).length;
+  const todayPain = CUSTOMER_PAIN.filter(p => p.date === SNAPSHOT_DATE).length;
+  $("#kpi-today").textContent = todayTasks + todayPain;
+  $("#kpi-pain").textContent = CUSTOMER_PAIN.length;
 
-  // Weekly
+  renderTrend();
+
   $("#weekly").innerHTML = WEEKLY.map(w => `<li>${chip(w.p.toLowerCase(), w.p)} ${w.text} <span style="color:var(--fg-3);">— ${w.due}</span></li>`).join("");
-  $("#decisions").innerHTML = DECISIONS.map(d => `<li><strong style="color:var(--accent);font-family:ui-monospace,Menlo,monospace">${d.id}</strong> · ${d.text}</li>`).join("");
+  $("#decisions").innerHTML = DECISIONS.map(d => `<li>${dateBadge(d.date)} <strong style="color:var(--accent);font-family:ui-monospace,Menlo,monospace">${d.id}</strong> · ${d.text}</li>`).join("");
+  $("#prds").innerHTML = PRDS.map(p => `<li><a href="${SOURCE_LINKS.prd}" title="跳 PRD.md"><strong style="font-family:ui-monospace,Menlo,monospace">${p.id}</strong></a> · ${p.title} · ${prdStateBadge(p.state)} · <span style="color:var(--fg-2);font-family:ui-monospace,Menlo,monospace;font-size:12px;">${p.task}</span> · <span style="color:var(--fg-2);font-size:11px;">${p.updated}</span>${p.note?` · <em style="color:var(--fg-2);font-size:11px;">${p.note}</em>`:''}</li>`).join("");
+  $("#adrs").innerHTML = ADRS.map(a => `<li><a href="${SOURCE_LINKS.adr}" title="跳 架构设计.md"><strong style="font-family:ui-monospace,Menlo,monospace">${a.id}</strong></a> · ${a.title} · ${prdStateBadge(a.status)} · <span style="color:var(--fg-2);font-size:11px;">${a.date}</span>${a.note?` · <em style="color:var(--fg-2);font-size:11px;">${a.note}</em>`:''}</li>`).join("");
 
-  // Kanban
   ["todo", "in_progress", "in_review", "done", "closed"].forEach(s => {
     const items = filtered.filter(t => t.status === s);
     $("#col-" + s).innerHTML = items.map(cardHTML).join("");
     $("#cnt-" + s).textContent = items.length;
   });
 
-  // List
   $("#list-body").innerHTML = filtered.map(t => `<tr data-id="${t.id}">
     <td><span class="id">${t.id}</span></td>
     <td>${chip(t.priority.toLowerCase(), t.priority)}</td>
-    <td><span class="status-dot ${t.status}"></span>${statusLabel(t.status)}</td>
+    <td><span class="status-dot ${t.status}"></span>${statusLabel(t.status)}${t.blocked ? " " + chip("blocked", "🚧") : ""}</td>
     <td><span class="chip ver">${t.version || "—"}</span></td>
     <td class="title">${t.title}</td>
-    <td>${t.category}</td>
-    <td>${t.estimate_days}d</td>
-    <td>${t.owner || "—"}</td>
+    <td>${t.category}</td><td>${t.estimate_days}d</td><td>${t.owner || "—"}</td>
+    <td>${dateBadge(t.discovered)}</td>
     <td style="color:var(--fg-3);font-size:11px;">${(t.tags || []).join(", ")}</td>
   </tr>`).join("");
 
-  // Gantt — group by version
+  // Gantt — per-task bars within version lane (truthful start/end)
   const versionsInOrder = [...new Set(filtered.map(t => t.version))].filter(Boolean);
-  const startWeek = 22;
-  const endWeek = 41;
-  const weekCount = endWeek - startWeek + 1;
+  const startWeek = 22, endWeek = 41, weekCount = endWeek - startWeek + 1;
   let gantt = '<div class="gantt-header"><div>Version / Sprint</div>';
   for (let w = startWeek; w <= endWeek; w++) gantt += `<div>W${w}</div>`;
   gantt += "</div>";
   versionsInOrder.forEach(v => {
     const items = filtered.filter(t => t.version === v);
-    const itemsStart = Math.min(...items.map(t => t.start_week || startWeek));
-    const itemsEnd = Math.max(...items.map(t => t.end_week || itemsStart));
-    const itemTitle = items[0].title.length > 30 ? items[0].title.slice(0, 30) + "…" : items[0].title;
-    const status = items.some(t => t.status === "done") && items.every(t => t.status === "done" || t.status === "closed") ? "done"
-                : items.some(t => t.status === "in_progress") ? "in_progress"
-                : items.some(t => t.status === "in_review") ? "in_review" : "todo";
-    const startCol = Math.max(0, itemsStart - startWeek);
-    const span = Math.max(1, itemsEnd - itemsStart + 1);
-    const leftPct = (startCol / weekCount) * 100;
-    const widthPct = (span / weekCount) * 100;
+    let bars = "";
+    items.forEach(t => {
+      const s = Math.max(0, (t.start_week || startWeek) - startWeek);
+      const span = Math.max(1, (t.end_week || t.start_week || startWeek) - (t.start_week || startWeek) + 1);
+      bars += `<div class="gantt-bar ${t.status}" style="left:${s/weekCount*100}%; width:${span/weekCount*100}%; top:${5}px; bottom:auto; height:22px;" title="${t.id} · ${t.title}">${t.id}</div>`;
+    });
+    const totalD = items.reduce((a,t)=>a+t.estimate_days,0);
     gantt += `<div class="gantt-row">
-      <div class="lane">${v}<div style="color:var(--fg-3);font-size:10px;font-weight:400;margin-top:2px;">${items.length} task${items.length>1?"s":""} · ${items.reduce((a,t)=>a+t.estimate_days,0)}d</div></div>
-      <div class="cell" style="grid-column: 2 / span ${weekCount};">
-        <div class="gantt-bar ${status}" style="left:${leftPct}%; width:${widthPct}%;" title="${itemTitle}">${itemTitle}</div>
+      <div class="lane">${v}<div style="color:var(--fg-3);font-size:10px;font-weight:400;margin-top:2px;">${items.length} task${items.length>1?"s":""} · ${totalD}d</div></div>
+      <div class="cell" style="grid-column: 2 / span ${weekCount}; height:${Math.max(32, items.length*26)}px;">
+        ${items.map((t,i)=>{const s=Math.max(0,(t.start_week||startWeek)-startWeek);const span=Math.max(1,(t.end_week||t.start_week||startWeek)-(t.start_week||startWeek)+1);return `<div class="gantt-bar ${t.status}" style="left:${s/weekCount*100}%; width:${span/weekCount*100}%; top:${5+i*26}px; bottom:auto; height:22px;" title="${t.id} · ${t.title}">${t.id}</div>`;}).join("")}
       </div>
     </div>`;
   });
   $("#gantt-wrap").innerHTML = gantt;
 
-  // Matrix
+  // Lineage
+  $("#lineage-grid").innerHTML =
+    `<div class="lin-row lin-head"><div>动机 / 客户痛点</div><div>任务</div><div>PRD</div><div>ADR</div><div>测试</div><div>状态</div></div>` +
+    LINEAGE.map(l => `<div class="lin-row" title="${l.note || ""}">
+      <div class="motive">${l.motive}</div>
+      <div class="lin-node"><a href="${SOURCE_LINKS.roadmap}">${l.task}</a></div>
+      <div class="lin-node"><a href="${SOURCE_LINKS.prd}">${l.prd}</a></div>
+      <div class="lin-node"><a href="${SOURCE_LINKS.adr}">${l.adr}</a></div>
+      <div class="lin-node"><a href="${SOURCE_LINKS.test}">${l.tc}</a></div>
+      <div>${l.status === "Blocked" ? chip("blocked", "🚧 Blocked") : prdStateBadge(l.status)}</div>
+    </div>`).join("");
+
   ["P0", "P1", "P2", "P3"].forEach(p => {
-    const items = TASKS.filter(t => t.priority === p && (t.status !== "done" && t.status !== "closed"));
-    $("#mtx-" + p.toLowerCase()).innerHTML = items.map(t => `<li><strong>${t.id}</strong> · ${t.title} <span style="color:var(--fg-3);">(${t.estimate_days}d, ${t.version})</span></li>`).join("");
+    const items = TASKS.filter(t => t.priority === p && open(t));
+    $("#mtx-" + p.toLowerCase()).innerHTML = items.map(t => `<li><strong>${t.id}</strong> · ${t.title} <span style="color:var(--fg-3);">(${t.estimate_days}d, ${t.version})</span>${t.blocked?" "+chip("blocked","🚧"):""}</li>`).join("");
   });
 
-  // Customer Pain
   $("#pain-grid").innerHTML = CUSTOMER_PAIN.map(p => `<div class="pain">
-    <div class="pid">${p.id}</div>
+    <div class="pid">${p.id}${p.date ? `<br>${dateBadge(p.date)}` : ""}</div>
     <div class="quote">${p.quote}</div>
     <div class="link">→ ${p.link}</div>
-    <div>${chip(/P0|hotfix/i.test(p.status) ? "p0" : /task/i.test(p.status) ? "p1" : "p2", p.status)}</div>
+    <div>${chip(/✅/.test(p.status) ? "p3" : /P0|hotfix/i.test(p.status) ? "p0" : /task|PRD/i.test(p.status) ? "p1" : "p2", p.status)}</div>
   </div>`).join("");
 }
 
-// Filter listeners
-["f-priority","f-status","f-category","f-version","f-search"].forEach(id => {
-  document.getElementById(id).addEventListener("input", render);
-});
+// Completion trend — cumulative done by end_week (SVG sparkline + bars)
+function renderTrend() {
+  const done = TASKS.filter(t => t.status === "done" && t.end_week);
+  const byWeek = {};
+  done.forEach(t => { byWeek[t.end_week] = (byWeek[t.end_week] || 0) + 1; });
+  const weeks = Object.keys(byWeek).map(Number).sort((a,b)=>a-b);
+  if (!weeks.length) { $("#trend").innerHTML = '<span style="color:var(--fg-3)">暂无完成数据</span>'; return; }
+  const minW = weeks[0], maxW = weeks[weeks.length-1];
+  let cum = 0; const points = [];
+  for (let w = minW; w <= maxW; w++) { cum += (byWeek[w] || 0); points.push({ w, cum, n: byWeek[w] || 0 }); }
+  const W = 720, H = 120, pad = 28;
+  const maxCum = points[points.length-1].cum || 1;
+  const x = i => pad + (points.length === 1 ? 0 : i / (points.length - 1) * (W - 2*pad));
+  const y = v => H - pad - (v / maxCum) * (H - 2*pad);
+  const line = points.map((p,i) => `${i===0?"M":"L"}${x(i).toFixed(1)},${y(p.cum).toFixed(1)}`).join(" ");
+  const dots = points.map((p,i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(p.cum).toFixed(1)}" r="3" fill="#4ad28a"><title>W${p.w}: +${p.n} (累计 ${p.cum})</title></circle>`).join("");
+  const labels = points.map((p,i) => `<text x="${x(i).toFixed(1)}" y="${H-8}" fill="#6b7681" font-size="9" text-anchor="middle">W${p.w}</text>`).join("");
+  $("#trend").innerHTML = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;height:auto;">
+    <line x1="${pad}" y1="${H-pad}" x2="${W-pad}" y2="${H-pad}" stroke="#2a313c"/>
+    <path d="${line}" fill="none" stroke="#4ad28a" stroke-width="2"/>
+    ${dots}${labels}
+    <text x="${pad}" y="16" fill="#9aa4af" font-size="11">累计完成 ${maxCum} 个任务</text>
+  </svg>`;
+}
 
-// Sort
+["f-priority","f-status","f-category","f-version","f-search"].forEach(id => $("#"+id).addEventListener("input", render));
+
 let sortKey = null, sortDir = 1;
 $$("th[data-sort]").forEach(th => th.addEventListener("click", () => {
   const k = th.dataset.sort;
@@ -543,17 +433,18 @@ $$("th[data-sort]").forEach(th => th.addEventListener("click", () => {
   render();
 }));
 
-// Card click → show details (toast for now; later → drawer / Plane URL)
+// Card click → details toast (deep-link buttons already in PRD/ADR/lineage lists)
 document.addEventListener("click", e => {
+  if (e.target.closest("a")) return; // let links work
   const card = e.target.closest(".card, tr[data-id]");
   if (!card) return;
   const t = TASKS.find(x => x.id === card.dataset.id);
   if (!t) return;
   const toast = $("#toast");
-  toast.innerHTML = `<strong>${t.id}</strong> · ${t.title}<br><small style="color:var(--fg-3)">${t.priority} · ${statusLabel(t.status)} · ${t.estimate_days}d · ${t.version}</small>`;
+  toast.innerHTML = `<strong>${t.id}</strong> · ${t.title}<br><small style="color:var(--fg-3)">${t.priority} · ${statusLabel(t.status)} · ${t.estimate_days}d · ${t.version}</small>${t.blocked?`<br><span style="color:var(--blocked)">🚧 Blocked：${t.blockReason||""}</span>`:""}`;
   toast.classList.add("show");
   clearTimeout(window._toastT);
-  window._toastT = setTimeout(() => toast.classList.remove("show"), 3000);
+  window._toastT = setTimeout(() => toast.classList.remove("show"), 4000);
 });
 
 render();

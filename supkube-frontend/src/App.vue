@@ -111,8 +111,12 @@
             <el-icon><Clock /></el-icon>
             <template #title>{{ t('nav.policies') }}</template>
           </el-menu-item>
-          <el-menu-item index="/transform-sets">
+          <el-menu-item index="/transforms">
             <el-icon><Tools /></el-icon>
+            <template #title>{{ t('nav.transforms') }}</template>
+          </el-menu-item>
+          <el-menu-item index="/transform-sets">
+            <el-icon><Files /></el-icon>
             <template #title>{{ t('nav.transformSets') }}</template>
           </el-menu-item>
           <el-menu-item index="/backups">
@@ -193,7 +197,17 @@
           </el-dropdown>
         </el-header>
         <el-main>
-          <router-view />
+          <!-- v0.9.1.10 (#98): key the routed view by the active cluster so
+               switching the Mode Switcher dropdown REMOUNTS the current page
+               → its onMounted re-fetches with the new X-Supkube-Cluster
+               header. Previously setActive() only changed the ?cluster= query
+               (router.replace, same path) so the view never remounted and the
+               user stared at stale data until the 30s poll tick ("不联动",
+               2026-05-28 demo). Normal route changes still remount as before
+               (different component type). -->
+          <router-view v-slot="{ Component }">
+            <component :is="Component" :key="cluster.active.value || 'this-cluster'" />
+          </router-view>
         </el-main>
       </el-container>
     </el-container>
@@ -208,7 +222,7 @@ import { SUPPORTED_LOCALES, setLocale } from './i18n'
 import {
   Monitor, Grid, FolderOpened, RefreshRight, Clock, Coin, Setting,
   Camera, MagicStick, ArrowLeft, ArrowRight, ArrowDown, DataLine,
-  Tools, SwitchButton, DocumentCopy, Connection, Plus
+  Files, Tools, SwitchButton, DocumentCopy, Connection, Plus
 } from '@element-plus/icons-vue'
 import { useAuth } from './composables/useAuth'
 import { useBranding } from './composables/useBranding'

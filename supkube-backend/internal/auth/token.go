@@ -19,15 +19,15 @@
 // per pipeline / operator, hashes it with SHA-256, and lists the hashes
 // in Helm values:
 //
-//   auth:
-//     staticTokens:
-//       - name: github-actions-prod
-//         hash: <sha256-hex>            # echo -n "<plaintext>" | sha256sum
-//         role: editor
-//         namespaces: [shop-prod]
-//       - name: terraform
-//         hash: <sha256-hex>
-//         role: admin
+//	auth:
+//	  staticTokens:
+//	    - name: github-actions-prod
+//	      hash: <sha256-hex>            # echo -n "<plaintext>" | sha256sum
+//	      role: editor
+//	      namespaces: [shop-prod]
+//	    - name: terraform
+//	      hash: <sha256-hex>
+//	      role: admin
 //
 // The plaintext lives ONLY on the calling pipeline's side (as a CI
 // secret, vault entry, etc.). The backend only ever sees the hash. A
@@ -41,11 +41,11 @@
 //
 // Security notes
 // ──────────────
-// 1. Constant-time compare on the hash to avoid timing attacks.
-// 2. Tokens never appear in audit logs — we record name + role only.
-// 3. Hash, not bcrypt: bcrypt is slow on purpose for password use, but
-//    these tokens are 256-bit random — there's no dictionary attack to
-//    defend against, so SHA-256 is fine and adds zero latency per call.
+//  1. Constant-time compare on the hash to avoid timing attacks.
+//  2. Tokens never appear in audit logs — we record name + role only.
+//  3. Hash, not bcrypt: bcrypt is slow on purpose for password use, but
+//     these tokens are 256-bit random — there's no dictionary attack to
+//     defend against, so SHA-256 is fine and adds zero latency per call.
 package auth
 
 import (

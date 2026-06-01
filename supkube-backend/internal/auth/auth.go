@@ -18,14 +18,14 @@
 //
 // Config (from environment, set by Helm in backend-deployment.yaml):
 //
-//   AUTH_ENABLED=true|false        master switch — false skips ALL checks
-//   OIDC_ISSUER_URL=<url>           e.g. http://localhost:30888/dex
-//   OIDC_CLIENT_ID=supkube
-//   OIDC_CLIENT_SECRET=<secret>
-//   OIDC_USERNAME_CLAIM=email
-//   OIDC_GROUPS_CLAIM=groups
-//   AUTH_PUBLIC_URL=<url>           e.g. http://localhost:30888
-//   AUTH_DEX_ENABLED=true|false     whether embedded Dex is on (affects /providers)
+//	AUTH_ENABLED=true|false        master switch — false skips ALL checks
+//	OIDC_ISSUER_URL=<url>           e.g. http://localhost:30888/dex
+//	OIDC_CLIENT_ID=supkube
+//	OIDC_CLIENT_SECRET=<secret>
+//	OIDC_USERNAME_CLAIM=email
+//	OIDC_GROUPS_CLAIM=groups
+//	AUTH_PUBLIC_URL=<url>           e.g. http://localhost:30888
+//	AUTH_DEX_ENABLED=true|false     whether embedded Dex is on (affects /providers)
 package auth
 
 import (
@@ -51,13 +51,13 @@ import (
 // v0.8.5 step 3: Role + NamespaceScope are resolved from the OIDC groups
 // claim via the Helm-configured RoleBinding list. See ResolveRole().
 type User struct {
-	Subject        string   `json:"sub"`
-	Username       string   `json:"username"`
-	Email          string   `json:"email"`
-	Groups         []string `json:"groups"`
+	Subject  string   `json:"sub"`
+	Username string   `json:"username"`
+	Email    string   `json:"email"`
+	Groups   []string `json:"groups"`
 	// v0.8.5 step 3 RBAC fields:
-	Role           string   `json:"role"`            // "admin" | "editor" | "viewer" | "" (no binding → reject)
-	NamespaceScope []string `json:"namespaceScope"`  // only for editor; empty for admin (cluster-wide) and viewer (read everything)
+	Role           string   `json:"role"`           // "admin" | "editor" | "viewer" | "" (no binding → reject)
+	NamespaceScope []string `json:"namespaceScope"` // only for editor; empty for admin (cluster-wide) and viewer (read everything)
 }
 
 // Role constants. Order matters semantically: admin > editor > viewer.
@@ -84,9 +84,10 @@ type RoleBinding struct {
 // operating on the given namespace.
 //
 // Semantics:
-//   admin  → always (cluster-wide)
-//   viewer → always (read-only ops; the role-check middleware blocks writes)
-//   editor → only if ns ∈ NamespaceScope
+//
+//	admin  → always (cluster-wide)
+//	viewer → always (read-only ops; the role-check middleware blocks writes)
+//	editor → only if ns ∈ NamespaceScope
 //
 // Empty NamespaceScope for editor = NO ns allowed (defensive default;
 // the bindings config must explicitly grant namespaces for editor to be useful).
@@ -156,21 +157,21 @@ type ProviderMeta struct {
 // trust JWTs with iss=<public URL>". That's exactly what
 // InsecureIssuerURLContext is for. We feed:
 //
-//   IssuerURL    = http://localhost:30888/dex   (what's in JWT iss claim)
-//   DiscoveryURL = http://supkube-dex:5556/dex  (cluster-internal, reachable)
+//	IssuerURL    = http://localhost:30888/dex   (what's in JWT iss claim)
+//	DiscoveryURL = http://supkube-dex:5556/dex  (cluster-internal, reachable)
 //
 // At validation time, the verifier checks the JWT iss claim equals
 // IssuerURL — which it does, because that's what Dex stamps.
 type Config struct {
-	Enabled        bool
-	IssuerURL      string // browser-facing — appears as `iss` claim in JWTs
-	DiscoveryURL   string // backend-reachable — used to fetch /.well-known/...
-	ClientID       string
-	ClientSecret   string
-	UsernameClaim  string
-	GroupsClaim    string
-	PublicURL      string  // e.g. http://localhost:30888 (for redirect URI)
-	DexEnabled     bool
+	Enabled       bool
+	IssuerURL     string // browser-facing — appears as `iss` claim in JWTs
+	DiscoveryURL  string // backend-reachable — used to fetch /.well-known/...
+	ClientID      string
+	ClientSecret  string
+	UsernameClaim string
+	GroupsClaim   string
+	PublicURL     string // e.g. http://localhost:30888 (for redirect URI)
+	DexEnabled    bool
 
 	// v0.8.5 step 2: configured IdP list. Empty → backend falls back to
 	// a single generic "Login" button (Dex chooser screen handles routing).
@@ -188,27 +189,27 @@ type Config struct {
 	DefaultRole string
 
 	// Set after Init() runs successfully.
-	provider      *oidc.Provider
-	verifier      *oidc.IDTokenVerifier
-	oauth2Config  *oauth2.Config
-	initialized   bool
-	initErr       error
-	initOnce      sync.Once
+	provider     *oidc.Provider
+	verifier     *oidc.IDTokenVerifier
+	oauth2Config *oauth2.Config
+	initialized  bool
+	initErr      error
+	initOnce     sync.Once
 
 	// v0.8.5 step 6: fallback auth methods. Loaded eagerly at
 	// LoadConfigFromEnv (not lazy in Init) because they don't depend
 	// on Dex being ready and we want any parse warnings to surface
 	// at boot rather than first-request.
-	staticTokens    []StaticToken     // see token.go
-	htpasswdEntries []htpasswdEntry   // see basic.go
+	staticTokens    []StaticToken   // see token.go
+	htpasswdEntries []htpasswdEntry // see basic.go
 }
 
 // LoadConfigFromEnv reads auth config from environment variables. Returns
 // a Config that may not be Initialized — call Init() before use.
 func LoadConfigFromEnv() *Config {
 	cfg := &Config{
-		Enabled:       envBool("AUTH_ENABLED", false),
-		IssuerURL:     os.Getenv("OIDC_ISSUER_URL"),
+		Enabled:   envBool("AUTH_ENABLED", false),
+		IssuerURL: os.Getenv("OIDC_ISSUER_URL"),
 		// DiscoveryURL falls back to IssuerURL when not provided —
 		// works for the common "browser URL == backend URL" case
 		// (single public Ingress reachable from both sides).
@@ -257,12 +258,12 @@ func LoadConfigFromEnv() *Config {
 // configured bindings.
 //
 // Resolution order (first wins, but highest role accumulates):
-//   1. Group bindings — for every binding.Group that's in user.Groups,
-//      we collect its role and (if editor) ns scope
-//   2. User bindings — for binding.User == user.Email, same accumulation
-//   3. If multiple roles match, keep the highest (admin > editor > viewer)
-//   4. If editor matches multiple times, union all namespaces
-//   5. If no binding matches AND RBAC enabled, return c.DefaultRole (default admin)
+//  1. Group bindings — for every binding.Group that's in user.Groups,
+//     we collect its role and (if editor) ns scope
+//  2. User bindings — for binding.User == user.Email, same accumulation
+//  3. If multiple roles match, keep the highest (admin > editor > viewer)
+//  4. If editor matches multiple times, union all namespaces
+//  5. If no binding matches AND RBAC enabled, return c.DefaultRole (default admin)
 //
 // RBAC disabled → everyone is admin regardless of groups (backward compat
 // with v0.8.5-step-2 deployments).

@@ -1,0 +1,130 @@
+# v0.9.1.13 — ImportPolicy CRD.
+#
+# An ImportPolicy tells the SupKube controller "watch this BackupStorageLocation
+# (typically a remote/cross-cluster BSL) and pull in newly-seen Velero Backup
+# CRs into THIS cluster's velero namespace so they're restorable here." Two
+# modes:
+#   - Continuous: poll on a fixed interval (>= 30s; enforced by controller)
+#   - Scheduled:  run on a cron expression (5-field, controller-validated)
+#
+# Cross-cluster trust:
+#   - fingerprintMode=enforce (default) requires the source Backup carry a
+#     valid HMAC signature using the shared fingerprint Secret. Mismatched
+#     or missing signatures are REJECTED (counted in status.rejectedCount).
+#   - warn = accept but log; disabled = accept blindly (single-cluster only).
+#
+# This file lives under crds/ (not templates/) so Helm provisions it BEFORE
+# any templates — controllers that watch ImportPolicy at startup must find
+# the CRD already registered.
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: importpolicies.supkube.io
+  annotations:
+    "helm.sh/resource-policy": keep
+spec:
+  group: supkube.io
+  scope: Namespaced
+  names:
+    kind: ImportPolicy
+    listKind: ImportPolicyList
+    singular: importpolicy
+    plural: importpolicies
+    shortNames:
+      - ip
+    categories:
+      - supkube
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      schema:
+        openAPIV3Schema:
+          type: object
+          required:
+            - spec
+          properties:
+            spec:
+              type: object
+              required:
+                - sourceBSL
+                - mode
+              properties:
+                sourceBSL:
+                  type: string
+                  minLength: 1
+                  description: "Name of the BackupStorageLocation (in targetVeleroNamespace) to watch for new Backup CRs."
+                mode:
+                  type: string
+                  enum:
+                    - Continuous
+                    - Scheduled
+                  description: "Continuous = fixed-interval polling; Scheduled = cron-driven."
+                continuousInterval:
+                  type: string
+                  pattern: '^[0-9]+(s|m|h)$'
+                  description: "Go duration (e.g. 30s, 2m, 1h). Controller enforces minimum 30s. Required when mode=Continuous."
+                schedule:
+                  type: string
+                  description: "Cron expression, 5-field standard. Validated by controller (regex too coarse here). Required when mode=Scheduled."
+                sourceClusterID:
+                  type: string
+                  description: "Optional cluster identifier used in audit logs and the UI Paired-with banner."
+                fingerprintMode:
+                  type: string
+                  enum:
+                    - enforce
+                    - warn
+                    - disabled
+                  default: enforce
+                  description: "enforce = reject backups with bad/missing HMAC signature; warn = accept+log; disabled = no check."
+                targetVeleroNamespace:
+                  type: string
+                  default: velero
+                  description: "Namespace in THIS cluster where imported Backup CRs are created."
+                paused:
+                  type: boolean
+                  default: false
+                  description: "When true, controller skips all sync activity for this policy."
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                  enum:
+                    - Active
+                    - Paused
+                    - Failed
+                lastSyncAt:
+                  type: string
+                  format: date-time
+                lastSeenBackupName:
+                  type: string
+                  description: "Name of the most recently imported Backup CR (helps debug 'why is X missing?')."
+                importedCount:
+                  type: integer
+                  format: int64
+                rejectedCount:
+                  type: integer
+                  format: int64
+                  description: "Backups rejected due to fingerprint mismatch / validation failure."
+                lastError:
+                  type: string
+      additionalPrinterColumns:
+        - name: Mode
+          type: string
+          jsonPath: .spec.mode
+        - name: Source-BSL
+          type: string
+          jsonPath: .spec.sourceBSL
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: Imported
+          type: integer
+          jsonPath: .status.importedCount
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp

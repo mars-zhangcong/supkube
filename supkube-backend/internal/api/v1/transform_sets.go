@@ -1,36 +1,42 @@
 // Package v1: transform_sets.go
 //
-// Transform Set CRUD (v0.8.2)
-// ───────────────────────────
-// A Transform Set is a named bundle of JSONPath patch rules applied during
-// Velero restore. Velero's native primitive is `spec.resourceModifierRef`
-// which points to a ConfigMap with a `version: v1` rules document. SupKube
-// stores Transform Sets *as* those ConfigMaps (in the velero namespace,
-// labeled supkube.io/kind=transform-set) so:
+// TransformSet CRUD (PRD-002 v1.3 two-layer schema)
+// ─────────────────────────────────────────────────
+// A TransformSet is now a thin CONTAINER referencing one or more atomic
+// Transforms (see transforms.go) plus optional defaults for ${VAR}
+// placeholders. The actual Velero ResourceModifier rules live in the
+// referenced Transforms — TransformSet is composition + parameterization.
 //
-//   1. No new CRD to install / maintain
-//   2. Velero understands them natively at restore time
-//   3. Power users can `kubectl get cm -n velero` and see what we created
+// Why the split (vs the v0.8.2 single-layer design):
+//   - Atomic Transforms are reusable across many TransformSets (e.g.
+//     `strip-clusterip` plugged into multiple cross-cluster restore packs).
+//   - TransformSets stay declarative & lightweight — no Velero schema
+//     leakage in the container layer.
+//   - Compilation (internal/transform/compile.go) flattens a TransformSet
+//     into a single Velero-compatible ConfigMap at Restore time, with
+//     a content-addressed hash so identical inputs reuse the same CM.
 //
-// Why we don't invent our own CRD layer above this:
-//   - It would just be a thin wrapper around the same JSONPath rules
-//   - We'd have to maintain a controller that syncs CRD → ConfigMap
-//   - Velero already validates the rules at restore time; duplicating that
-//     in a controller is wasted complexity
+// Storage model:
+//   - ns:    "supkube" (not "velero" — derived CMs live in velero ns)
+//   - label: supkube.io/kind=transform-set
+//   - data:  exactly one key, "transform-set.yaml", holding the
+//     TransformSetSpec (transformRefs[], defaults{}, description).
 //
-// Schema inside the ConfigMap data map:
+// Single-key invariant: kept consistent with Transform + the derived
+// ConfigMap (ADR-003), even though Velero never reads TransformSet
+// directly (only the compile.go-produced CM). Predictability > local
+// optimization.
 //
-//   data:
-//     description:  free-form prose shown in UI list
-//     rules.yaml:   the actual ResourceModifier YAML Velero consumes
+// Migration from v0.8.x single-layer layout (velero ns, kind=transform,
+// data.rules.yaml directly) → split into:
+//   - 1 atomic Transform `<orig>-rules` in supkube ns (holds rules.yaml)
+//   - 1 wrapper TransformSet `<orig>` in supkube ns (transformRefs=[<orig>-rules])
 //
-// We also store a JSON-serialized "rules" key for fast UI rendering so the
-// frontend doesn't have to parse YAML in the browser.
+// See migrateBrokenTransformSets in transform_sets_seed.go.
 package v1
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -39,88 +45,96 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 	sigyaml "sigs.k8s.io/yaml"
 
 	"github.com/supkube/supkube-backend/internal/k8s"
+	"github.com/supkube/supkube-backend/internal/transform"
 )
 
+// ─── Constants (re-exported aliases of internal/transform package) ──────
+// Single source of truth lives in internal/transform/compile.go so the
+// compiler & the CRUD share label values, ns, and data-key names without
+// risk of drift. We re-alias here only because the local file already
+// referenced the old constant names; keep them as locals for clarity.
 const (
-	transformSetNamespace = "velero"
-	transformSetLabelKind = "supkube.io/kind"
-	transformSetKindValue = "transform-set"
+	transformSetNamespace = transform.SupKubeNamespace
+	transformSetLabelKind = transform.LabelKind
+	// transformSetKindValue is the value of supkube.io/kind for the
+	// CONTAINER layer ("transform-set"). The atomic layer uses the
+	// distinct value "transform" (see transforms.go).
+	transformSetKindValue = transform.KindTransformSet
+	// transformSetSpecKey is the SINGLE permitted data key on a
+	// TransformSet ConfigMap. ADR-003: keep len(Data)==1 for every CM
+	// we manage so the invariant holds uniformly.
+	transformSetSpecKey = transform.TransformSetSpecKey
+	// transformRulesKey is the single key on a derived/atomic CM
+	// (used by the compile.go consumer + the migration codepath).
+	transformRulesKey = transform.TransformRulesKey
+
+	// Legacy values present in clusters upgraded from v0.8.x.
+	// migrateBrokenTransformSets rewrites these on startup.
+	transformSetLegacyNamespace = "velero"
+	transformSetLegacyKindValue = "transform" // single-layer label value
 )
 
-// ─── Schema types matching Velero's ResourceModifier format ─────────────
-// Reference: https://velero.io/docs/main/restore-resource-modifiers/
+// ─── Annotations ────────────────────────────────────────────────────────
+const (
+	tsDescriptionAnnotation = "supkube.io/description"
+	// Migration tracking annotations (ADR-014 startup migration).
+	// The legacy CM in velero ns gets annotated (not deleted) so admins
+	// can still see the original; subsequent migration runs detect this
+	// and skip.
+	annotMigratedTo   = "supkube.io/migrated-to"
+	annotMigratedFrom = "supkube.io/migrated-from"
+	annotMigrationErr = "supkube.io/migration-error"
+)
+
+// ─── User-facing types ─────────────────────────────────────────────────
+
+// TransformSetRef is one entry in TransformSet.transformRefs[].
+// Params are optional per-ref overrides; the TransformSet.defaults map
+// is a flat fallback applied to every ref.
 //
-// We pin to version "v1". A future Velero release may add fields; the JSON
-// tags here use omitempty so unknown forward-compatible fields don't get
-// stripped on round-trip.
-
-type TSCondition struct {
-	GroupResource     string                `json:"groupResource"`     // e.g. "services" or "deployments.apps"
-	ResourceNameRegex string                `json:"resourceNameRegex,omitempty"`
-	Namespaces        []string              `json:"namespaces,omitempty"`
-	LabelSelector     *metav1.LabelSelector `json:"labelSelector,omitempty"`
-	MatchExpressions  []string              `json:"matchExpressions,omitempty"`
+// NOTE (PRD-002 v1.3): the on-disk spec format
+// (data["transform-set.yaml"]) keeps transformRefs as a STRING ARRAY
+// (`["t1", "t2"]`) per compile.go's TransformSetSpec, which is what
+// the compiler reads. The API layer accepts the richer object form
+// `[{name, params}]` for forward-compat but currently only the `name`
+// field round-trips through the compiler (per-ref params live in the
+// TransformSet.defaults map for now — see compile.go merging logic).
+type TransformSetRef struct {
+	Name   string            `json:"name"`
+	Params map[string]string `json:"params,omitempty"`
 }
 
-type TSPatch struct {
-	Operation string      `json:"operation"`       // "add" | "remove" | "replace" | "test" | "copy" | "move"
-	Path      string      `json:"path"`            // JSON Pointer e.g. "/spec/ports/0/nodePort"
-	From      string      `json:"from,omitempty"`  // for copy/move
-	Value     interface{} `json:"value,omitempty"` // omitempty so "remove" doesn't include null
-}
-
-// TSMergePatch wraps a JSON Merge Patch (RFC 7396) — silently no-ops on
-// missing fields, which is exactly what we want for "strip-if-present"
-// operations like removing volumeName / clusterIP / loadBalancerIP from
-// resources whose backup may or may not still carry the field.
-type TSMergePatch struct {
-	PatchData string `json:"patchData"`
-}
-
-// TSRule maps directly to Velero's ResourceModifierRule.
-//
-// A rule MUST have at least one of Patches / MergePatches / StrategicPatches
-// (validation enforces this). Multiple types can co-exist in the same rule
-// but in practice we generate one rule per modification kind for clarity.
-type TSRule struct {
-	Conditions       TSCondition    `json:"conditions"`
-	Patches          []TSPatch      `json:"patches,omitempty"`
-	// v0.8.4: merge & strategic patches. Velero applies them as
-	//   - mergePatches:     RFC 7396 JSON Merge Patch (silent no-op on
-	//                       missing fields; arrays REPLACE not merge)
-	//   - strategicPatches: K8s strategic merge (knows array merge keys,
-	//                       e.g. Service.spec.ports uses `port` as key)
-	MergePatches     []TSMergePatch `json:"mergePatches,omitempty"`
-	StrategicPatches []TSMergePatch `json:"strategicPatches,omitempty"`
-}
-
-// ResourceModifierDoc mirrors Velero's expected YAML structure.
-type ResourceModifierDoc struct {
-	Version                string   `json:"version" yaml:"version"`
-	ResourceModifierRules  []TSRule `json:"resourceModifierRules" yaml:"resourceModifierRules"`
-}
-
-// TransformSet is the SupKube-facing shape. List endpoints return this;
-// it's the ConfigMap deserialized + decorated.
+// TransformSet is the SupKube-facing shape returned by list/get and
+// accepted by create/update. It maps 1:1 to a ConfigMap in supkube ns
+// with one data key.
 type TransformSet struct {
-	Name        string   `json:"name"`
-	Description string   `json:"description,omitempty"`
-	Rules       []TSRule `json:"rules"`
-	BuiltIn     bool     `json:"builtIn,omitempty"`     // true if managed by SupKube install
-	UsageCount  int      `json:"usageCount,omitempty"`  // future: count of Restores referencing this
-	CreatedAt   string   `json:"createdAt,omitempty"`
+	Name          string            `json:"name"`
+	Description   string            `json:"description,omitempty"`
+	TransformRefs []TransformSetRef `json:"transformRefs"`
+	Defaults      map[string]string `json:"defaults,omitempty"`
+	BuiltIn       bool              `json:"builtIn,omitempty"`
+	CreatedAt     string            `json:"createdAt,omitempty"`
+}
+
+// ─── Client factory (test seam) ─────────────────────────────────────────
+//
+// Tests override transformClientFactory to inject a fake Clientset; in
+// production it falls through to k8s.GetClient(). Keeping the seam local
+// (not a package-level helper everyone shares) limits blast radius.
+var transformClientFactory = func() (kubernetes.Interface, error) {
+	return k8s.GetClient()
 }
 
 // ─── HTTP handlers ──────────────────────────────────────────────────────
 
-// ListTransformSets returns every ConfigMap in velero ns that carries
-// our identifying label. Built-in templates ship with
-// supkube.io/builtin=true so the UI can prevent accidental deletion.
+// ListTransformSets returns every TransformSet CM in supkube ns.
+// Containers only — atomic Transforms are listed via ListTransforms.
 func ListTransformSets(c *gin.Context) {
-	cl, err := k8s.GetClient()
+	cl, err := transformClientFactory()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -137,8 +151,8 @@ func ListTransformSets(c *gin.Context) {
 	for i := range cms.Items {
 		ts, err := configMapToTransformSet(&cms.Items[i])
 		if err != nil {
-			// Skip malformed entries silently — log-only would be nicer but
-			// we don't want one bad CM to kill the whole list.
+			// Skip malformed entries silently — one bad CM shouldn't
+			// kill the whole list.
 			continue
 		}
 		out = append(out, ts)
@@ -146,10 +160,10 @@ func ListTransformSets(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"items": out, "total": len(out)})
 }
 
-// GetTransformSet returns one Transform Set by name.
+// GetTransformSet returns one TransformSet by name.
 func GetTransformSet(c *gin.Context) {
 	name := c.Param("name")
-	cl, err := k8s.GetClient()
+	cl, err := transformClientFactory()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -160,20 +174,18 @@ func GetTransformSet(c *gin.Context) {
 		return
 	}
 	if !isTransformSetConfigMap(cm) {
-		c.JSON(http.StatusNotFound, gin.H{"error": "ConfigMap exists but is not a SupKube Transform Set"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "ConfigMap exists but is not a SupKube TransformSet"})
 		return
 	}
 	ts, err := configMapToTransformSet(cm)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "decode transform set: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "decode TransformSet: " + err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, ts)
 }
 
-// CreateTransformSet body schema is the user-facing TransformSet shape.
-// We translate it back to the Velero ResourceModifierDoc + persist as
-// ConfigMap.
+// CreateTransformSet persists a new container.
 func CreateTransformSet(c *gin.Context) {
 	var ts TransformSet
 	if err := c.ShouldBindJSON(&ts); err != nil {
@@ -184,7 +196,7 @@ func CreateTransformSet(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if err := validateTransformSetRules(ts.Rules); err != nil {
+	if err := validateTransformSet(&ts); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -193,14 +205,14 @@ func CreateTransformSet(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	cl, err := k8s.GetClient()
+	cl, err := transformClientFactory()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	if _, err := cl.CoreV1().ConfigMaps(transformSetNamespace).Create(context.Background(), cm, metav1.CreateOptions{}); err != nil {
 		if apierrors.IsAlreadyExists(err) {
-			c.JSON(http.StatusConflict, gin.H{"error": fmt.Sprintf("Transform Set %q already exists", ts.Name)})
+			c.JSON(http.StatusConflict, gin.H{"error": fmt.Sprintf("TransformSet %q already exists", ts.Name)})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -209,8 +221,7 @@ func CreateTransformSet(c *gin.Context) {
 	c.JSON(http.StatusCreated, ts)
 }
 
-// UpdateTransformSet refuses to mutate built-in templates so users can't
-// silently break the seeded defaults.
+// UpdateTransformSet refuses to mutate built-ins (clone-to-edit pattern).
 func UpdateTransformSet(c *gin.Context) {
 	name := c.Param("name")
 	var ts TransformSet
@@ -224,12 +235,12 @@ func UpdateTransformSet(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "URL name and body name must match"})
 		return
 	}
-	if err := validateTransformSetRules(ts.Rules); err != nil {
+	if err := validateTransformSet(&ts); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	cl, err := k8s.GetClient()
+	cl, err := transformClientFactory()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -240,11 +251,11 @@ func UpdateTransformSet(c *gin.Context) {
 		return
 	}
 	if !isTransformSetConfigMap(existing) {
-		c.JSON(http.StatusNotFound, gin.H{"error": "not a SupKube Transform Set"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "not a SupKube TransformSet"})
 		return
 	}
 	if existing.Labels["supkube.io/builtin"] == "true" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "built-in Transform Sets cannot be modified; clone it under a new name instead"})
+		c.JSON(http.StatusForbidden, gin.H{"error": "built-in TransformSets cannot be modified; clone it under a new name instead"})
 		return
 	}
 
@@ -261,35 +272,54 @@ func UpdateTransformSet(c *gin.Context) {
 	c.JSON(http.StatusOK, ts)
 }
 
-// ConflictFix is one entry in the batch the UI sends to ApplyConflictFixes.
-// Matches the relevant fields of a Pre-flight Conflict.
-type ConflictFix struct {
-	ConflictKind       string         `json:"conflictKind"`
-	Artifact           ArtifactRef    `json:"artifact"`
-	SuggestedTransform *TransformRule `json:"suggestedTransform"`
+// DeleteTransformSet drops the container.
+//
+// IMPORTANT: deleting a TransformSet does NOT cascade-delete the atomic
+// Transforms it references — they may be shared with other TransformSets.
+// The caller (UI) is expected to delete unreferenced Transforms
+// separately via DeleteTransform.
+func DeleteTransformSet(c *gin.Context) {
+	name := c.Param("name")
+	cl, err := transformClientFactory()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	cm, err := cl.CoreV1().ConfigMaps(transformSetNamespace).Get(context.Background(), name, metav1.GetOptions{})
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	if !isTransformSetConfigMap(cm) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "not a SupKube TransformSet"})
+		return
+	}
+	if cm.Labels["supkube.io/builtin"] == "true" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "built-in TransformSets cannot be deleted"})
+		return
+	}
+	if err := cl.CoreV1().ConfigMaps(transformSetNamespace).Delete(context.Background(), name, metav1.DeleteOptions{}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "TransformSet deleted"})
 }
 
-// ApplyConflictFixes is the v0.8.3 batched "one-click fix" endpoint.
+// ─── ApplyConflictFixes (PRD-001 v2 跳转端点) ───────────────────────────
 //
-// Why batched instead of one-at-a-time (as v0.8.2 did):
+// In the v0.8.x single-layer model this endpoint materialized a
+// consolidated Velero ResourceModifier ConfigMap directly. In PRD-002
+// v1.3 the responsibility moves DOWN the stack: we now produce an
+// atomic Transform (rules.yaml) representing the user's accepted fix
+// set, and let the user wire it into a TransformSet (or auto-bind it
+// to the Restore drawer's adhoc TransformSet) as a separate step.
 //
-//   Velero's Restore.spec.resourceModifier is a SINGLE LocalObjectReference.
-//   A Restore can reference exactly ONE Transform Set ConfigMap. So if the
-//   user clicks "Apply Fix" on 4 conflicts, we MUST merge them into one
-//   ConfigMap, otherwise only the last one's patches actually run and the
-//   restore fails on the other 3 conflicts.
+// The returned `transformName` is what the UI navigates to (Transforms
+// page filter or Edit drawer) for the user to review before adding to
+// a TransformSet.
 //
-// The frontend therefore sends the FULL CURRENT LIST of applied fixes every
-// time. We replace the consolidated Transform Set with the new union. The
-// ConfigMap name is derived from the restoreName so the user can re-open
-// the drawer later and we end up with a stable, predictable CM.
-//
-// Body shape:
-//
-//	{
-//	  "restoreName": "test-app-backup-...-restore-220823",
-//	  "fixes": [ ConflictFix, ConflictFix, ... ]
-//	}
+// Body: { restoreName, fixes: [ConflictFix] }
+// Returns: { transformName, ruleCount, created }
 func ApplyConflictFixes(c *gin.Context) {
 	var req struct {
 		RestoreName string        `json:"restoreName" binding:"required"`
@@ -304,10 +334,7 @@ func ApplyConflictFixes(c *gin.Context) {
 		return
 	}
 
-	// Build one rule per fix, narrowly scoped to the exact ns + name.
-	// v0.8.4: each SuggestedTransform carries exactly one variant —
-	// JSON Patch, Merge Patch, or Strategic Merge Patch. We dispatch to
-	// the right field in TSRule based on which is populated.
+	// Build one rule per fix.
 	var rules []TSRule
 	var descriptionParts []string
 	for _, fix := range req.Fixes {
@@ -337,54 +364,50 @@ func ApplyConflictFixes(c *gin.Context) {
 				Value:     st.Value,
 			}}
 		default:
-			// Skip — no patch payload, nothing actionable.
 			continue
 		}
 		rules = append(rules, rule)
 		descriptionParts = append(descriptionParts,
 			fmt.Sprintf("%s on %s/%s", fix.ConflictKind, fix.Artifact.Namespace, fix.Artifact.Name))
 	}
-	if err := validateTransformSetRules(rules); err != nil {
+	if err := validateRulesList(rules); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "generated rules failed validation: " + err.Error()})
 		return
 	}
 
-	// Stable name per restore session. Truncate so the suffix fits.
+	// Stable atomic Transform name per restore session. Truncate if needed.
 	prefix := "preflight-fix-"
 	if len(req.RestoreName) > 253-len(prefix) {
 		req.RestoreName = req.RestoreName[:253-len(prefix)]
 	}
-	tsName := prefix + req.RestoreName
+	trName := prefix + req.RestoreName
 
-	ts := TransformSet{
-		Name:        tsName,
+	tr := Transform{
+		Name:        trName,
 		Description: fmt.Sprintf("Auto-generated by Pre-flight (%d fix(es)): %s", len(rules), strings.Join(descriptionParts, "; ")),
 		Rules:       rules,
 	}
 
-	cl, err := k8s.GetClient()
+	cl, err := transformClientFactory()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	cm, err := transformSetToConfigMap(&ts, false)
+	cm, err := transformToConfigMap(&tr, false)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	// Mark as auto-generated for future GC.
 	cm.Labels["supkube.io/auto-generated"] = "true"
 
-	// Upsert: try Create first, fall back to Update if it already exists.
-	// Idempotent re-clicks just refresh the rules.
+	// Upsert.
 	created := true
 	if _, err := cl.CoreV1().ConfigMaps(transformSetNamespace).Create(context.Background(), cm, metav1.CreateOptions{}); err != nil {
 		if !apierrors.IsAlreadyExists(err) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		// Fetch + patch existing
-		existing, gerr := cl.CoreV1().ConfigMaps(transformSetNamespace).Get(context.Background(), tsName, metav1.GetOptions{})
+		existing, gerr := cl.CoreV1().ConfigMaps(transformSetNamespace).Get(context.Background(), trName, metav1.GetOptions{})
 		if gerr != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": gerr.Error()})
 			return
@@ -397,16 +420,148 @@ func ApplyConflictFixes(c *gin.Context) {
 		created = false
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"transformSetName": tsName,
-		"created":          created,
-		"ruleCount":        len(rules),
+		"transformName": trName,
+		"created":       created,
+		"ruleCount":     len(rules),
 	})
 }
 
-// lowerKindToResource is a tiny, hand-rolled pluralizer for the kinds we
-// generate Transform Sets for. Full pluralization is in RESTMapper but we
-// don't need it here — the Pre-flight detectors only emit a fixed set of
-// Kinds.
+// ConflictFix is one entry in the batch the UI sends to ApplyConflictFixes.
+type ConflictFix struct {
+	ConflictKind       string         `json:"conflictKind"`
+	Artifact           ArtifactRef    `json:"artifact"`
+	SuggestedTransform *TransformRule `json:"suggestedTransform"`
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────
+
+func isTransformSetConfigMap(cm *corev1.ConfigMap) bool {
+	if cm == nil || cm.Labels == nil {
+		return false
+	}
+	return cm.Labels[transformSetLabelKind] == transformSetKindValue
+}
+
+// configMapToTransformSet decodes the spec key into the API shape.
+func configMapToTransformSet(cm *corev1.ConfigMap) (TransformSet, error) {
+	ts := TransformSet{
+		Name:      cm.Name,
+		BuiltIn:   cm.Labels["supkube.io/builtin"] == "true",
+		CreatedAt: cm.CreationTimestamp.Format("2006-01-02T15:04:05Z"),
+	}
+	if cm.Annotations != nil {
+		ts.Description = cm.Annotations[tsDescriptionAnnotation]
+	}
+	raw, ok := cm.Data[transformSetSpecKey]
+	if !ok || strings.TrimSpace(raw) == "" {
+		return ts, fmt.Errorf("TransformSet %q missing data[%s]", cm.Name, transformSetSpecKey)
+	}
+	// Use transform.TransformSetSpec for parsing; the compiler is the
+	// canonical reader of this file. We expand the parsed []string refs
+	// into the API's []TransformSetRef shape (params=nil per-ref;
+	// per-ref params not yet plumbed through compile.go).
+	var spec transform.TransformSetSpec
+	if err := sigyaml.Unmarshal([]byte(raw), &spec); err != nil {
+		return ts, fmt.Errorf("parse TransformSet spec: %w", err)
+	}
+	if spec.Description != "" && ts.Description == "" {
+		ts.Description = spec.Description
+	}
+	for _, name := range spec.TransformRefs {
+		ts.TransformRefs = append(ts.TransformRefs, TransformSetRef{Name: name})
+	}
+	ts.Defaults = spec.Defaults
+	return ts, nil
+}
+
+// transformSetToConfigMap serializes the API shape back into a CM.
+//
+// transformRefs are flattened to []string when written so the on-disk
+// format matches what compile.go expects (TransformSetSpec.TransformRefs
+// is `[]string`). Per-ref params from the API input are dropped at
+// write time — a tracking warning is left in the description for now.
+func transformSetToConfigMap(ts *TransformSet, builtIn bool) (*corev1.ConfigMap, error) {
+	if ts.TransformRefs == nil {
+		ts.TransformRefs = []TransformSetRef{}
+	}
+	refs := make([]string, 0, len(ts.TransformRefs))
+	perRefParamsPresent := false
+	for _, r := range ts.TransformRefs {
+		refs = append(refs, r.Name)
+		if len(r.Params) > 0 {
+			perRefParamsPresent = true
+		}
+	}
+	desc := ts.Description
+	if perRefParamsPresent && !strings.Contains(desc, "per-ref params") {
+		// Self-documenting drift signal: tells the next reader that
+		// per-ref params were sent but the compiler currently only
+		// honours TransformSet-level defaults.
+		desc = strings.TrimSpace(desc + " [warning: per-ref params not yet honoured by compile.go — supply via Defaults]")
+	}
+	spec := transform.TransformSetSpec{
+		TransformRefs: refs,
+		Defaults:      ts.Defaults,
+		Description:   desc,
+	}
+	yamlBytes, err := sigyaml.Marshal(spec)
+	if err != nil {
+		return nil, fmt.Errorf("serialize transform-set.yaml: %w", err)
+	}
+	labels := map[string]string{
+		transformSetLabelKind:   transformSetKindValue,
+		"supkube.io/managed-by": "supkube",
+	}
+	if builtIn {
+		labels["supkube.io/builtin"] = "true"
+	}
+	annotations := map[string]string{
+		tsDescriptionAnnotation: desc,
+	}
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        ts.Name,
+			Namespace:   transformSetNamespace,
+			Labels:      labels,
+			Annotations: annotations,
+		},
+		Data: map[string]string{
+			transformSetSpecKey: string(yamlBytes),
+		},
+	}
+	return cm, nil
+}
+
+// validateTransformSet sanity-checks the container before persisting.
+//   - transformRefs[] non-empty
+//   - each ref name validates as a k8s name (so Get can find them)
+//   - duplicate ref names rejected (caller almost certainly mis-clicked)
+//
+// We deliberately do NOT verify each ref exists in supkube ns here:
+//  1. CRUD is async-friendly — a TransformSet may be created before its
+//     Transforms (e.g. installer Helm chart order isn't guaranteed).
+//  2. Compile-time validation already errors loudly at Restore.
+func validateTransformSet(ts *TransformSet) error {
+	if len(ts.TransformRefs) == 0 {
+		return fmt.Errorf("transformRefs must be non-empty")
+	}
+	seen := map[string]struct{}{}
+	for i, r := range ts.TransformRefs {
+		if err := validateK8sName(r.Name); err != nil {
+			return fmt.Errorf("transformRefs[%d]: %w", i, err)
+		}
+		if _, dup := seen[r.Name]; dup {
+			return fmt.Errorf("transformRefs[%d]: duplicate ref %q", i, r.Name)
+		}
+		seen[r.Name] = struct{}{}
+	}
+	return nil
+}
+
+// ─── Helpers shared with transforms.go + ApplyConflictFixes ─────────────
+// (kept here because transforms.go imports them via package-scope.)
+
+// lowerKindToResource maps PascalCase Kind → lowercase plural resource.
 func lowerKindToResource(kind string) string {
 	switch kind {
 	case "Service":
@@ -428,15 +583,11 @@ func lowerKindToResource(kind string) string {
 	case "CronJob":
 		return "cronjobs"
 	default:
-		// Conservative fallback: lowercase + s. Works for most simple Kinds
-		// but not e.g. Endpoints (already plural) — those aren't on our
-		// Pre-flight whitelist anyway.
 		return strings.ToLower(kind) + "s"
 	}
 }
 
-// regexpEscape escapes ^ . $ ( ) [ ] { } | \ + * ? — used to build a
-// safe "name equals X" regex without pulling in the regexp/syntax package.
+// regexpEscape escapes ^ . $ ( ) [ ] { } | \ + * ? for a literal-match regex.
 func regexpEscape(s string) string {
 	const specials = `^.$()[]{}|\+*?`
 	var b strings.Builder
@@ -449,200 +600,7 @@ func regexpEscape(s string) string {
 	return b.String()
 }
 
-// shortHash returns a 6-char hash of input for ConfigMap-name suffixes.
-// FNV-1a is fine — not cryptographic, just needs to be deterministic and
-// short.
-func shortHash(s string) string {
-	const fnv64Offset = 0xcbf29ce484222325
-	const fnv64Prime = 0x100000001b3
-	var h uint64 = fnv64Offset
-	for i := 0; i < len(s); i++ {
-		h ^= uint64(s[i])
-		h *= fnv64Prime
-	}
-	const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
-	var b [6]byte
-	for i := range b {
-		b[i] = alphabet[h%uint64(len(alphabet))]
-		h /= uint64(len(alphabet))
-	}
-	return string(b[:])
-}
-
-// DeleteTransformSet refuses to delete built-in templates.
-func DeleteTransformSet(c *gin.Context) {
-	name := c.Param("name")
-	cl, err := k8s.GetClient()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	cm, err := cl.CoreV1().ConfigMaps(transformSetNamespace).Get(context.Background(), name, metav1.GetOptions{})
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		return
-	}
-	if !isTransformSetConfigMap(cm) {
-		c.JSON(http.StatusNotFound, gin.H{"error": "not a SupKube Transform Set"})
-		return
-	}
-	if cm.Labels["supkube.io/builtin"] == "true" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "built-in Transform Sets cannot be deleted"})
-		return
-	}
-	if err := cl.CoreV1().ConfigMaps(transformSetNamespace).Delete(context.Background(), name, metav1.DeleteOptions{}); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"message": "Transform Set deleted"})
-}
-
-// ─── Helpers ────────────────────────────────────────────────────────────
-
-func isTransformSetConfigMap(cm *corev1.ConfigMap) bool {
-	if cm == nil || cm.Labels == nil {
-		return false
-	}
-	return cm.Labels[transformSetLabelKind] == transformSetKindValue
-}
-
-// v0.8.3 ConfigMap layout — IMPORTANT
-// ────────────────────────────────────
-// Velero's resource_modifiers parser REQUIRES `len(cm.Data) == 1` (see
-// velero/pkg/util/resourcemodifiers/resource_modifiers.go:GetResourceModifiersFromConfig).
-// Any extra Data key triggers "illegal resource modifiers" at restore-time
-// validation — exactly what bit us in v0.8.2.
-//
-// So we keep the ConfigMap squeaky-clean:
-//   - data["rules.yaml"]               only thing Velero sees
-//   - annotations["supkube.io/description"]  human-readable label
-//   - annotations["supkube.io/rules-json"]   pre-parsed JSON for fast UI render
-//   - labels["supkube.io/kind"] etc. — SupKube identification (Velero ignores)
-const (
-	tsDescriptionAnnotation = "supkube.io/description"
-	tsRulesJSONAnnotation   = "supkube.io/rules-json"
-)
-
-func configMapToTransformSet(cm *corev1.ConfigMap) (TransformSet, error) {
-	ts := TransformSet{
-		Name:        cm.Name,
-		Description: cm.Annotations[tsDescriptionAnnotation],
-		BuiltIn:     cm.Labels["supkube.io/builtin"] == "true",
-		CreatedAt:   cm.CreationTimestamp.Format("2006-01-02T15:04:05Z"),
-	}
-	// Prefer the rules-json annotation (fast); fall back to parsing the
-	// canonical rules.yaml in Data.
-	if raw := cm.Annotations[tsRulesJSONAnnotation]; raw != "" {
-		var doc ResourceModifierDoc
-		if err := json.Unmarshal([]byte(raw), &doc); err != nil {
-			// Fall through to rules.yaml — annotation may be stale or
-			// hand-edited by kubectl.
-		} else {
-			ts.Rules = doc.ResourceModifierRules
-		}
-	}
-	if len(ts.Rules) == 0 {
-		if raw, ok := cm.Data["rules.yaml"]; ok && raw != "" {
-			var doc ResourceModifierDoc
-			if err := sigyaml.Unmarshal([]byte(raw), &doc); err != nil {
-				return ts, fmt.Errorf("parse rules.yaml: %w", err)
-			}
-			ts.Rules = doc.ResourceModifierRules
-		}
-	}
-	return ts, nil
-}
-
-func transformSetToConfigMap(ts *TransformSet, builtIn bool) (*corev1.ConfigMap, error) {
-	doc := ResourceModifierDoc{
-		Version:               "v1",
-		ResourceModifierRules: ts.Rules,
-	}
-	yamlBytes, err := sigyaml.Marshal(doc)
-	if err != nil {
-		return nil, fmt.Errorf("serialize rules.yaml: %w", err)
-	}
-	jsonBytes, err := json.Marshal(doc)
-	if err != nil {
-		return nil, fmt.Errorf("serialize rules.json: %w", err)
-	}
-	labels := map[string]string{
-		transformSetLabelKind:   transformSetKindValue,
-		"supkube.io/managed-by": "supkube",
-	}
-	if builtIn {
-		labels["supkube.io/builtin"] = "true"
-	}
-	annotations := map[string]string{
-		tsDescriptionAnnotation: ts.Description,
-		tsRulesJSONAnnotation:   string(jsonBytes),
-	}
-	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        ts.Name,
-			Namespace:   transformSetNamespace,
-			Labels:      labels,
-			Annotations: annotations,
-		},
-		// Only ONE key allowed here — Velero rejects multi-key Data.
-		Data: map[string]string{
-			"rules.yaml": string(yamlBytes),
-		},
-	}
-	return cm, nil
-}
-
-// validateTransformSetRules sanity-checks each rule before persisting.
-// Velero will re-validate at restore time; this is just to avoid storing
-// obviously broken rules.
-//
-// v0.8.4: rules may now contain JSON Patches OR Merge Patches OR
-// Strategic Patches (Velero supports all three). A rule must have at least
-// ONE non-empty patch group.
-func validateTransformSetRules(rules []TSRule) error {
-	if len(rules) == 0 {
-		return fmt.Errorf("at least one rule is required")
-	}
-	allowedOps := map[string]bool{"add": true, "remove": true, "replace": true, "test": true, "copy": true, "move": true}
-	for i, r := range rules {
-		if strings.TrimSpace(r.Conditions.GroupResource) == "" {
-			return fmt.Errorf("rule[%d]: conditions.groupResource is required", i)
-		}
-		if len(r.Patches) == 0 && len(r.MergePatches) == 0 && len(r.StrategicPatches) == 0 {
-			return fmt.Errorf("rule[%d]: at least one of patches / mergePatches / strategicPatches is required", i)
-		}
-		for j, p := range r.Patches {
-			if !allowedOps[p.Operation] {
-				return fmt.Errorf("rule[%d].patches[%d]: invalid operation %q (allowed: add, remove, replace, test, copy, move)", i, j, p.Operation)
-			}
-			if !strings.HasPrefix(p.Path, "/") {
-				return fmt.Errorf("rule[%d].patches[%d]: path must be a JSON Pointer starting with '/' (got %q)", i, j, p.Path)
-			}
-			needsValue := p.Operation == "add" || p.Operation == "replace" || p.Operation == "test"
-			if needsValue && p.Value == nil {
-				return fmt.Errorf("rule[%d].patches[%d]: operation %q requires a value", i, j, p.Operation)
-			}
-		}
-		for j, m := range r.MergePatches {
-			if strings.TrimSpace(m.PatchData) == "" {
-				return fmt.Errorf("rule[%d].mergePatches[%d]: patchData is required", i, j)
-			}
-			// Quick JSON validity check — Velero parses this at restore
-			// time but we'd rather catch obviously-broken JSON early.
-			var dummy interface{}
-			if err := json.Unmarshal([]byte(m.PatchData), &dummy); err != nil {
-				return fmt.Errorf("rule[%d].mergePatches[%d]: patchData is not valid JSON: %v", i, j, err)
-			}
-		}
-		for j, s := range r.StrategicPatches {
-			if strings.TrimSpace(s.PatchData) == "" {
-				return fmt.Errorf("rule[%d].strategicPatches[%d]: patchData is required", i, j)
-			}
-			var dummy interface{}
-			if err := json.Unmarshal([]byte(s.PatchData), &dummy); err != nil {
-				return fmt.Errorf("rule[%d].strategicPatches[%d]: patchData is not valid JSON: %v", i, j, err)
-			}
-		}
-	}
-	return nil
-}
+// (shortHash + mustJSON helpers from the v0.8.x single-layer schema were
+// dropped during the PRD-002 v1.3 refactor — content-addressed hashing
+// now lives in transform.hashInput, and JSON serialization uses
+// encoding/json directly in the few callers that need it.)

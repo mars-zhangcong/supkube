@@ -7,11 +7,11 @@
 //
 // API surface:
 //
-//   GET    /api/v1/clusters             list all
-//   GET    /api/v1/clusters/:name       get one (with status)
-//   POST   /api/v1/clusters             create (with kubeconfig)
-//   DELETE /api/v1/clusters/:name       remove (also deletes secret)
-//   POST   /api/v1/clusters/:name/test  one-shot connection check
+//	GET    /api/v1/clusters             list all
+//	GET    /api/v1/clusters/:name       get one (with status)
+//	POST   /api/v1/clusters             create (with kubeconfig)
+//	DELETE /api/v1/clusters/:name       remove (also deletes secret)
+//	POST   /api/v1/clusters/:name/test  one-shot connection check
 //
 // All endpoints are admin-only — registering a new cluster gives
 // SupKube the ability to dispatch into it, which is a cluster-admin-
@@ -64,21 +64,21 @@ var clusterNameRe = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9
 // ClusterDTO is what the SPA receives. Flatter than the raw CR so the
 // list table renders without traversing nested objects.
 type ClusterDTO struct {
-	Name         string    `json:"name"`
-	DisplayName  string    `json:"displayName,omitempty"`
-	Type         string    `json:"type"`
-	Description  string    `json:"description,omitempty"`
-	Context      string    `json:"context,omitempty"`
-	Phase        string    `json:"phase"`
-	Message      string    `json:"message,omitempty"`
-	LastChecked  time.Time `json:"lastChecked,omitempty"`
-	K8sVersion   string    `json:"k8sVersion,omitempty"`
-	NodeCount    int       `json:"nodeCount,omitempty"`
-	Capabilities []string  `json:"capabilities,omitempty"`
-	VeleroInstalled bool   `json:"veleroInstalled"`
-	VeleroVersion   string `json:"veleroVersion,omitempty"`
-	CreationTime time.Time `json:"creationTime,omitempty"`
-	IsCurrent    bool      `json:"isCurrent"`
+	Name            string    `json:"name"`
+	DisplayName     string    `json:"displayName,omitempty"`
+	Type            string    `json:"type"`
+	Description     string    `json:"description,omitempty"`
+	Context         string    `json:"context,omitempty"`
+	Phase           string    `json:"phase"`
+	Message         string    `json:"message,omitempty"`
+	LastChecked     time.Time `json:"lastChecked,omitempty"`
+	K8sVersion      string    `json:"k8sVersion,omitempty"`
+	NodeCount       int       `json:"nodeCount,omitempty"`
+	Capabilities    []string  `json:"capabilities,omitempty"`
+	VeleroInstalled bool      `json:"veleroInstalled"`
+	VeleroVersion   string    `json:"veleroVersion,omitempty"`
+	CreationTime    time.Time `json:"creationTime,omitempty"`
+	IsCurrent       bool      `json:"isCurrent"`
 }
 
 // CreateClusterRequest is the SPA's POST body. We accept the kubeconfig
@@ -88,10 +88,10 @@ type ClusterDTO struct {
 type CreateClusterRequest struct {
 	Name        string `json:"name" binding:"required"`
 	DisplayName string `json:"displayName,omitempty"`
-	Type        string `json:"type,omitempty"`        // primary | secondary; default secondary
+	Type        string `json:"type,omitempty"` // primary | secondary; default secondary
 	Description string `json:"description,omitempty"`
 	Kubeconfig  string `json:"kubeconfig" binding:"required"`
-	Context     string `json:"context,omitempty"`     // empty = use current-context from kubeconfig
+	Context     string `json:"context,omitempty"` // empty = use current-context from kubeconfig
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -134,10 +134,21 @@ func ListClusters(c *gin.Context) {
 // buildThisClusterDTO assembles the synthetic "this-cluster" row that
 // always sits at the top of the registry. Fail-safe: any probe error
 // degrades to "Unknown" phase rather than 500'ing the whole list.
+//
+// v0.9.x DisplayName 改进 (Mars 2026-05-31 testing 20260531 #1 反馈):
+//
+//	旧版 DisplayName 写死 "This Cluster" — 在 DR Topology / MCM 列表里看到
+//	"This-Cluster" 字眼, 客户的真问题是 "我现在到底在哪个集群?" 死写没回答。
+//	新逻辑: 显示**真实可识别的标识**, 按优先级 fallback:
+//	  1. control-plane node 名 (e.g. "docker-desktop", "ip-10-0-1-23")
+//	  2. 任意第一个 node 名 (managed K8s 像 EKS 拿不到 control-plane)
+//	  3. 兜底 "Local Cluster" (无 node? 不太可能但 fail-safe)
+//	`Name` (sentinel "this-cluster") 不动, 仍是 cluster_id 用于 routing
+//	header (request_client.go L52); 只改 `DisplayName` (UI 渲染).
 func buildThisClusterDTO(ctx context.Context) ClusterDTO {
 	dto := ClusterDTO{
-		Name:         "this-cluster",
-		DisplayName:  "This Cluster",
+		Name:         "this-cluster",  // sentinel, 不可改 (routing / header / API)
+		DisplayName:  "Local Cluster", // 默认兜底, 下面再 detect override
 		Type:         "primary",
 		Phase:        "Healthy",
 		IsCurrent:    true,
@@ -153,6 +164,31 @@ func buildThisClusterDTO(ctx context.Context) ClusterDTO {
 	}
 	if nl, err := k8sCli.CoreV1().Nodes().List(ctx, metav1.ListOptions{}); err == nil {
 		dto.NodeCount = len(nl.Items)
+		// Pick a human-recognizable cluster name from node names.
+		// Priority: control-plane label → any node → fall back to default.
+		var cpName, anyName string
+		for _, n := range nl.Items {
+			if anyName == "" {
+				anyName = n.Name
+			}
+			// K8s 1.20+ uses node-role.kubernetes.io/control-plane;
+			// older clusters used .../master. Accept either.
+			if _, ok := n.Labels["node-role.kubernetes.io/control-plane"]; ok {
+				cpName = n.Name
+				break
+			}
+			if _, ok := n.Labels["node-role.kubernetes.io/master"]; ok {
+				cpName = n.Name
+				break
+			}
+		}
+		switch {
+		case cpName != "":
+			dto.DisplayName = cpName
+		case anyName != "":
+			dto.DisplayName = anyName
+			// (无 node 时保留 "Local Cluster" 默认)
+		}
 	}
 	if _, err := k8sCli.AppsV1().Deployments("velero").Get(ctx, "velero", metav1.GetOptions{}); err == nil {
 		dto.VeleroInstalled = true
@@ -167,11 +203,9 @@ func buildThisClusterDTO(ctx context.Context) ClusterDTO {
 func GetCluster(c *gin.Context) {
 	name := c.Param("name")
 	if name == "this-cluster" {
-		// Synthetic entry — return the same shape we synthesize in List.
-		c.JSON(http.StatusOK, ClusterDTO{
-			Name: "this-cluster", DisplayName: "This Cluster",
-			Type: "primary", Phase: "Healthy", IsCurrent: true,
-		})
+		// Synthetic entry — return the same DTO that List would build for
+		// "this-cluster" (含 control-plane node name detection, 2026-05-31).
+		c.JSON(http.StatusOK, buildThisClusterDTO(context.Background()))
 		return
 	}
 	dynCli, err := k8s.GetDynamicClient()
@@ -398,12 +432,12 @@ func TestClusterConnection(c *gin.Context) {
 
 	phase, msg, version, nodes, vinstalled, vversion := testClusterConnection(kc, req.Context)
 	c.JSON(http.StatusOK, gin.H{
-		"phase":          phase,
-		"message":        msg,
-		"k8sVersion":     version,
-		"nodeCount":      nodes,
+		"phase":           phase,
+		"message":         msg,
+		"k8sVersion":      version,
+		"nodeCount":       nodes,
 		"veleroInstalled": vinstalled,
-		"veleroVersion":  vversion,
+		"veleroVersion":   vversion,
 	})
 }
 

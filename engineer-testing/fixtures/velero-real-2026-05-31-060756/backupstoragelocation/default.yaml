@@ -1,0 +1,24 @@
+apiVersion: velero.io/v1
+kind: BackupStorageLocation
+metadata:
+  creationTimestamp: "2026-05-13T09:44:43Z"
+  generation: 32362
+  labels:
+    component: velero
+  name: default
+  namespace: velero
+  resourceVersion: "2936410"
+  uid: 151a258d-4eb8-470b-95c8-701121b8065c
+spec:
+  config:
+    region: minio
+    s3ForcePathStyle: "true"
+    s3Url: http://minio.minio.svc:9000
+  default: true
+  objectStorage:
+    bucket: velero
+  provider: aws
+status:
+  lastSyncedTime: "2026-05-31T06:07:24Z"
+  lastValidationTime: "2026-05-31T06:07:36Z"
+  phase: Available

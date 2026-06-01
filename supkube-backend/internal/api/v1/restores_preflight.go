@@ -114,21 +114,35 @@ type TransformRule struct {
 
 // Conflict describes a single detected conflict between the backup and
 // the target cluster/namespace.
+//
+// PRD-001 v2 (#104, finding #2 — 2026-05-31): severity is固化 as an enum
+// (`blocker` | `warning`) decided by the BACKEND. The frontend MUST treat
+// it as read-only and MUST NOT compute or override severity client-side;
+// otherwise cross-version drift and security-bypass risks creep in. The
+// `matchingTransformSets` slice is likewise authoritative server-side —
+// the backend matches the conflict against the TransformSet library and
+// hands the names to the UI, which only renders them.
 type Conflict struct {
-	Kind               string         `json:"kind"`
-	Severity           string         `json:"severity"`
-	Artifact           ArtifactRef    `json:"artifact"`
-	Field              string         `json:"field"`
-	CurrentValue       interface{}    `json:"currentValue,omitempty"`
-	ConflictsWith      string         `json:"conflictsWith,omitempty"`
-	Message            string         `json:"message"`
-	SuggestedTransform *TransformRule `json:"suggestedTransform,omitempty"`
+	Kind     string `json:"kind"`
+	Severity string `json:"severity"`
+	// MatchingTransformSets lists names of TransformSets known to address
+	// this exact conflict kind+payload. Used by the RestoreDrawer
+	// Checklist to render a "→ Go to Transform" CTA per conflict row.
+	// Empty slice (not nil) when no match — encoded as `[]` so the
+	// frontend can iterate without a null-guard.
+	MatchingTransformSets []string       `json:"matchingTransformSets"`
+	Artifact              ArtifactRef    `json:"artifact"`
+	Field                 string         `json:"field"`
+	CurrentValue          interface{}    `json:"currentValue,omitempty"`
+	ConflictsWith         string         `json:"conflictsWith,omitempty"`
+	Message               string         `json:"message"`
+	SuggestedTransform    *TransformRule `json:"suggestedTransform,omitempty"`
 }
 
 // PreflightRequest is the body for POST /api/v1/restores/preflight.
 type PreflightRequest struct {
-	BackupName           string `json:"backupName" binding:"required"`
-	TargetNamespace      string `json:"targetNamespace" binding:"required"`
+	BackupName      string `json:"backupName" binding:"required"`
+	TargetNamespace string `json:"targetNamespace" binding:"required"`
 	// When true, we exclude resources in TargetNamespace from collision checks
 	// because those resources will be deleted before the restore runs (see
 	// CreateRestore's CleanupBeforeRestore flow).
@@ -142,7 +156,7 @@ type PreflightResponse struct {
 	BackupName      string     `json:"backupName"`
 	TargetNamespace string     `json:"targetNamespace"`
 	Conflicts       []Conflict `json:"conflicts"`
-	Checks          []string   `json:"checks"` // detectors that ran
+	Checks          []string   `json:"checks"`           // detectors that ran
 	Errors          []string   `json:"errors,omitempty"` // detectors that failed (non-blocking)
 }
 
@@ -202,6 +216,24 @@ func PreflightRestore(c *gin.Context) {
 		if err != nil {
 			resp.Errors = append(resp.Errors, fmt.Sprintf("%s: %s", name, err.Error()))
 			return
+		}
+		// PRD-001 v2 (#104): normalize each conflict so the wire shape
+		// matches the schema the frontend renders against:
+		//   - severity defaults to "blocker" if a detector forgot to set
+		//     it (conservative — forces admin to acknowledge unknown
+		//     conflicts rather than silently ignoring)
+		//   - matchingTransformSets is an empty slice (not nil) so the
+		//     frontend can iterate without a null-guard, and JSON
+		//     marshals to `[]` not `null`
+		// TransformSet library matching itself lands in a follow-up
+		// (PRD-002 §4.4) — for now the slice is always empty here.
+		for i := range conflicts {
+			if conflicts[i].Severity == "" {
+				conflicts[i].Severity = SeverityBlocker
+			}
+			if conflicts[i].MatchingTransformSets == nil {
+				conflicts[i].MatchingTransformSets = []string{}
+			}
 		}
 		resp.Conflicts = append(resp.Conflicts, conflicts...)
 	}
@@ -694,13 +726,13 @@ func detectImageRegistryReachability(artifacts []unstructured.Unstructured) ([]C
 		}
 		msg := fmt.Sprintf("Image registry %q is not resolvable from this cluster (%v). %d workload(s) reference it; the target pods will likely stay in ImagePullBackOff until the registry name is rewritten or DNS is fixed.", host, err, count)
 		conflicts = append(conflicts, Conflict{
-			Kind:     ConflictImageRegistryUnreachable,
-			Severity: SeverityWarning,
-			Artifact: first,
-			Field:    "/spec/.../containers[*]/image",
-			CurrentValue: host,
+			Kind:          ConflictImageRegistryUnreachable,
+			Severity:      SeverityWarning,
+			Artifact:      first,
+			Field:         "/spec/.../containers[*]/image",
+			CurrentValue:  host,
 			ConflictsWith: "(no DNS record from inside the cluster)",
-			Message:  msg,
+			Message:       msg,
 			SuggestedTransform: &TransformRule{
 				Operation: "replace",
 				Path:      "/spec/template/spec/containers/0/image",
@@ -717,12 +749,13 @@ func detectImageRegistryReachability(artifacts []unstructured.Unstructured) ([]C
 // registry rewriting in 99% of cases.
 //
 // Examples:
-//   "nginx:latest"                              → ""
-//   "library/postgres:15"                       → ""
-//   "docker.io/library/postgres:15"             → "docker.io"
-//   "quay.io/jetstack/cert-manager:v1.12.0"     → "quay.io"
-//   "registry.example.com:5000/app/web:abc"     → "registry.example.com:5000"
-//   "internal.corp/team/app@sha256:..."         → "internal.corp"
+//
+//	"nginx:latest"                              → ""
+//	"library/postgres:15"                       → ""
+//	"docker.io/library/postgres:15"             → "docker.io"
+//	"quay.io/jetstack/cert-manager:v1.12.0"     → "quay.io"
+//	"registry.example.com:5000/app/web:abc"     → "registry.example.com:5000"
+//	"internal.corp/team/app@sha256:..."         → "internal.corp"
 func registryHost(image string) string {
 	if image == "" {
 		return ""

@@ -4,15 +4,15 @@
 // ─────────────────────────────
 // Audit records are written to TWO places, each serving a different audience:
 //
-//   1. stdout — for the customer's existing log aggregation (Loki/EFK/Splunk).
-//      Standard structured prefix so SIEM rules can match. This is the
-//      long-term retention path. We don't try to be the log database.
+//  1. stdout — for the customer's existing log aggregation (Loki/EFK/Splunk).
+//     Standard structured prefix so SIEM rules can match. This is the
+//     long-term retention path. We don't try to be the log database.
 //
-//   2. K8s Events (`events.k8s.io/v1`) — for in-cluster visibility + the
-//      UI's audit page. Events have default 1-hour TTL but k8s-events
-//      controller respects --event-ttl flag if customers want longer.
-//      We label them `supkube.io/audit=true` so the UI's query can find
-//      them via label selector without scanning unrelated events.
+//  2. K8s Events (`events.k8s.io/v1`) — for in-cluster visibility + the
+//     UI's audit page. Events have default 1-hour TTL but k8s-events
+//     controller respects --event-ttl flag if customers want longer.
+//     We label them `supkube.io/audit=true` so the UI's query can find
+//     them via label selector without scanning unrelated events.
 //
 // We only audit MUTATING requests (POST/PUT/PATCH/DELETE) + login/logout +
 // failed authentication. Read operations would inflate the event store
@@ -21,17 +21,17 @@
 //
 // Schema (matches what the UI consumes):
 //
-//   user          — email or username, fall back to "anonymous"
-//   action        — derived: "Create" / "Update" / "Delete" / "Login" / ...
-//   resource      — derived from URL: "Backup" / "Restore" / ...
-//   resourceName  — captured from path param if available
-//   namespace     — captured from request body / query when applicable
-//   method        — verbatim HTTP method
-//   path          — Gin pattern (e.g. /api/v1/backups/:name)
-//   result        — "success" / "denied" / "error"
-//   statusCode    — HTTP status response
-//   sourceIP      — c.ClientIP() — may be inaccurate behind multiple proxies
-//   timestamp     — server-side wall clock when the request completed
+//	user          — email or username, fall back to "anonymous"
+//	action        — derived: "Create" / "Update" / "Delete" / "Login" / ...
+//	resource      — derived from URL: "Backup" / "Restore" / ...
+//	resourceName  — captured from path param if available
+//	namespace     — captured from request body / query when applicable
+//	method        — verbatim HTTP method
+//	path          — Gin pattern (e.g. /api/v1/backups/:name)
+//	result        — "success" / "denied" / "error"
+//	statusCode    — HTTP status response
+//	sourceIP      — c.ClientIP() — may be inaccurate behind multiple proxies
+//	timestamp     — server-side wall clock when the request completed
 package auth
 
 import (
@@ -282,19 +282,19 @@ func writeAuditEvent(rec *AuditRecord) {
 			GenerateName: "supkube-audit-",
 			Namespace:    auditNamespace,
 			Labels: map[string]string{
-				auditLabelKey:           auditLabelValue,
-				"supkube.io/audit-user": sanitizeLabel(rec.User),
-				"supkube.io/audit-result": rec.Result,
+				auditLabelKey:               auditLabelValue,
+				"supkube.io/audit-user":     sanitizeLabel(rec.User),
+				"supkube.io/audit-result":   rec.Result,
 				"supkube.io/audit-resource": rec.Resource,
 			},
 			Annotations: map[string]string{
-				"supkube.io/audit-method":     rec.Method,
-				"supkube.io/audit-path":       rec.Path,
-				"supkube.io/audit-status":     strconv.Itoa(rec.StatusCode),
-				"supkube.io/audit-source-ip":  rec.SourceIP,
-				"supkube.io/audit-namespace":  rec.Namespace,
+				"supkube.io/audit-method":        rec.Method,
+				"supkube.io/audit-path":          rec.Path,
+				"supkube.io/audit-status":        strconv.Itoa(rec.StatusCode),
+				"supkube.io/audit-source-ip":     rec.SourceIP,
+				"supkube.io/audit-namespace":     rec.Namespace,
 				"supkube.io/audit-resource-name": rec.ResourceName,
-				"supkube.io/audit-user-full":  rec.User,
+				"supkube.io/audit-user-full":     rec.User,
 			},
 		},
 		InvolvedObject: corev1.ObjectReference{
@@ -379,11 +379,12 @@ func sanitizeLabel(in string) string {
 // Admin-only — the central permission table enforces this.
 //
 // Query params (all optional):
-//   user      — filter to a specific user
-//   result    — "success" / "denied" / "error"
-//   resource  — "Backup" / "Restore" / ...
-//   since     — RFC3339 timestamp (only return records after this time)
-//   limit     — default 200, max 1000
+//
+//	user      — filter to a specific user
+//	result    — "success" / "denied" / "error"
+//	resource  — "Backup" / "Restore" / ...
+//	since     — RFC3339 timestamp (only return records after this time)
+//	limit     — default 200, max 1000
 //
 // Returns newest first.
 func ListAuditLogs(gc *gin.Context) {

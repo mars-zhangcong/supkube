@@ -46,14 +46,23 @@
             <div class="policy-cell">
               <div class="policy-name">{{ row.metadata?.name }}</div>
               <div class="policy-cell-chips">
-                <span class="sk-chip sk-chip-status-muted">{{ actionTextOf(row) }}</span>
+                <!-- Agent D: Import 类型蓝色 chip — 复用 tokens.css 里
+                     现有的 .sk-chip-type-imported（与 Backups 页一致）。 -->
+                <el-tooltip v-if="row._kind === 'import'"
+                  :content="t('importPolicy.typeChipTooltip')"
+                  placement="top" :show-after="200">
+                  <span class="sk-chip sk-chip-type-imported">
+                    ⬇ {{ t('importPolicy.typeChip') }}
+                  </span>
+                </el-tooltip>
+                <span v-else class="sk-chip sk-chip-status-muted">{{ actionTextOf(row) }}</span>
                 <span v-if="row.spec?.paused" class="sk-chip sk-chip-status-warning">
                   {{ t('policies.paused') }}
                 </span>
                 <span v-else class="sk-chip sk-chip-status-success">
                   {{ t('policies.active') }}
                 </span>
-                <span v-if="validationOf(row).key !== 'valid'" class="sk-chip sk-chip-status-error">
+                <span v-if="row._kind !== 'import' && validationOf(row).key !== 'valid'" class="sk-chip sk-chip-status-error">
                   {{ validationOf(row).label }}
                 </span>
               </div>
@@ -66,7 +75,9 @@
              emoji per UI_GUIDELINES §3.1. -->
         <el-table-column :label="t('policies.resources').toUpperCase()" width="160">
           <template #default="{ row }">
-            <div v-if="resourceNamespaces(row).length > 0" class="policy-ns-col">
+            <!-- Agent D: Import 行不针对源集群 ns，显示 — -->
+            <span v-if="row._kind === 'import'" class="muted">—</span>
+            <div v-else-if="resourceNamespaces(row).length > 0" class="policy-ns-col">
               <el-tooltip
                 v-for="ns in resourceNamespaces(row)"
                 :key="ns"
@@ -89,7 +100,13 @@
         <el-table-column :label="t('policies.storageLocationCol').toUpperCase()" width="200">
           <template #default="{ row }">
             <div class="policy-bsl-col">
-              <template v-if="storageLocationOf(row).dual">
+              <!-- Agent D: Import 行展示 source BSL（标 ⬇）。 -->
+              <template v-if="row._kind === 'import'">
+                <el-tooltip :content="t('importPolicy.sourceBSL') + ': ' + (row._import?.sourceBSL || '—')" placement="top" :show-after="200">
+                  <span class="policy-bsl-chip bsl-cloud">⬇ {{ row._import?.sourceBSL || '—' }}</span>
+                </el-tooltip>
+              </template>
+              <template v-else-if="storageLocationOf(row).dual">
                 <el-tooltip :content="t('policies.bslLocalTooltip', { name: storageLocationOf(row).local })" placement="top" :show-after="200">
                   <span class="policy-bsl-chip bsl-local">{{ storageLocationOf(row).local }}</span>
                 </el-tooltip>
@@ -110,10 +127,17 @@
         <el-table-column :label="t('policies.frequency').toUpperCase()" width="140">
           <template #default="{ row }">
             <div class="freq-cell">
+              <!-- Agent D: Import 行展示 mode + interval/cron。 -->
+              <template v-if="row._kind === 'import'">
+                <div class="freq-human">
+                  {{ row._import?.mode === 'continuous' ? t('importPolicy.modeContinuous') : t('importPolicy.modeScheduled') }}
+                </div>
+                <code class="freq-cron">{{ row.spec?.schedule || '—' }}</code>
+              </template>
               <!-- v0.8.10.5: paused + 0 0 1 1 * cron is SupKube's
                    "On Demand" idiom (no automatic run, fire via Run
                    Once only). Per user feedback show that explicitly. -->
-              <template v-if="row.spec?.paused">
+              <template v-else-if="row.spec?.paused">
                 <div class="sk-body-strong">{{ t('policies.onDemand') }}</div>
               </template>
               <template v-else>
@@ -172,7 +196,16 @@
                 <span class="dots">⋮</span>
               </el-button>
               <template #dropdown>
-                <el-dropdown-menu>
+                <!-- Agent D: Import 行只展示 Run-once / Pause / Delete；
+                     Snapshot 行保持原有菜单不动。 -->
+                <el-dropdown-menu v-if="row._kind === 'import'">
+                  <el-dropdown-item command="importRunOnce">{{ t('importPolicy.actionRunOnce') }}</el-dropdown-item>
+                  <el-dropdown-item command="importPause">
+                    {{ row.spec?.paused ? t('importPolicy.actionResume') : t('importPolicy.actionPause') }}
+                  </el-dropdown-item>
+                  <el-dropdown-item command="importDelete" divided>{{ t('common.delete') }}</el-dropdown-item>
+                </el-dropdown-menu>
+                <el-dropdown-menu v-else>
                   <el-dropdown-item command="view">{{ t('common.view') }}</el-dropdown-item>
                   <el-dropdown-item command="revalidate">{{ t('policies.revalidate') }}</el-dropdown-item>
                   <el-dropdown-item command="edit">{{ t('common.edit') }}</el-dropdown-item>
@@ -318,28 +351,73 @@
           />
         </el-form-item>
 
-        <!-- Action button-group: L1 Snapshot vs L2 Snapshot+Export -->
-        <el-form-item>
+        <!-- Agent D / Import Policy 2026-06-01 — Action Type 选择条。
+             Snapshot Policy = 源集群备份（保留原有整套表单不动）。
+             Import Policy   = 目标集群从共享 BSL 拉新 RP（持续 DR）。
+             Edit 模式禁切（一条 Schedule 和一条 ImportPolicy 是不同 CR，
+             不能就地互转）；只在 Create 模式露出。 -->
+        <el-form-item v-if="!editMode">
           <template #label>
             <div class="kasten-label-block">
-              <strong>{{ t('policies.action') }}</strong>
-              <span class="kasten-label-help">{{ t('policies.actionHelp') }}</span>
+              <strong>{{ t('policies.actionType') }}</strong>
+              <span class="kasten-label-help">{{ t('policies.actionTypeHelp') }}</span>
             </div>
           </template>
           <div class="kasten-pill-group">
-            <button
-              type="button"
-              class="kasten-pill"
-              :class="{ 'is-active': !createForm.export.enabled }"
-              @click="selectAction('snapshot')"
-            >L1 {{ t('policies.actionSnapshot').replace(/^L1\s*/, '') }}</button>
-            <button
-              type="button"
-              class="kasten-pill"
-              :class="{ 'is-active': createForm.export.enabled }"
-              @click="selectAction('snapshot-export')"
-            >L2 {{ t('policies.actionSnapshotExport').replace(/^L2\s*/, '') }}</button>
+            <button type="button" class="kasten-pill"
+              :class="{ 'is-active': createForm.actionType === 'snapshot' }"
+              @click="createForm.actionType = 'snapshot'">
+              📸 {{ t('policies.actionTypeSnapshot') }}
+            </button>
+            <button type="button" class="kasten-pill"
+              :class="{ 'is-active': createForm.actionType === 'import' }"
+              @click="createForm.actionType = 'import'">
+              ⬇ {{ t('policies.actionTypeImport') }}
+            </button>
           </div>
+        </el-form-item>
+
+        <!-- ════════════════════════════════════════════════════════════
+             SNAPSHOT POLICY 分支（原有 Kasten K10 表单整段不动一行）
+             ════════════════════════════════════════════════════════════ -->
+        <template v-if="createForm.actionType === 'snapshot'">
+
+        <!-- v0.9.1.12 PRD-009 (Mars 2026-06-01) — Kasten K10 model:
+             Snapshot is always taken; user only toggles whether to export.
+             Replaces the old L1/L2 pill group. Backend stays identical:
+             toggle binds to createForm.export.enabled (the boolean ADR-025
+             dual-schedule already consumes), so no schema change.
+             selectAction() is reused to preserve the snapshot-only guardrail
+             dialog when flipping off. -->
+        <el-form-item>
+          <template #label>
+            <div class="kasten-label-block">
+              <strong>{{ t('policies.snapshotSectionTitle') }}</strong>
+              <span class="kasten-label-help">{{ t('policies.snapshotSectionHelp') }}</span>
+            </div>
+          </template>
+          <div class="snapshot-always-on">
+            <span class="kasten-pill is-active is-locked">📸 {{ t('policies.snapshotAlwaysOnPill') }}</span>
+            <span class="snapshot-always-on-note">· {{ t('policies.alwaysOn') }}</span>
+          </div>
+        </el-form-item>
+
+        <!-- Enable Backups via Snapshot Exports (Kasten K10 official wording) -->
+        <el-form-item>
+          <template #label>
+            <div class="kasten-label-block">
+              <strong>{{ t('policies.enableExportLabel') }}</strong>
+              <span class="kasten-label-help">{{ t('policies.enableExportHelp') }}</span>
+            </div>
+          </template>
+          <el-switch
+            :model-value="createForm.export.enabled"
+            size="large"
+            inline-prompt
+            :active-text="t('policies.enableExportOnText')"
+            :inactive-text="t('policies.enableExportOffText')"
+            @change="(v) => selectAction(v ? 'snapshot-export' : 'snapshot')"
+          />
           <p v-if="!createForm.export.enabled" class="action-disabled-warning" style="margin-top: 10px">
             ⚠ {{ t('policies.snapshotOnlyWarn') }}
           </p>
@@ -426,6 +504,10 @@
               :placeholder="t('policies.storageProfilePlaceholder')"
               style="width: 100%"
             >
+              <!-- v0.9.1.10 (#101 finding 1): explicit "Auto" so '' reads as
+                   a deliberate choice. Backend resolves the effective cloud
+                   BSL (flagged-default / sole / named-default). -->
+              <el-option :label="t('policies.storageProfileAuto')" value="" />
               <!-- v0.8.12 LBS3: hide the in-cluster Local BSL from this
                    Cloud-only selector (bslRole=local). The Cloud half
                    should never land in the Local store; pairing rules
@@ -462,20 +544,22 @@
           </el-form-item>
         </template>
 
-        <!-- Data Path (v0.8.7.5: split into Snapshot Engine + Export Engine
-             columns to mirror Kasten's L1/L2 mental model. The Action
-             pill above (L1/L2) gates which column is interactive:
+        <!-- Data Path — two-column visual reflects the Snapshot / Export
+             toggle above (v0.9.1.12 PRD-009 reworded from L1/L2):
 
-               L1 = Snapshot only        → left column active, right grayed
-               L2 = Snapshot + Export    → right column active, left grayed
-                    (because Data Mover already implies CSI snapshot,
-                     Filesystem path skips snapshot entirely)
+               Export OFF → left column active (CSI / Metadata-only)
+               Export ON  → right column active (Data Mover / Filesystem)
+                            (Data Mover does a CSI snapshot under the hood;
+                             Filesystem skips snapshot and reads files directly)
 
-             Implementation: still ONE source-of-truth value in
-             createForm.snapshot.dataPath. The two-column visual is
-             purely for clarity. A watcher migrates the value when
-             Action switches so the user can't end up with an L1/L2
-             vs. dataPath mismatch (which v0.8.7.4 silently allowed). -->
+             Implementation: ONE source-of-truth in createForm.snapshot.dataPath.
+             A watcher migrates the value when the Export toggle flips so the
+             user can't end up with a "Export ON + CSI-only path" combo (which
+             would silently fail to export). The columns are visual scaffolding;
+             the gating logic lives in setDataPath() + selectAction(). -->
+        <!-- (legacy v0.8.7.5 L1/L2 comment retired here; preserved in git blame) -->
+        <!-- Left col is keyed on !export.enabled, right col on export.enabled —
+             so they auto-track the new Kasten-style switch above. -->
         <el-form-item>
           <template #label>
             <div class="kasten-label-block">
@@ -484,7 +568,7 @@
             </div>
           </template>
           <div class="data-path-2col">
-            <!-- ─── Left: Snapshot only (L1) ─── -->
+            <!-- ─── Left: Snapshot only (Export toggle OFF) ─── -->
             <div class="data-path-col" :class="{ 'is-active-col': !createForm.export.enabled, 'is-disabled-col': createForm.export.enabled }">
               <div class="data-path-col-head">
                 <span class="data-path-col-title">📸 {{ t('policies.dataPathSection.snapshotOnly') }}</span>
@@ -510,7 +594,7 @@
               </div>
             </div>
 
-            <!-- ─── Right: Snapshot + Export (L2) ─── -->
+            <!-- ─── Right: Snapshot Export (Export toggle ON) ─── -->
             <div class="data-path-col" :class="{ 'is-active-col': createForm.export.enabled, 'is-disabled-col': !createForm.export.enabled }">
               <div class="data-path-col-head">
                 <span class="data-path-col-title">🚚 {{ t('policies.dataPathSection.snapshotExport') }}</span>
@@ -578,6 +662,150 @@
             </template>
           </div>
         </el-form-item>
+        </template>
+
+        <!-- ════════════════════════════════════════════════════════════
+             IMPORT POLICY 分支 (Agent D 2026-06-01)
+             目标集群从共享 BSL 拉新 RP 的持续 DR。后端独立 CR
+             (POST /import-policies)，不动 ADR-025 dual-schedule。
+             ════════════════════════════════════════════════════════════ -->
+        <template v-else>
+          <!-- Source Storage Location -->
+          <el-form-item required>
+            <template #label>
+              <div class="kasten-label-block">
+                <strong>🗄 {{ t('importPolicy.sourceBSL') }}</strong>
+                <span class="kasten-label-help">{{ t('importPolicy.sourceBSLHelp') }}</span>
+              </div>
+            </template>
+            <el-select v-model="createForm.import.sourceBSL"
+              filterable
+              :placeholder="t('importPolicy.sourceBSLPlaceholder')"
+              style="width:100%">
+              <el-option v-for="bsl in storageLocations" :key="bsl.name"
+                :label="bsl.name" :value="bsl.name"
+                :disabled="bsl.phase !== 'Available'">
+                <span style="float:left">
+                  {{ bsl.name }}
+                  <span v-if="bsl.isDefault" class="bsl-default-badge">default</span>
+                </span>
+                <span style="float:right;color:#909399;font-size:12px">
+                  {{ bsl.provider }}{{ bsl.phase !== 'Available' ? ' · ' + bsl.phase : '' }}
+                </span>
+              </el-option>
+            </el-select>
+          </el-form-item>
+
+          <!-- Import Mode (Continuous / Scheduled) -->
+          <el-form-item>
+            <template #label>
+              <div class="kasten-label-block">
+                <strong>⏱ {{ t('importPolicy.mode') }}</strong>
+              </div>
+            </template>
+            <div class="kasten-pill-group">
+              <button type="button" class="kasten-pill"
+                :class="{ 'is-active': createForm.import.mode === 'continuous' }"
+                @click="createForm.import.mode = 'continuous'">
+                {{ t('importPolicy.modeContinuous') }}
+              </button>
+              <button type="button" class="kasten-pill"
+                :class="{ 'is-active': createForm.import.mode === 'scheduled' }"
+                @click="createForm.import.mode = 'scheduled'">
+                {{ t('importPolicy.modeScheduled') }}
+              </button>
+            </div>
+          </el-form-item>
+
+          <!-- Continuous: Poll Interval -->
+          <el-form-item v-if="createForm.import.mode === 'continuous'">
+            <template #label>
+              <div class="kasten-label-block">
+                <strong>📡 {{ t('importPolicy.continuousInterval') }}</strong>
+                <span class="kasten-label-help">{{ t('importPolicy.continuousIntervalHelp') }}</span>
+              </div>
+            </template>
+            <div class="kasten-pill-grid pill-grid-4">
+              <button v-for="iv in importPollPresets" :key="iv.value"
+                type="button" class="kasten-pill"
+                :class="{ 'is-active': createForm.import.continuousInterval === iv.value }"
+                @click="createForm.import.continuousInterval = iv.value">
+                {{ iv.label }}
+              </button>
+            </div>
+            <el-input v-model="createForm.import.continuousInterval"
+              :placeholder="t('importPolicy.intervalPlaceholder')"
+              style="margin-top:8px" />
+          </el-form-item>
+
+          <!-- Scheduled: Cron -->
+          <el-form-item v-if="createForm.import.mode === 'scheduled'">
+            <template #label>
+              <div class="kasten-label-block">
+                <strong>📅 {{ t('importPolicy.cron') }}</strong>
+                <span class="kasten-label-help">{{ t('importPolicy.cronHelp') }}</span>
+              </div>
+            </template>
+            <div class="kasten-pill-grid pill-grid-3">
+              <button v-for="p in importCronPresets" :key="p.value"
+                type="button" class="kasten-pill"
+                :class="{ 'is-active': createForm.import.schedule === p.value }"
+                @click="createForm.import.schedule = p.value">
+                {{ p.label }}
+              </button>
+            </div>
+            <el-input v-model="createForm.import.schedule"
+              :placeholder="t('importPolicy.cronPlaceholder')"
+              style="margin-top:8px" />
+          </el-form-item>
+
+          <!-- Source Cluster Filter -->
+          <el-form-item>
+            <template #label>
+              <div class="kasten-label-block">
+                <strong>🆔 {{ t('importPolicy.sourceClusterID') }}</strong>
+                <span class="kasten-label-help">{{ t('importPolicy.sourceClusterIDHelp') }}</span>
+              </div>
+            </template>
+            <el-input v-model="createForm.import.sourceClusterID"
+              :placeholder="t('importPolicy.sourceClusterIDPlaceholder')" />
+          </el-form-item>
+
+          <!-- Fingerprint Verification -->
+          <el-form-item>
+            <template #label>
+              <div class="kasten-label-block">
+                <strong>🔐 {{ t('importPolicy.fingerprintMode') }}</strong>
+                <span class="kasten-label-help">{{ t('importPolicy.fingerprintHelp') }}</span>
+              </div>
+            </template>
+            <div class="kasten-pill-group">
+              <button type="button" class="kasten-pill"
+                :class="{ 'is-active': createForm.import.fingerprintMode === 'enforce' }"
+                @click="createForm.import.fingerprintMode = 'enforce'">
+                {{ t('importPolicy.fingerprintEnforce') }}
+              </button>
+              <button type="button" class="kasten-pill"
+                :class="{ 'is-active': createForm.import.fingerprintMode === 'warn' }"
+                @click="createForm.import.fingerprintMode = 'warn'">
+                {{ t('importPolicy.fingerprintWarn') }}
+              </button>
+              <button type="button" class="kasten-pill"
+                :class="{ 'is-active': createForm.import.fingerprintMode === 'disabled' }"
+                @click="createForm.import.fingerprintMode = 'disabled'">
+                {{ t('importPolicy.fingerprintDisabled') }}
+              </button>
+            </div>
+          </el-form-item>
+
+          <!-- RPO estimate (Continuous only) -->
+          <el-form-item v-if="createForm.import.mode === 'continuous' && importRpoEstimateMin > 0">
+            <div class="import-rpo-banner">
+              <div class="import-rpo-line">{{ t('importPolicy.rpoEstimate', { min: importRpoEstimateMin }) }}</div>
+              <div class="import-rpo-note">{{ t('importPolicy.rpoEstimateNote') }}</div>
+            </div>
+          </el-form-item>
+        </template>
       </el-form>
 
       <template #footer>
@@ -589,7 +817,7 @@
              Not blocking: a 2/5 policy still saves, but the chip strip
              makes the gap visible so the user can fix it before clicking
              Create rather than discovering it later on the Dashboard. -->
-        <div class="policy-score-strip">
+        <div class="policy-score-strip" v-if="createForm.actionType !== 'import'">
           <div class="pss-head">
             <span class="sk-caption pss-label">3-2-1-1-0</span>
             <span class="pss-count">{{ scorePreview.filter((r) => r.ok).length }}/5</span>
@@ -627,18 +855,22 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Plus, Search, FolderOpened } from '@element-plus/icons-vue'
 import {
   getSchedules, getSchedule, createSchedule, patchSchedule, deleteSchedule,
   runScheduleOnce, getNamespaces, getNamespaceStorageCapability,
-  getStorageLocations
+  getStorageLocations,
+  // Agent D 2026-06-01 — Import Policy 跨集群 DR
+  getImportPolicies, createImportPolicy, pauseImportPolicy,
+  resumeImportPolicy, runImportPolicyOnce, deleteImportPolicy
 } from '../api/velero'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const { t } = useI18n()
 const router = useRouter()
+const route = useRoute()
 
 // v0.8.10.1: jump from a Policy row's RP count to the Restore Points
 // page pre-filtered by this policy. Same UX pattern as the Applications
@@ -729,16 +961,22 @@ const storageLocationOf = (row) => {
 const filteredSchedules = computed(() => {
   const name = nameFilter.value.trim().toLowerCase()
   return schedules.value.filter((row) => {
-    if (actionFilter.value !== 'all') {
+    // Agent D: Snapshot/Snapshot+Export 这两个 actionFilter 选项只针对
+    // Snapshot 策略行；遇到 Import 行直接排除（频率/导出概念不适用）。
+    if (actionFilter.value === 'Snapshot' || actionFilter.value === 'Snapshot+Export') {
+      if (row._kind === 'import') return false
       const isSnapOnly = row?.metadata?.annotations?.['supkube.io/export-enabled'] === 'false'
       if (actionFilter.value === 'Snapshot' && !isSnapOnly) return false
       if (actionFilter.value === 'Snapshot+Export' && isSnapOnly) return false
     }
     if (freqFilter.value !== 'all') {
-      const k = frequencyKeyOf(row)
-      if (freqFilter.value === 'hourly' && !['hourly', 'every6h', 'every12h'].includes(k)) return false
-      if (freqFilter.value === 'daily' && k !== 'daily') return false
-      if (freqFilter.value === 'weekly' && k !== 'weekly') return false
+      // Import 行没有 cron-bucket 概念，跳过频率过滤直接保留。
+      if (row._kind !== 'import') {
+        const k = frequencyKeyOf(row)
+        if (freqFilter.value === 'hourly' && !['hourly', 'every6h', 'every12h'].includes(k)) return false
+        if (freqFilter.value === 'daily' && k !== 'daily') return false
+        if (freqFilter.value === 'weekly' && k !== 'weekly') return false
+      }
     }
     if (name && !(row.metadata?.name || '').toLowerCase().includes(name)) return false
     return true
@@ -796,6 +1034,10 @@ const handleCommand = (cmd, row) => {
     case 'runOnce': handleRunOnce(row); break
     case 'pause': togglePause(row); break
     case 'delete': handleDelete(row); break
+    // Agent D: Import Policy 行的菜单项
+    case 'importRunOnce': handleImportRunOnce(row); break
+    case 'importPause':   handleImportPauseToggle(row); break
+    case 'importDelete':  handleImportDelete(row); break
   }
 }
 
@@ -1124,8 +1366,20 @@ const editingName = ref('')
 // UI; v0.7 maps them to a single Velero Schedule with the shorter cron and
 // the longer ttl, with intent recorded in annotations for v0.9 to consume.
 const defaultForm = () => ({
+  // Agent D 2026-06-01: 'snapshot' = 原 Kasten 备份策略（默认）；
+  //                     'import'   = 目标集群从共享 BSL 拉新 RP 的持续 DR。
+  // 字段挂在表单顶层；submit handler 根据它派发到不同 endpoint。
+  actionType: 'snapshot',
   name: '',
   comments: '',
+  import: {
+    sourceBSL: '',
+    mode: 'continuous',              // 'continuous' | 'scheduled'
+    continuousInterval: '30s',       // Go duration; ≥30s
+    schedule: '*/15 * * * *',        // 5-field cron
+    sourceClusterID: '',             // 留空 = 接受全部 source
+    fingerprintMode: 'enforce'       // 'enforce' | 'warn' | 'disabled'
+  },
   // Top-level frequency choice (Kasten parity). Each preset maps to a
   // snapshot.schedule cron via FREQUENCY_TO_CRON below. Default Daily =
   // safe baseline for most workloads.
@@ -1156,10 +1410,60 @@ const defaultForm = () => ({
     schedulePreset: '0 0 * * *',
     schedule: '0 0 * * *',
     retention: '720h',
-    storageLocation: 'default'
+    // v0.9.1.10 (#101 finding 1): '' = "Auto (default cloud location)". Was
+    // hardcoded 'default', which the payload forwarded literally → Velero
+    // looked for a BSL named "default" that doesn't exist on AKS (only
+    // "azure-blob") → both policy halves' Backups failed. Empty lets the
+    // backend resolve the effective cloud BSL.
+    storageLocation: ''
   }
 })
 const createForm = ref(defaultForm())
+
+// Agent D: Import Policy 的轮询/调度预设。值是后端期望的 Go duration / cron。
+const importPollPresets = computed(() => [
+  { value: '30s', label: t('importPolicy.pollPreset30s') },
+  { value: '60s', label: t('importPolicy.pollPreset60s') },
+  { value: '2m',  label: t('importPolicy.pollPreset2m') },
+  { value: '5m',  label: t('importPolicy.pollPreset5m') }
+])
+const importCronPresets = computed(() => [
+  { value: '*/5 * * * *',  label: t('importPolicy.schedulePreset5m') },
+  { value: '*/15 * * * *', label: t('importPolicy.schedulePreset15m') },
+  { value: '0 * * * *',    label: t('importPolicy.schedulePreset1h') },
+  { value: '0 2 * * *',    label: t('importPolicy.schedulePresetDaily') },
+  { value: '0 3 * * 0',    label: t('importPolicy.schedulePresetWeekly') }
+])
+
+// RPO worst-case 估计：仅 Continuous 模式显示。
+// v1 实现 = pollInterval × 2 (扫描 + 处理窗口)；与源 backup 间隔加和才是端到端 RPO。
+const importRpoEstimateMin = computed(() => {
+  if (createForm.value?.actionType !== 'import') return 0
+  if (createForm.value?.import?.mode !== 'continuous') return 0
+  const iv = createForm.value.import.continuousInterval || ''
+  const m = /^(\d+)(s|m|h)$/.exec(iv.trim())
+  if (!m) return 0
+  const n = parseInt(m[1], 10)
+  const seconds = m[2] === 's' ? n : (m[2] === 'm' ? n * 60 : n * 3600)
+  // worst-case = 2x pollInterval, 转换为分钟向上取整
+  return Math.max(1, Math.ceil((seconds * 2) / 60))
+})
+
+// 校验：Continuous 间隔必须是 Go duration 且 ≥ 30s。
+const importIntervalValid = () => {
+  const iv = (createForm.value?.import?.continuousInterval || '').trim()
+  const m = /^(\d+)(s|m|h)$/.exec(iv)
+  if (!m) return false
+  const n = parseInt(m[1], 10)
+  const seconds = m[2] === 's' ? n : (m[2] === 'm' ? n * 60 : n * 3600)
+  return seconds >= 30
+}
+
+// 简单 5-字段 cron 校验：5 个空格分隔的段（不严格验语义，只看 shape）。
+const importCronValid = () => {
+  const c = (createForm.value?.import?.schedule || '').trim()
+  return /^\S+\s+\S+\s+\S+\s+\S+\s+\S+$/.test(c)
+}
 
 // Kasten-style frequency preset map. Each option drives BOTH the snapshot
 // and export schedule (export stays in lock-step by default — v0.9 will
@@ -1404,37 +1708,158 @@ const onExportToggle = (newVal) => {
   })
 }
 
+// ─── Agent D 2026-06-01: Import Policy submit + 行操作 ──────────────────
+// 所有错误码经 mapImportError() 转 i18n toast，未知错误回落到 server.error。
+const mapImportError = (e) => {
+  const data = e?.response?.data || {}
+  const code = data.code || data.errorCode
+  if (code && (code + '').startsWith('ERR_')) {
+    // bsl/intval 等可携参的错误用 t() 渲染
+    return t('errors.' + code, { bsl: data.bsl || '' })
+  }
+  return data.error || e.message
+}
+
+const submitImportPolicy = async () => {
+  const f = createForm.value
+  if (!f.import.sourceBSL) {
+    ElMessage.warning(t('importPolicy.sourceBSLHelp'))
+    return
+  }
+  if (f.import.mode === 'continuous' && !importIntervalValid()) {
+    ElMessage.error(t('importPolicy.intervalTooShort'))
+    return
+  }
+  if (f.import.mode === 'scheduled' && !importCronValid()) {
+    ElMessage.error(t('importPolicy.cronInvalid'))
+    return
+  }
+  creating.value = true
+  try {
+    // 共享 contract 的 spec shape — 与 Agent A/B/C 后端对齐。
+    const body = {
+      name: f.name,
+      spec: {
+        sourceBSL: f.import.sourceBSL,
+        mode: f.import.mode,
+        continuousInterval: f.import.mode === 'continuous' ? f.import.continuousInterval : undefined,
+        schedule: f.import.mode === 'scheduled' ? f.import.schedule : undefined,
+        sourceClusterID: f.import.sourceClusterID || undefined,
+        fingerprintMode: f.import.fingerprintMode,
+        targetVeleroNamespace: 'velero',
+        paused: false
+      }
+    }
+    await createImportPolicy(body)
+    ElMessage.success(t('importPolicy.createdToast', { name: f.name }))
+    showCreateDialog.value = false
+    editMode.value = false
+    editingName.value = ''
+    createForm.value = defaultForm()
+    await fetchSchedules()
+  } catch (e) {
+    ElMessage.error(mapImportError(e))
+  } finally {
+    creating.value = false
+  }
+}
+
+const handleImportRunOnce = async (row) => {
+  const name = row?.metadata?.name
+  if (!name) return
+  try {
+    await runImportPolicyOnce(name)
+    ElMessage.success(t('importPolicy.runOnceStarted', { name }))
+    await fetchSchedules()
+  } catch (e) {
+    ElMessage.error(mapImportError(e))
+  }
+}
+
+const handleImportPauseToggle = async (row) => {
+  const name = row?.metadata?.name
+  if (!name) return
+  const isPaused = !!row.spec?.paused
+  try {
+    if (isPaused) {
+      await resumeImportPolicy(name)
+      ElMessage.success(t('importPolicy.resumed', { name }))
+    } else {
+      await pauseImportPolicy(name)
+      ElMessage.success(t('importPolicy.paused', { name }))
+    }
+    await fetchSchedules()
+  } catch (e) {
+    ElMessage.error(mapImportError(e))
+  }
+}
+
+const handleImportDelete = async (row) => {
+  const name = row?.metadata?.name
+  if (!name) return
+  try {
+    await ElMessageBox.confirm(
+      `Delete import policy "${name}"?`,
+      'Delete Import Policy',
+      { confirmButtonText: 'Delete', cancelButtonText: 'Cancel', type: 'warning' }
+    )
+    await deleteImportPolicy(name)
+    ElMessage.success(`Import Policy "${name}" deleted`)
+    await fetchSchedules()
+  } catch (e) {
+    if (e !== 'cancel') ElMessage.error(mapImportError(e))
+  }
+}
+
+// 把 ImportPolicy 资源转成与 Schedule 行同形状的对象，挂 _kind='import'
+// 作为模板分支标记。spec.paused 复用同名字段以便 Active/Paused chip 通用。
+const normalizeImportPolicy = (ip) => ({
+  metadata: ip.metadata || {},
+  spec: {
+    paused: !!(ip.spec?.paused),
+    // 给 frequency 列展示一些有用信息：mode + interval/schedule
+    schedule: ip.spec?.mode === 'scheduled'
+      ? (ip.spec?.schedule || '')
+      : (ip.spec?.continuousInterval || '')
+  },
+  status: ip.status || {},
+  _kind: 'import',
+  _import: ip.spec || {},
+  restorePointCount: ip.status?.restorePointsImported || 0
+})
+
 const fetchSchedules = async () => {
   loading.value = true
   try {
-    const res = await getSchedules()
-    // v0.8.9: backend now returns PolicyAggregate items, not raw Schedules.
-    // Adapt to the legacy table shape so existing template bindings
-    // (row.metadata.name, row.spec.schedule, etc.) keep working —
-    // by flattening: row = snapshotSchedule + synthetic mode chip.
-    // The export half is exposed under row.supkube.exportHalf for
-    // detail views that want it.
-    const items = res.data.items || []
-    schedules.value = items.map(agg => {
+    // 并行拉 Snapshot Schedules 和 Import Policies — Agent D。
+    // ImportPolicies 失败不阻塞 Schedules 渲染（404 = 老后端没 ship）。
+    const [schedRes, ipRes] = await Promise.all([
+      getSchedules(),
+      getImportPolicies().catch((e) => {
+        console.warn('getImportPolicies failed (backend may not support yet):', e?.message)
+        return { data: { items: [] } }
+      })
+    ])
+    const items = schedRes.data.items || []
+    const snapshotRows = items.map(agg => {
       // Defensive: an aggregate with no snapshot half shouldn't exist
       // (backend invariant), but if it does we synthesize an empty
       // shell so the row doesn't crash.
       const snap = agg.snapshotSchedule || { metadata: { name: agg.policyName }, spec: {} }
       return {
         ...snap,
-        // Inject the policy-level fields so existing
-        // template code can read them without breaking.
+        _kind: 'snapshot',
         _policy: {
           name: agg.policyName,
           mode: agg.mode,
           exportHalf: agg.exportSchedule || null
         },
-        // v0.8.10.1: hoist policy-level RP count to the row level so
-        // the table sort-method + template can read it as
-        // row.restorePointCount without `_policy.` prefix.
         restorePointCount: agg.restorePointCount || 0
       }
     })
+    const importItems = ipRes.data?.items || []
+    const importRows = importItems.map(normalizeImportPolicy)
+    schedules.value = [...snapshotRows, ...importRows]
   } catch (e) {
     ElMessage.error('Failed to load policies')
     console.error(e)
@@ -1541,13 +1966,15 @@ const collapseToVelero = (form) => {
     payload.dual = true
     payload.snapshotTtl = `${snapHours}h`
     payload.exportTtl = `${expHours}h`
-    payload.exportStorageLocation = form.export.storageLocation || 'default'
-    // snapshotStorageLocation left blank → uses Velero's cluster default BSL
+    // v0.9.1.10 (#101 finding 1): empty → omit so the backend resolves the
+    // effective cloud BSL (never silently send the nonexistent "default").
+    payload.exportStorageLocation = form.export.storageLocation || undefined
+    // snapshotStorageLocation left blank → backend resolves the default BSL
   } else {
     // L1 — single schedule, legacy field set
     payload.dual = false
     payload.ttl = `${snapHours}h`
-    payload.storageLocation = form.export.storageLocation || 'default'
+    payload.storageLocation = form.export.storageLocation || undefined
     payload.snapshotMoveData = dp === 'data-mover'
   }
   return payload
@@ -1560,6 +1987,12 @@ const handleSubmit = async () => {
   if (!createForm.value.name) {
     ElMessage.warning('Please enter a policy name')
     return
+  }
+  // Agent D: Import Policy 走完全独立的提交路径，绕开 Snapshot 那套
+  // schedule/dataPath/csi 校验。Edit 模式不支持 Import（actionType 只在
+  // create 时露出，edit 时 v-if 隐藏）。
+  if (createForm.value.actionType === 'import' && !editMode.value) {
+    return submitImportPolicy()
   }
   if (!createForm.value.snapshot.schedule) {
     ElMessage.warning('Please set a Snapshot schedule')
@@ -1684,6 +2117,34 @@ onMounted(() => {
   fetchSchedules()
   fetchNamespaces()
   fetchStorageLocations()
+  // v0.9.1.10 (#108): deep-link from Applications → kebab "Backup" /
+  // "创建新策略". Open the Create-Policy wizard pre-filled with the app's
+  // namespace so "back up this app" lands the user directly on policy
+  // creation, not a bare list.
+  //
+  // v0.9.1.11 (testing 20260531 #3): Mars reported the drawer wasn't
+  // auto-opening and the policy name wasn't being pre-filled per app.
+  // Root cause for the name field: handler only set includedNamespaces.
+  // Fix: also derive a sane default name (`<ns>-policy`) so the user
+  // can edit-and-create in one step. The drawer-open behavior itself
+  // was correct in the existing handler; the auto-fill name was the
+  // missing piece causing the "broken" impression.
+  //
+  // After consuming the intent, replace the route to drop the query so
+  // a hard refresh on /policies doesn't re-open the drawer on top of
+  // whatever the user was doing.
+  if (route.query.intent === 'create') {
+    openCreateDrawer() // resets createForm to defaults first
+    if (route.query.namespace) {
+      const ns = String(route.query.namespace)
+      createForm.value.includedNamespaces = [ns]
+      // Default name: <ns>-policy. User can rename before submit; the
+      // backend rejects duplicates so collisions surface immediately.
+      createForm.value.name = `${ns}-policy`
+    }
+    // Clear the query so a refresh / back-nav doesn't replay the intent.
+    router.replace({ path: '/policies' })
+  }
 })
 </script>
 
@@ -2025,6 +2486,25 @@ onMounted(() => {
   background: #4f46e5;
   border-color: #4f46e5;
   color: #ffffff;
+}
+/* v0.9.1.12 PRD-009: Snapshot "always-on" pill — same indigo as active
+   but with default cursor + slight desaturation so users understand it's
+   informational, not a clickable toggle. (Kasten K10 model: Snapshot is
+   mandatory; user only chooses whether to also export.) */
+.kasten-pill.is-locked {
+  cursor: default;
+  border-radius: 6px;
+  flex: 0 0 auto;
+  padding: 8px 14px;
+}
+.snapshot-always-on {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.snapshot-always-on-note {
+  font-size: 12px;
+  color: var(--sk-text-caption, #909399);
 }
 /* v0.8.7: data-path pills — slightly smaller text so 4-up fits on
    the 560px-wide drawer without wrapping. Hover gets a subtle title
@@ -2373,5 +2853,30 @@ onMounted(() => {
   border: 1.5px solid #409eff;
   color: #409eff;
   background: #ffffff;
+}
+
+/* ─── Agent D 2026-06-01: Import Policy 专属样式 ───────────────────── */
+/* Import chip 复用全局 .sk-chip-type-imported（tokens.css 已有）。 */
+/* Continuous Poll Interval pill 4列布局 / Cron 预设 3列布局 — 复用
+   .kasten-pill-grid 但 grid-template-columns 由变体覆盖。 */
+.kasten-pill-grid.pill-grid-3 { grid-template-columns: repeat(3, 1fr); }
+.kasten-pill-grid.pill-grid-4 { grid-template-columns: repeat(4, 1fr); }
+/* RPO 估计提示条 — 比 prereq/notice 更醒目（紫色调代表 SLO 维度）。 */
+.import-rpo-banner {
+  background: #f4ecfd;
+  border-left: 3px solid #722ed1;
+  border-radius: 4px;
+  padding: 10px 14px;
+}
+.import-rpo-line {
+  font-size: 13px;
+  font-weight: 600;
+  color: #3a1d6e;
+  line-height: 1.4;
+}
+.import-rpo-note {
+  font-size: 11px;
+  color: #6b4ba0;
+  margin-top: 3px;
 }
 </style>

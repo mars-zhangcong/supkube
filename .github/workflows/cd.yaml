@@ -1,0 +1,170 @@
+name: CD
+
+# 发布管道：打 v* tag（正式发布）或手动 dispatch 触发。
+# 日常 PR/合并只跑 ci.yaml；只有"打版本 tag"才进入构建→推 ACR→部署，
+# 与 ENGINEERING.md §4 发布流程一致（tag = 一次正式发布的开始）。
+on:
+  push:
+    tags: ["v*"]                 # 例：git tag v0.9.1.10-alpha && git push origin v0.9.1.10-alpha
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 部署目标环境
+        type: choice
+        options: [test, prod]
+        default: test
+
+permissions:
+  id-token: write                # OIDC 换 Azure token 必需（无密码）
+  contents: read
+
+env:
+  ACR_LOGIN_SERVER: supkube.azurecr.io
+  ACR_NAME: supkube
+  CHART_DIR: supkube-helm/supkube
+  AKS_NAME: aks-jumborca-dev
+  AKS_RG: Research_and_Development   # 已按 az aks list 实测填入
+
+jobs:
+  # ─────────────── 1) 构建多架构镜像并推 ACR ───────────────
+  build-push:
+    name: Build & Push (multi-arch → ACR)
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 解析版本号（tag → 产品版本）
+        id: ver
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            V="${GITHUB_REF_NAME#v}"          # v0.9.1.10-alpha → 0.9.1.10-alpha
+          else
+            V="0.0.0-dev-${GITHUB_SHA::8}"    # 手动 dispatch 用 sha 派生
+          fi
+          echo "version=$V" >>"$GITHUB_OUTPUT"
+          echo "▶ VERSION=$V"
+
+      - uses: azure/login@v2                  # OIDC，无密码
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: ACR 登录（token 现取，规避 1h TTL 过期）
+        run: az acr login --name "$ACR_NAME"
+
+      - uses: docker/setup-qemu-action@v3     # arm64 跨架构构建需要 QEMU
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build & Push backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./supkube-backend
+          file: ./docker/Dockerfile.backend
+          platforms: linux/amd64,linux/arm64  # 一个 manifest list 双架构
+          push: true
+          build-args: |
+            SUPKUBE_VERSION=${{ steps.ver.outputs.version }}
+            CACHEBUST=${{ github.run_id }}
+          tags: |
+            ${{ env.ACR_LOGIN_SERVER }}/backend:${{ steps.ver.outputs.version }}
+            ${{ env.ACR_LOGIN_SERVER }}/backend:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false                   # ACR 对 provenance 附件兼容性差，关掉避免 push 400
+
+      - name: Build & Push frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./supkube-frontend
+          file: ./docker/Dockerfile.frontend
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.ACR_LOGIN_SERVER }}/frontend:${{ steps.ver.outputs.version }}
+            ${{ env.ACR_LOGIN_SERVER }}/frontend:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+
+      - name: 推送后即时校验（推成功≠能拉；确认双架构 manifest）
+        run: |
+          V="${{ steps.ver.outputs.version }}"
+          az acr repository show-tags -n "$ACR_NAME" --repository backend  -o tsv | grep -qx "$V" || { echo "::error::backend:$V 未出现在 ACR"; exit 1; }
+          az acr repository show-tags -n "$ACR_NAME" --repository frontend -o tsv | grep -qx "$V" || { echo "::error::frontend:$V 未出现在 ACR"; exit 1; }
+          archs=$(az acr manifest list-metadata -n "$ACR_NAME" --name "backend:$V" --query "[].architecture" -o tsv)
+          echo "backend 架构: $archs"
+          echo "$archs" | grep -qx amd64 || { echo "::error::backend:$V 缺 amd64 架构，AKS 将 ImagePull/exec format error"; exit 1; }
+
+  # ─────────────── 2) 部署测试环境（自动） ───────────────
+  deploy-test:
+    name: Deploy → test (auto)
+    needs: build-push
+    runs-on: ubuntu-latest
+    environment: test                         # 无审批，自动
+    if: github.ref_type == 'tag' || github.event.inputs.environment == 'test'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: 取 AKS 凭据
+        run: az aks get-credentials -n "$AKS_NAME" -g "$AKS_RG" --overwrite-existing
+      - uses: azure/setup-helm@v4
+        with: { version: v3.14.0 }
+      - name: helm upgrade（测试命名空间 supkube-staging）
+        run: |
+          helm repo add vmware-tanzu https://vmware-tanzu.github.io/helm-charts
+          helm dependency build "$CHART_DIR"
+          helm upgrade --install supkube "$CHART_DIR" \
+            -n supkube-staging --create-namespace \
+            --set eula.accept=true \
+            --set backend.image.repository=$ACR_LOGIN_SERVER/backend \
+            --set backend.image.tag=${{ needs.build-push.outputs.version }} \
+            --set frontend.image.repository=$ACR_LOGIN_SERVER/frontend \
+            --set frontend.image.tag=${{ needs.build-push.outputs.version }} \
+            --wait --timeout 5m
+      - name: Verify-before-ship（Rule D）
+        run: |
+          chmod +x hack/ci-verify.sh
+          ./hack/ci-verify.sh supkube-staging ${{ needs.build-push.outputs.version }}
+
+  # ─────────────── 3) 部署生产（人工审核卡点） ───────────────
+  deploy-prod:
+    name: Deploy → prod (manual approval)
+    needs: [build-push, deploy-test]
+    runs-on: ubuntu-latest
+    environment: prod                         # GH Environment 的 Required reviewers = 人工卡点
+    if: github.ref_type == 'tag' || github.event.inputs.environment == 'prod'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: 取 AKS 凭据
+        run: az aks get-credentials -n "$AKS_NAME" -g "$AKS_RG" --overwrite-existing
+      - uses: azure/setup-helm@v4
+        with: { version: v3.14.0 }
+      - name: helm upgrade（生产命名空间 supkube）
+        run: |
+          helm repo add vmware-tanzu https://vmware-tanzu.github.io/helm-charts
+          helm dependency build "$CHART_DIR"
+          helm upgrade --install supkube "$CHART_DIR" \
+            -n supkube --create-namespace \
+            --set eula.accept=true \
+            --set backend.image.repository=$ACR_LOGIN_SERVER/backend \
+            --set backend.image.tag=${{ needs.build-push.outputs.version }} \
+            --set frontend.image.repository=$ACR_LOGIN_SERVER/frontend \
+            --set frontend.image.tag=${{ needs.build-push.outputs.version }} \
+            --wait --timeout 5m \
+            --atomic                          # 升级失败自动回滚到上一个 release
+      - name: Verify-before-ship（生产）
+        run: |
+          chmod +x hack/ci-verify.sh
+          ./hack/ci-verify.sh supkube ${{ needs.build-push.outputs.version }}

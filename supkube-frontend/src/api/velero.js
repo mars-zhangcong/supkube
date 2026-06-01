@@ -100,6 +100,17 @@ export const getBackupArtifacts = (name) => api.get(`/backups/${name}/artifacts`
 export const getBackupLogs = (name) => api.get(`/backups/${name}/logs`)
 export const createBackup = (data) => api.post('/backups', data)
 export const deleteBackup = (name) => api.delete(`/backups/${name}`)
+// v0.9.x #68: emergency escape — strips finalizers + direct delete (no
+// DBR cascade). Only call from confirm dialog warning the user about
+// bypassed side effects. Backend doc: ForceDeleteBackup in handlers.go.
+export const forceDeleteBackup = (name) => api.post(`/backups/${name}/force-delete`)
+
+// v0.9.x #79 Log Viewer. Two GETs; download returns a blob so the
+// browser save dialog fires. Bearer token is attached by the shared
+// axios interceptor, so blob download works under OIDC auth.
+export const getLogComponents = () => api.get('/logs/components')
+export const getLogs          = (params) => api.get('/logs', { params })
+export const downloadLogs     = (params) => api.get('/logs', { params: { ...params, download: 1 }, responseType: 'blob' })
 
 // v0.8.0: Unified Action stream — Activity page consumes /api/v1/actions
 // (Backups + Restores aggregated into a single Action shape). The Restores
@@ -107,17 +118,31 @@ export const deleteBackup = (name) => api.delete(`/backups/${name}`)
 export const getActions = (params = {}) => api.get('/actions', { params })
 export const getAction = (id, type) => api.get(`/actions/${encodeURIComponent(id)}`, { params: { type } })
 
-// v0.8.2: Transform Sets — Velero ResourceModifier ConfigMaps with CRUD
-// + the one-click "Apply Suggested Fix" flow used by Pre-flight.
-export const getTransformSets = () => api.get('/transform-sets')
-export const getTransformSet = (name) => api.get(`/transform-sets/${name}`)
+// PRD-002 v1.3 (2026-05-31) two-layer schema:
+//   - Transform: atomic rule bundle (Velero ResourceModifier rules.yaml)
+//   - TransformSet: container that REFERENCES Transforms by name + sets
+//     defaults for ${VAR} placeholders. No inline rules anymore.
+// The on-disk ConfigMaps moved from velero ns → supkube ns; the migration
+// runs server-side on startup.
+export const getTransforms   = () => api.get('/transforms')
+export const getTransform    = (name) => api.get(`/transforms/${name}`)
+export const createTransform = (data) => api.post('/transforms', data)
+export const updateTransform = (name, data) => api.put(`/transforms/${name}`, data)
+// 409 when any TransformSet still references this Transform; response body
+// carries `referencingTransformSets: [name, ...]` so the UI can list them.
+export const deleteTransform = (name) => api.delete(`/transforms/${name}`)
+
+export const getTransformSets   = () => api.get('/transform-sets')
+export const getTransformSet    = (name) => api.get(`/transform-sets/${name}`)
 export const createTransformSet = (data) => api.post('/transform-sets', data)
 export const updateTransformSet = (name, data) => api.put(`/transform-sets/${name}`, data)
 export const deleteTransformSet = (name) => api.delete(`/transform-sets/${name}`)
-// v0.8.3 batched apply-fix. Body: { restoreName, fixes: [ConflictFix, ...] }.
-// We send the FULL current list of applied fixes every time so the backend
-// can merge them into one consolidated Transform Set ConfigMap — Velero
-// only honors one resourceModifierRef per Restore.
+// Apply Pre-flight "Suggested Fixes" as an atomic Transform.
+// Body: { restoreName, fixes: [ConflictFix, ...] }
+// Response: { transformName, created, ruleCount }
+//   — transformName is the auto-generated atomic Transform; the UI then
+//     navigates the user to /transforms?name=<transformName> so they can
+//     review and wire it into a TransformSet before triggering Restore.
 export const applyConflictFixes = (data) => api.post('/transform-sets/apply-conflict-fixes', data)
 
 // Restores (legacy — kept for backward compat during v0.8 transition)
@@ -138,6 +163,20 @@ export const patchSchedule = (name, data) => api.patch(`/schedules/${name}`, dat
 export const runScheduleOnce = (name) => api.post(`/schedules/${name}/run-once`)
 export const getSchedule = (name) => api.get(`/schedules/${name}`)
 export const deleteSchedule = (name) => api.delete(`/schedules/${name}`)
+
+// Import Policies — 跨集群 DR：从共享 BSL 拉取另一个集群产生的 RP
+// (Agent D / PRD Import Policy 2026-06-01). 共享 contract:
+//   POST   /import-policies               body: {name, spec:{...}}
+//   GET    /import-policies               list
+//   POST   /import-policies/:n/pause
+//   POST   /import-policies/:n/resume
+//   POST   /import-policies/:n/run-once
+export const getImportPolicies     = () => api.get('/import-policies')
+export const createImportPolicy    = (data) => api.post('/import-policies', data)
+export const pauseImportPolicy     = (name) => api.post(`/import-policies/${name}/pause`)
+export const resumeImportPolicy    = (name) => api.post(`/import-policies/${name}/resume`)
+export const runImportPolicyOnce   = (name) => api.post(`/import-policies/${name}/run-once`)
+export const deleteImportPolicy    = (name) => api.delete(`/import-policies/${name}`)
 
 // Storage locations
 export const getStorageLocations = () => api.get('/storage-locations')

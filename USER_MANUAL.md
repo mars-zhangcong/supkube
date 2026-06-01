@@ -29,6 +29,17 @@
 11. [认证配置：4 大 IdP 快速集成](#11-认证配置4-大-idp-快速集成v085)
 12. [RBAC：3 角色权限模型](#12-rbac3-角色权限模型v085-step-3)
 13. [审计日志](#13-审计日志v085-step-4)
+14. [非 OIDC 登录：API Token 与 Basic Auth](#14-非-oidc-登录api-token-与-basic-authv085-step-6)
+15. [备份组成：数据路径与大小](#15-备份组成数据路径与大小v086)
+16. [跨集群跨云灾备](#16-跨集群跨云灾备v087)
+17. [Data Mover vs Filesystem — 深度对比](#17-data-mover-vs-filesystem--深度对比v0875)
+18. [备份链与去重模型](#18-备份链与去重模型v087)
+19. [集群健康：孤儿资源的 GC 与设置](#19-集群健康孤儿资源的-gc-与设置v088)
+20. [双策略：Snapshot + Export 模型](#20-双策略snapshot--export-模型v089-引入--v0810-改进)
+21. [kubectl 速查 + label / annotation 契约](#21-kubectl-速查--label--annotation-契约v08102)
+22. [灾备演练 / DR Playbook](#22-灾备演练--dr-playbookv090-multi-cluster-manager)
+23. [Helm 安装参考](#23-helm-安装参考v091-install-reference)
+24. [Import Policy（跨集群持续 DR）](#24-import-policy跨集群持续-drv09113)
 
 ---
 
@@ -451,6 +462,44 @@ kubectl rollout status deploy/supkube-frontend -n supkube
 helm uninstall supkube -n supkube
 # 不会删除 velero 资源，BSL 数据也不会动
 ```
+
+### 5.X 平台支持矩阵（Support Matrix）
+
+> SupKube 的备份/还原能力依赖底层 K8s 的 **CSI 驱动**实现 `VolumeSnapshot`。不同云厂商 / 发行版在快照对象生命周期、`DeletionPolicy`、`VolumeBindingMode` 上有差异 → **每个目标平台必须走查后才能放进"已支持"列表**。
+>
+> **走查方法**：见 `测试用例.md §18 CSI 平台适配走查 (TC-CSI)`。
+> **自动检测**：装机前跑 `hack/preflight.sh`；运行中由产品内 **#109 Preflight**（v0.9.x+）自动识别 CSI 驱动 + 能力 + 比对本矩阵。
+>
+> **状态图例**：✅ Verified · 🟡 Planned · 🔬 Research · ⚠ Limited · ❌ Not supported
+
+#### Public Cloud
+
+| 平台 | CSI 驱动 | 已测版本 | 状态 | 备注 |
+|---|---|---|---|---|
+| **Azure AKS** | `disk.csi.azure.com` | k8s 1.34 + Velero 1.18.0 (chart 12.0.1) | **✅ Verified（2026-05-30）** | snapshotMoveData=false 存储快照保留 + 还原已实证；v1.18 binary 必须配 v1.18 CRD（见 #102 frankenstein 教训） |
+| AWS EKS | `ebs.csi.aws.com` | — | 🟡 Planned | — |
+| GCP GKE | `pd.csi.storage.gke.io` | — | 🟡 Planned | — |
+| Alibaba Cloud ACK | `diskplugin.csi.alibabacloud.com` | — | 🟡 Planned | — |
+| Tencent Cloud TKE | `com.tencent.cloud.csi.cbs` | — | 🟡 Planned | — |
+
+#### Private Cloud
+
+| 平台 | CSI 驱动 | 已测版本 | 状态 | 备注 |
+|---|---|---|---|---|
+| VMware Tanzu (vSphere) | `csi.vsphere.vmware.com` | — | 🟡 Planned | — |
+| Red Hat OpenShift | varies | — | 🟡 Planned | 与 OADP（OpenShift 的 Velero Operator）共存策略待评估 |
+| Rancher (RKE2 / RKE) | varies（按底层 CSI） | — | 🟡 Planned | — |
+| KubeSphere | varies | — | 🟡 Planned | — |
+
+#### Desktop / Edge
+
+| 平台 | CSI 驱动 | 已测版本 | 状态 | 备注 |
+|---|---|---|---|---|
+| **Docker Desktop** | `hostpath.csi.k8s.io` | Velero 1.18.0 | **✅ Verified（2026-05-30，测试驱动）** | csi-hostpath 测试驱动；`.snap` 文件在 backup delete 时不真删（累积孤儿，生产驱动不会） |
+| K3s（默认） | `local-path-provisioner` | — | ⚠ Limited | 默认 local-path **不支持** CSI snapshot；如需快照请自装 CSI 驱动（longhorn-csi / openebs-csi 等） |
+| KubeEdge | varies (edge) | — | 🔬 Research | 边缘节点的快照行为待调研 |
+
+> **想把你的平台加进矩阵?** 跑一遍 `测试用例.md §18` 的走查模板，把报告发给我们，通过后即录入。
 
 ---
 
@@ -2455,6 +2504,149 @@ kubectl -n supkube get cm supkube-eula -o yaml   # 看 EULA 记录
 helm -n supkube list                        # 看 chart 版本和 status
 curl -sk https://supkube.example.com/api/v1/status   # /status 返回 backend version
 ```
+
+---
+
+## 24. Import Policy（跨集群持续 DR）（v0.9.1.13+）
+
+> 给做**双活 / 暖备 / 跨 region DR** 的 SRE。本节是 v0.9.1.13 引入的 Import Policy 模型的客户面单一来源。架构权威：**ADR-038**；产品需求：**PRD-009 v2 §4.5** + **PRD-007 §4.4**。
+>
+> 关键差异：v0.9.1.13 之前，跨集群"看见对方备份"靠 Velero 内置 `backupSyncPeriod=60s` 全量扫描 BSL，**无 source 区分、无 fingerprint 校验、无 per-policy 控制**。v0.9.1.13 起，跨集群拉取由 SupKube 的 `ImportPolicy` CRD 显式管理，按 BSL × namespace × cron 收敛，并强制 HMAC 校验源真实性。
+
+### 24.1 什么是 Import Policy
+
+**模型**：共享 BSL（源、目标双方都能读写的同一个对象存储 bucket / container）+ HMAC fingerprint 校验（源端写入时签，目标端读入时验）+ 持续 / 定时 pull（目标端按 60s 间隔或 cron 拉取 metadata）。
+
+**与 Snapshot Policy 的分工**：
+
+```
+┌─────────── Cluster A (源) ───────────┐         ┌────────── Cluster B (目标) ──────────┐
+│                                       │         │                                       │
+│  Snapshot Policy (Schedule CR)        │         │  Import Policy (新, ADR-038)         │
+│      │                                │         │      │                                │
+│      ▼                                │         │      ▼                                │
+│  Velero Backup → 写 BSL X            │ ──BSL──>│  watch BSL X → fingerprint 校验 →   │
+│      └─ 同时写 .supkube-fingerprint    │   X     │      ▼                                │
+│         (HMAC-SHA256 over manifests)   │         │  apply Backup CR (label imported)    │
+│                                       │         │      │                                │
+│                                       │         │  UI Restore Points: chip = Imported  │
+└───────────────────────────────────────┘         └───────────────────────────────────────┘
+```
+
+简单记：**源集群** 跑 Snapshot Policy 把数据**推**到 BSL；**目标集群** 跑 Import Policy 把那些 backup 的**身份信息**拉到本地，让 UI 能看到、能 Restore。**数据本身**永远只在 BSL 上一份，Restore 时 Velero 直接从 BSL 拉。
+
+**vs 历史方案（v0.9.1.12 及之前）**：
+
+| 维度 | Velero `backupSyncPeriod` | SupKube Import Policy |
+|---|---|---|
+| 拉取触发 | 全 BSL 全量扫描，每 60s | 按 ImportPolicy 收敛（可选 ns / label / source cluster） |
+| source 真实性 | ❌ 无校验 → 谁能写 BSL 谁就能注入 | ✅ HMAC-SHA256 over manifest + sharedSecret |
+| source 标识 | ❌ 看不出来自哪个集群 | ✅ `supkube.io/source-cluster=<id>` label |
+| 失败可见性 | log only | `status.rejectedCount` + `lastError` + UI Activity 事件 |
+| 节奏可调 | 全局一个 period | per-policy continuous(60s) 或 cron |
+
+### 24.2 选 Continuous 还是 Scheduled
+
+```
+是否需要"目标集群一直随时可拉起"（暖备 DR）？
+   │
+   ├── YES → mode=Continuous, continuousInterval=60s（默认）
+   │         ├── 想压成本？ → 改 300s（5 min，对标 Kasten）
+   │         └── 准实时？  → 改 30s（advanced，警告 BSL API 调用费用 2 倍）
+   │
+   └── NO  → mode=Scheduled
+             ├── 合规节奏（每 5 min 一次像 Kasten）→ schedule="*/5 * * * *"
+             ├── 测试 / 偶尔同步              → schedule="0 2 * * *"（每天凌晨）
+             └── 月度归档审计                  → schedule="0 3 1 * *"（每月 1 号凌晨）
+```
+
+**经验法则**：生产 DR 选 Continuous 60s；非生产 / 测试集群选 Scheduled，按需运行 Run-once。
+
+### 24.3 RPO 公式与 Kasten K10 对比
+
+**worst-case RPO 公式**：
+
+```
+worst_case_RPO = source_backup_interval + import_poll_interval
+```
+
+直觉：源端最坏要等一个 backup interval 才有新 backup；目标端最坏要等一个 import interval 才看到它。
+
+**对比表**：
+
+| 方案 | source 配置 | target 配置 | worst RPO | 备注 |
+|---|---|---|---|---|
+| Kasten K10 默认 | snapshot 每 5 min | sync 每 5 min | **10 min** | 行业基准 |
+| SupKube 默认 | snapshot 每 5 min | Continuous 60s | **6 min** | 已击败 Kasten |
+| SupKube aggressive | snapshot 每 1 min | Continuous 30s | **1.5 min** | 准实时；⚠ BSL list API 调用频率显著上升，云费用注意 |
+| SupKube 合规 | snapshot 每 1 h | Scheduled `0 * * * *` | **2 h** | 每天 24 次；适合合规审计为主、RPO 要求宽的场景 |
+
+> ⚠ "准实时"≠ CDP（Continuous Data Protection）。真正的 RPO≈0 需要应用级日志（PG WAL / MySQL binlog），不在 ImportPolicy 范畴。详见 ROADMAP "数据韧性 6 点路径" 第 1 项。
+
+### 24.4 fingerprint 部署
+
+**单集群场景**（同集群内自校验）：默认 `helm install` 已在 `supkube-fingerprint-secret` 里 generate-once 一个 32 字节随机值。客户**无需做任何事**。
+
+**跨集群场景**（A 写 / B 读 同一 BSL）：**必须显式同步密钥**。
+
+```bash
+# 1. 在管理工作站生成一次（任一处都行）
+openssl rand -base64 32
+# → 例如：Hf3xK9pQwL4r8mC6vN2tBs7DyEa1nZuY0iJ5kFhXgRm=
+
+# 2. Cluster A helm install / upgrade 时 --set
+helm upgrade --install supkube supkube/supkube \
+  --namespace supkube --create-namespace \
+  --set fingerprint.sharedSecret="Hf3xK9pQwL4r8mC6vN2tBs7DyEa1nZuY0iJ5kFhXgRm="
+
+# 3. Cluster B 用同样的 --set 值
+helm upgrade --install supkube supkube/supkube \
+  --namespace supkube --create-namespace \
+  --set fingerprint.sharedSecret="Hf3xK9pQwL4r8mC6vN2tBs7DyEa1nZuY0iJ5kFhXgRm="
+```
+
+**失败排查**（三种 ERR）：
+
+| 错误码 | 含义 | 排查命令 |
+|---|---|---|
+| `ERR_FINGERPRINT_MISSING` | BSL 上的 backup 没有 `.supkube-fingerprint.json` 文件（可能是非 SupKube 集群写的，或者源集群没装 v0.9.1.13+） | `mc ls X/backups/<bk>/` 看是否有 `.supkube-fingerprint.json`；源集群 `kubectl -n supkube get cm supkube-version` 查版本 |
+| `ERR_FINGERPRINT_HMAC_INVALID` | HMAC 验证失败（最常见原因：sharedSecret 不匹配，或 backup tarball 被篡改） | 双集群分别 `kubectl -n supkube get secret supkube-fingerprint-secret -o jsonpath='{.data.shared-secret}'` 比对 |
+| `ERR_FINGERPRINT_VERSION_MISMATCH` | fingerprint schema 版本与 import 端不兼容（升级窗口期可能出现） | 升级双集群到同一 minor 版本；过渡期把 `fingerprintMode` 临时改 `warn` |
+
+### 24.5 UI 操作速查
+
+**创建 Import Policy**：
+
+```
+Policies 页 → [Create New Policy] → Action Type 选 ⤵ "Import Policy"
+  ├─ Source BSL:           （下拉，从已配置的 BSL 选）
+  ├─ Source Cluster ID:    （可选；留空 = 接受任意源，填写 = 只接受指定 cluster-id）
+  ├─ Mode:                 ● Continuous   ○ Scheduled
+  ├─ Continuous Interval:  60s (默认) / 30s / 300s   ← Mode=Continuous 时显示
+  ├─ Schedule:             */5 * * * *                ← Mode=Scheduled 时显示
+  ├─ Fingerprint Mode:     ● enforce  ○ warn  ○ disabled
+  ├─ Namespace Filter:     （可选，glob 表达式如 demo-*）
+  └─ Label Selector:       （可选，K8s label selector 语法）
+[Submit]
+```
+
+**列表行 kebab 菜单**：
+- **Pause**：暂停拉取（CR `spec.paused=true`）；source 端继续 backup，但目标端 status 冻结
+- **Resume**：恢复
+- **Run Once**：立即触发一次 sync（不影响 cron 时刻表 / continuous 计时器）
+- **Edit**：改 mode / interval / fingerprintMode / filter（**source BSL 不可改**，要换 BSL 请删了重建）
+- **Delete**：删 ImportPolicy CR；**已 import 的 Backup CR 不会被删**（保留 RP 让用户决定 cleanup）
+
+**监控 RPO 健康**：
+- **列表行 status 列**：显示 `lastSyncAt` 相对时间（如 "32s ago"）；超过 2× `continuousInterval` 标红
+- **Dashboard RPO 卡片**：v0.9.x 规划中（PRD-010），届时聚合所有 ImportPolicy 的 worst-case RPO 一屏可视
+
+### 24.6 关联文档
+
+- **架构权威**：架构设计.md ADR-038（Import Policy CRD + fingerprint HMAC 模型）
+- **产品需求**：PRD-009 v2 §4.5（双活 DR 流程） / PRD-007 §4.4（5 层 3-2-1-1-0 的 Layer 4）
+- **测试用例**：测试用例.md §9.5（TC-IMP-001/002/003/004，4 个端到端场景）
+- **任务追踪**：#88 + #157-163（Import Policy 拆分系列）
 
 ---
 

@@ -1,0 +1,24 @@
+apiVersion: velero.io/v1
+kind: BackupStorageLocation
+metadata:
+  creationTimestamp: "2026-05-22T01:43:58Z"
+  generation: 12967
+  name: myazureblob
+  namespace: velero
+  resourceVersion: "2936428"
+  uid: 394294f9-7db1-4304-a437-13c08e1122fa
+spec:
+  config:
+    resourceGroup: DefaultResourceGroup-SEA
+    storageAccount: rnd7sa71
+    storageAccountKeyEnvVar: AZURE_STORAGE_ACCOUNT_ACCESS_KEY
+  credential:
+    key: cloud
+    name: supkube-bsl-myazureblob-credentials
+  objectStorage:
+    bucket: velero-dr
+  provider: azure
+status:
+  lastSyncedTime: "2026-05-31T05:41:54Z"
+  lastValidationTime: "2026-05-31T06:07:47Z"
+  phase: Available
