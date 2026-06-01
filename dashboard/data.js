@@ -36,6 +36,7 @@ const DECISIONS = [
   { id: "D-30", date: "2026-06-01", text: "🔄 ADR-037/038 让号治理：PRD-008→ADR-039（审计存储）/ PRD-010→ADR-040（DR Topology SVG）。台账加 \"被复用过的旧号不得沿用\" 规则。出处：PRD-Review 第六份跨文档 finding。" },
   { id: "D-31", date: "2026-06-01", text: "📚 项目级 MEMORY.md ship（363 行）：交互节奏 + Rule A-F 反例 + 13 条跨 session 教训速查 + 基础设施速查 + 维护约定。从 AI 个人 memory 迁入仓库，方便接力人 Review。" },
   { id: "D-32", date: "2026-06-01", text: "🗂 Rule G + LEDGER.md 立：项目所有文档编号（PRD/ADR/TC/D/C）统一台账，取号 4 步 SOP（read→reserve→write→改状态），并发由 main agent 集中预分配号（Rule C v2 延伸），让号 forward-only，漂移检查 gen-data.mjs 兜底。落 ENGINEERING.md Rule G + MEMORY.md L-14 + ADR-041。本条由 Rule G 4 步演练首次占的 D 号（与 ADR-041 同批演练）。" },
+  { id: "D-33", date: "2026-06-01", text: "☁️ 开发主体环境上云 (ADR-042)：关闭本机 docker-desktop，aks-jumborca-dev=研发 (push to main 自动)、aks-jumborca-test=测试 (tag 自动)、aks-jumborca-prod=未来生产 (manual approval + cluster guard)。dev-deploy.sh 头加 DEPRECATED notice，v0.9.1.15 真删除。保留 amd64+arm64 双架构。GitHub 仓库暂保持 public（追 Demo 闭环优先于商业闭源）。Rule G 第 2 次演练取号 ADR-042 + D-33 成功，4 步 SOP 流畅。" },
 ];
 
 /* ---- PRD 状态（应与 PRD.md 索引表一致）---- */
@@ -68,6 +69,7 @@ const ADRS = [
   { id: "ADR-039", title: "Activity 持久化与 audit event 存储选型（让号自 037）", date: "2026-06-01", status: "草稿", note: "🔄 PRD-008 让号 · PRD-Review 第六份 §二（占号待 PRD-008 Phase 0 落地）" },
   { id: "ADR-040", title: "DR Topology SVG 视觉规范（让号自 038）", date: "2026-06-01", status: "草稿", note: "🔄 PRD-010 让号 · PRD-Review 第六份 §二（占号待 PRD-010 实施落地）" },
   { id: "ADR-041", title: "项目编号统一台账 (LEDGER.md) + Rule G 取号 SOP", date: "2026-06-01", status: "草稿", note: "🆕 Rule G 首次演练取的号 · 跨 PRD/ADR/TC/D/C 全 series 防撞号 · 并发由 main agent 集中预分配" },
+  { id: "ADR-042", title: "开发主体环境上云 (Azure AKS) + CI/CD 三集群推送策略", date: "2026-06-01", status: "草稿", note: "🆕 关 docker-desktop · push to main → aks-dev / tag → aks-test / manual → aks-prod · dev-deploy.sh 退役 · arm64 保留 · GitHub 暂 public" },
 ];
 
 /* ---- 本周行动 ---- */
@@ -118,9 +120,14 @@ const LINEAGE = [
 /* ---- 任务（无结构化源，人工维护）---- */
 const TASKS = [
   { id: "P0-1", version: "v0.9.1.3", title: "Velero 真自带（CRD + plugin + 镜像入 ACR）", status: "done", priority: "P0", category: "Infra", estimate_days: 3, owner: "claude", start_week: 23, end_week: 24, discovered: "2026-05-28", tags: ["customer-pain","velero-bundle"] },
-  { id: "P0-6", version: "v0.9.1.5", title: "Multi-Cluster 下拉切换不联动 Dashboard", status: "todo", priority: "P0", category: "Bug", estimate_days: 1.5, owner: "claude", start_week: 24, end_week: 24, discovered: "2026-05-28", tags: ["customer-pain","task-98","C-010"] },
+  { id: "P0-6", version: "v0.9.1.5", title: "Multi-Cluster 下拉切换不联动 Dashboard", status: "done", priority: "P0", category: "Bug", estimate_days: 1.5, owner: "claude", start_week: 24, end_week: 24, discovered: "2026-05-28", tags: ["customer-pain","task-98","C-010"] },
 
-  { id: "P1-4", version: "v0.9.1.6", title: "Kasten 风格 Export/Import 指纹模型", status: "in_progress", priority: "P0", category: "Backend", estimate_days: 5, owner: "claude", start_week: 24, end_week: 25, discovered: "2026-05-28", tags: ["task-88","customer-pain","C-003","PRD-009"] },
+  { id: "P1-4", version: "v0.9.1.13", title: "Kasten 风格 Export/Import 指纹模型（PRD-009 v2 Phase 2 + ImportPolicy CRD + fingerprint HMAC + 直 S3 polling）", status: "done", priority: "P0", category: "Backend", estimate_days: 5, owner: "claude", start_week: 24, end_week: 25, discovered: "2026-05-28", tags: ["task-88","customer-pain","C-003","PRD-009","shipped-2026-06-01"] },
+
+  // ── 2026-06-01 dashboard 刷新: ROADMAP P0 表里 3 条缺位补上 (drift 修正) ──
+  { id: "T-63", version: "v0.9.2", title: "License Manager 前端（1:1 复刻 Kasten Licenses 页 + mock backend）", status: "todo", priority: "P0", category: "Frontend", estimate_days: 3, owner: "tbd", start_week: 24, end_week: 25, discovered: "2026-05-24", tags: ["task-63","商业闭环","PV5-CR5-ME4=14"] },
+  { id: "T-86", version: "v0.9.1.5", title: "存储管理 tab（快照位置迁入集群管理；BSL 保持主菜单）", status: "todo", priority: "P0", category: "Frontend", estimate_days: 1, owner: "tbd", start_week: 24, end_week: 24, discovered: "2026-05-28", tags: ["task-86","customer-pain","PV4-CR5-ME4=13"] },
+  { id: "T-114", version: "v0.9.x", title: "PRD-002 Transform 一等公民 v1.3（改正中 → 研发：T1 编译契约 + CAS storm DoD #18 + Event 流统计）", status: "in_progress", priority: "P0", category: "Backend", estimate_days: 7, owner: "claude", start_week: 25, end_week: 26, discovered: "2026-05-31", tags: ["task-114","PRD-002","PV5-CR4-ME3=12"] },
 
   { id: "P2-1", version: "v1.0-GA", title: "GitHub Actions CI（build + lint + test）", status: "todo", priority: "P2", category: "Infra", estimate_days: 3, owner: "tbd", start_week: 28, end_week: 28, discovered: "2026-05-28", tags: ["ci","tech-debt"] },
   { id: "P2-2", version: "v1.0-GA", title: "E2E 测试自动化（TC-* 测试用例）", status: "todo", priority: "P2", category: "Infra", estimate_days: 5, owner: "tbd", start_week: 29, end_week: 30, discovered: "2026-05-28", tags: ["e2e","tech-debt"] },
@@ -150,7 +157,9 @@ const TASKS = [
   { id: "T-CHLOG", version: "CHANGELOG", title: "CHANGELOG.md（Keep-a-Changelog，澄清双轨版本号）", status: "done", priority: "P2", category: "Docs", estimate_days: 0.5, owner: "claude", start_week: 23, end_week: 23, discovered: "2026-06-01", tags: ["docs"] },
   { id: "T-ENG", version: "ENGINEERING", title: "ENGINEERING.md（Rule A/B/C/D 落仓库 + 文档地图）", status: "done", priority: "P1", category: "Docs", estimate_days: 0.5, owner: "claude", start_week: 23, end_week: 23, discovered: "2026-06-01", tags: ["docs","process"] },
   { id: "T-DASH", version: "tools", title: "Dashboard 重构：data.js 与视图分离 + 数据刷新 + 血缘/深链/Blocked/趋势", status: "in_progress", priority: "P2", category: "Docs", estimate_days: 1, owner: "claude", start_week: 23, end_week: 23, discovered: "2026-06-01", tags: ["devops","dashboard"] },
-  { id: "T-PRD009-2", version: "PRD-009", title: "PRD-009 v2 Phase 2：ImportPolicy CRD + controller（ADR-038）", status: "in_progress", priority: "P1", category: "Backend", estimate_days: 4, owner: "claude", start_week: 23, end_week: 24, discovered: "2026-06-01", tags: ["PRD-009","ADR-038","task-157-163"] },
+  { id: "T-PRD009-2", version: "v0.9.1.13", title: "PRD-009 v2 Phase 2：ImportPolicy CRD + controller + fingerprint HMAC + 直 S3 polling（ADR-038, 7-agent 并发交付）", status: "done", priority: "P1", category: "Backend", estimate_days: 4, owner: "claude", start_week: 23, end_week: 23, discovered: "2026-06-01", tags: ["PRD-009","ADR-038","task-157-163","shipped-2026-06-01"] },
+  { id: "T-LEDGER", version: "tools", title: "LEDGER.md + Rule G 取号 SOP + ADR-041（跨 series 防撞号 SSOT, gen-data.mjs 漂移检查兜底）", status: "done", priority: "P1", category: "Docs", estimate_days: 0.3, owner: "claude", start_week: 23, end_week: 23, discovered: "2026-06-01", tags: ["ADR-041","Rule-G","SSOT","shipped-2026-06-01"] },
+  { id: "T-MEMORY", version: "tools", title: "MEMORY.md 项目级 Memory（交互节奏 + Rule A-G 反例 + 13 条跨 session 教训）", status: "done", priority: "P2", category: "Docs", estimate_days: 0.3, owner: "claude", start_week: 23, end_week: 23, discovered: "2026-06-01", tags: ["docs","memory","onboarding","shipped-2026-06-01"] },
 
   // ── 计划中的特性 ──
   { id: "S-92", version: "v0.9.6", title: "还原时安全扫描 YARA + ClamAV 双引擎", status: "todo", priority: "P1", category: "Feature", estimate_days: 9, owner: "tbd", start_week: 27, end_week: 28, discovered: "2026-05-28", tags: ["premium","yara","clamav","C-007"] },

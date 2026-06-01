@@ -445,26 +445,36 @@ echo "✅ verify-before-ship 通过：ns=$NS version=$VER buildStamp=$stamp"
 
 ## 4. CD 部署（分级环境 + 触发规则）
 
-### 4.1 三套环境与发布等级
+> **2026-06-01 ADR-042 修订**：开发主体环境上云，本机 docker-desktop 退役，dev/test/prod **三集群真物理隔离**（不再 ns 区分 environment）。
+
+### 4.1 三套环境与发布等级（ADR-042 修订）
 
 | 环境 | 集群 / 命名空间 | 部署方式 | 触发 | 审批 |
 |---|---|---|---|---|
-| **开发 dev** | docker-desktop（arm64）/ `supkube` | `hack/dev-deploy.sh`（本地快速环，~60-90s）| 开发者手动 | 无 |
-| **测试 test** | AKS `aks-jumborca-dev` / `supkube-staging` | `cd.yaml` deploy-test | 打 tag 或手动 dispatch | **自动** |
-| **生产 prod** | AKS（建议独立 prod 集群或 `supkube` ns）/ `supkube` | `cd.yaml` deploy-prod | test 通过后 | **人工审核**（GH Environment Required reviewers） |
+| **开发 dev** | AKS `aks-jumborca-dev` / `supkube` | `cd.yaml` deploy-dev | **push to main** 即推 | 无 |
+| **测试 test** | AKS `aks-jumborca-test` / `supkube` | `cd.yaml` deploy-test | 打 tag `v*` 或手动 dispatch | **自动** |
+| **生产 prod** | AKS `aks-jumborca-prod` / `supkube` ⚠ 集群待创建（ADR-042 §5）| `cd.yaml` deploy-prod（cluster-exists guard） | test 通过后 | **人工审核**（GH Environment Required reviewers） |
 
-> 资源有限只有一个 AKS 时：用**命名空间隔离**（`supkube-staging` vs `supkube`）作为过渡；有预算后升级为独立 prod 集群（生产数据保护产品强烈建议物理隔离）。这属于"通用适配思路"，按企业网络/隔离实情调整。
+> **三集群同订阅 同 RG（Research_and_Development）**：共用同一 ACR（`supkube.azurecr.io` 匿名拉）+ 同一 OIDC 联合凭据（按 environment 拆 federated credentials）。
+>
+> **本机 docker-desktop 已退役**：所有开发验证走 `git push main → CI/CD 推 aks-dev → kubectl --context=aks-jumborca-dev -n supkube get pods` 看 buildStamp。反馈循环 ~5-8 min（vs 老 dev-deploy.sh ~2 min），换跟 prod 一致环境 + 笔记本资源释放。
+>
+> **aks-jumborca-test 共存集群**：同时跑 Kasten K10（`kasten-io` ns）+ KubeVirt（`kubevirt`/`cdi`/`demo-vm*` ns）作竞品对比 + KubeVirt 实验场。SupKube 装独立 `supkube` ns + `velero` ns。
 
-### 4.2 触发规则（trigger matrix）
+### 4.2 触发规则（trigger matrix · ADR-042 修订）
 
-| 事件 | CI(ci.yaml) | CD(cd.yaml) build-push | deploy-test | deploy-prod |
-|---|---|---|---|---|
-| PR → main | ✅ 全部校验 | — | — | — |
-| push → main（合并后）| ✅ | — | — | — |
-| 打 tag `v*` | — | ✅ | ✅ 自动 | ⏸ 等人工审批 |
-| 手动 dispatch(test) | — | ✅ | ✅ | — |
+| 事件 | CI(ci.yaml) | CD build-push | deploy-dev | deploy-test | deploy-prod |
+|---|---|---|---|---|---|
+| PR → main | ✅ 全部校验 | — | — | — | — |
+| **push → main**（合并后）| ✅ | ✅ | ✅ **自动推 aks-dev** | — | — |
+| 打 tag `v*` | — | ✅ | — | ✅ 自动 | ⏸ 等人工审批 |
+| 手动 dispatch(dev) | — | ✅ | ✅ | — | — |
+| 手动 dispatch(test) | — | ✅ | — | ✅ | — |
+| 手动 dispatch(prod) | — | ✅ | — | — | ⏸ 等人工审批 + cluster guard |
 
-> 设计意图：**日常合并只跑 CI 闸门**（快、省钱）；**只有打版本 tag 才进入发布管道**，与 `ENGINEERING.md §4 发布流程`一致（tag = 一次正式发布的开始）。
+> **设计意图修订（ADR-042）**：日常 commit + push 即触发 dev 闭环（给 Mars 提速的核心）；打 tag 才进 test/prod，保留发布节奏纪律。dev 高频不打 tag，test/prod 显式打 tag 标"我承诺这版稳"边界。
+>
+> **prod cluster guard**: deploy-prod 第一步 `az aks show aks-jumborca-prod` 检查；不存在则 fail-fast + 友好提示 `az aks create` 命令（避免误以为部署成功但实际跳过）。
 
 ### 4.3 分支策略
 

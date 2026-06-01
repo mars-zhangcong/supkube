@@ -282,13 +282,15 @@ Mars 反馈："我装的就是这个软件，操作的就是这个软件，为�
 
 ## 七、基础设施速查（Azure + AKS + Tailscale + ACR + Helm）
 
-### Mars 的可用资源
-- **Azure 账号**：`ea-rnd-mzhang@jumborca.net` / `Sub-RnD`（jumborca R&D 订阅）
-- **AKS 集群**：
-  - `aks-jumborca-dev` —— dev 集群（**本机默认 current-context 常指这里**；操作 test 时务必显式 `--context aks-jumborca-test` 以免误操作 dev）
-  - `aks-jumborca-test` —— test 集群，2 节点 × (4 vCPU / 16Gi)，K8s v1.34.7；已装 Azure 托管 addon + Kasten K10 备份；KB 练习首选场地
+### Mars 的可用资源（**2026-06-01 ADR-042 修订 — 开发主体上云**）
+- **Azure 账号**：`ea-rnd-mzhang@jumborca.net` / `Sub-RnD`（jumborca R&D 订阅）/ RG `Research_and_Development`
+- **AKS 集群**（三套独立, 按 dev/test/prod 真物理隔离）:
+  - `aks-jumborca-dev` —— **开发主体集群** (ADR-042)。Mars 笔记本退役后日常验证全在这。push to main 即 cd.yaml 自动推。**本机默认 current-context 常指这里**。
+  - `aks-jumborca-test` —— 测试 + 共存集群。2 节点 × (4 vCPU / 16Gi)，K8s v1.34.7。共存负载: Kasten K10（kasten-io ns 作竞品对比）+ KubeVirt（kubevirt/cdi/demo-vm* ns 作 VM 备份实验场, 任务 #93 候选）。SupKube 装独立 `supkube` + `velero` ns。tag `v*` 推送触发部署。
+  - `aks-jumborca-prod` —— **未来生产集群**, ⚠ **暂未创建**（ADR-042 §5）。真有 prod 客户前不建省 $200-400/月。创建后 cd.yaml deploy-prod 自动生效（有 cluster-exists guard）。
+- **本机 docker-desktop K8s** —— ⛔ **已退役**（ADR-042, 2026-06-01）。Mars 自行关闭。
 - **Tailscale tailnet `mars.zhangcong@`**：
-  - `mars-laptop` = `100.69.159.111` —— 当前这台 MacBook Pro
+  - `mars-laptop` = `100.69.159.111` —— 当前这台 MacBook Pro（不再跑 K8s，仅作 IDE + browser + 跟 az/kubectl CLI 调集群）
   - `mars-homelab` = `100.73.206.94` —— 老 Mac（曾被误认成当前机器；要在老 Mac 上做事先让 Mars 开机+开 Tailscale+开远程登录）
 
 ### 项目镜像与制品
@@ -297,9 +299,10 @@ Mars 反馈："我装的就是这个软件，操作的就是这个软件，为�
 - **Helm chart**：`supkube-helm/supkube`，双轨版本：chart `0.9.1-alpha.N`(SemVer) ↔ appVersion `0.9.1.N-alpha`(四段)。内置 velero 子 chart（`charts/*.tgz` 被 gitignore，`Chart.lock` 锁定）。**EULA 闸**需 `--set eula.accept=true`
 - **CD workflow**：`.github/workflows/cd.yaml` 接管 ACR 推送（不再有 ghcr docker job，ci.yaml L77 已记录这个迁移）
 
-### 集群命名空间
+### 集群命名空间（三集群一致）
 - `supkube` —— SupKube backend / frontend / dex / minio
 - `velero` —— Velero + node-agent（与 SupKube 解耦, 方便 `kubectl logs -n velero` 直接跟 Velero 文档）
+- ⚠ 老版本曾在单集群用 `supkube-staging` 区分 env，**2026-06-01 ADR-042 之后退役** — 现在三集群都用 `supkube` ns, env 隔离靠集群本身
 
 ### 本机工具栈
 kubectl / helm v3.17 / az / docker / jq / openssl 已装；**kbcli 未装**。dev-deploy.sh Phase 0 检查这些。
@@ -334,6 +337,7 @@ kubectl / helm v3.17 / az / docker / jq / openssl 已装；**kbcli 未装**。de
 | 2026-06-01 | L-12 | Agent B 报 "BackupLister 是 poor man's"，依赖 Velero sync 而非真直 S3 | 后端 agent 报有妥协时**必须立刻挑明对产品承诺的影响**，不绕；Mars 决定补还是接受 |
 | 2026-06-01 | L-13 | ADR-037/038 撞号复发（PRD-008/010 旧草稿仍用旧含义）| 占号前先查台账; 被复用过的旧号**不得沿用**, 必须让号（PRD-Review 第六份建议）|
 | 2026-06-01 | L-14 | L-13 复发暴露：项目缺**跨 series 取号台账**（PRD/ADR/TC/D/C 各靠各的文档末尾 grep 最大号，并行 Agent 必撞）| **建 `LEDGER.md` 唯一号源**（[LEDGER.md](./LEDGER.md)） + **ENGINEERING.md Rule G 取号 SOP**: 单 Agent 顺序取号；并行 Agent 由 main agent 集中预分配号塞 prompt（Rule C v2 延伸）。让号是 forward-only。每次更 LEDGER 跑漂移检查 |
+| 2026-06-01 | L-15 | docker-desktop arm64 build 每次 2-3 min + 笔记本 8GiB 内存吃满 + dev-deploy.sh "双轨双集群" 失败模式多（容器名 / buildx --load 假成功 / RBAC silent fail）→ Mars 反馈"笔记本拖慢节奏" | **开发主体上云（ADR-042）**: 关 docker-desktop, dev/test/prod 三 AKS 集群真物理隔离, cd.yaml push to main → aks-dev 自动 + tag → aks-test + manual → aks-prod。dev-deploy.sh DEPRECATED notice → v0.9.1.15 删除。反馈循环 2→5-8 min (慢一倍但稳)，换 prod 行为一致 + 笔记本资源解放。教训: 双轨 dev 环境只在前期合理，产品成熟后必须收口到云上 single path |
 
 ---
 

@@ -12,7 +12,7 @@
 | Series | 已占最高号 | **下个空号** | 用途 | 详表 |
 |---|---|---|---|---|
 | **PRD** | PRD-012 | **PRD-013** | Product Requirements Document（影响 UX/数据模型的功能） | §二 |
-| **ADR** | ADR-041 | **ADR-042** | Architecture Decision Record（架构级决策，含让号占位） | §三 |
+| **ADR** | ADR-042 | **ADR-043** | Architecture Decision Record（架构级决策，含让号占位） | §三 |
 | **TC-REG** | TC-REG-011 | **TC-REG-012** | Regression test case（bug fix 强制回归） | §四 |
 | **TC-POL** | TC-POL-008 | **TC-POL-009** | Policy 测试用例 | §四 |
 | **TC-APP** | TC-APP-003 | **TC-APP-004** | Applications 测试用例 | §四 |
@@ -21,7 +21,7 @@
 | **TC-LBS** | TC-LBS-003 | **TC-LBS-004** | Local Backup Store 测试用例 | §四 |
 | **TC-RP** | TC-RP-006 | **TC-RP-007** | Restore Point 测试用例 | §四 |
 | **TC-MC** | TC-MC-004 | **TC-MC-005** | Multi-Cluster 测试用例 | §四 |
-| **D**（战略/产品决策） | D-32 | **D-33** | dashboard `DECISIONS` 数组里的当日决策 | §五 |
+| **D**（战略/产品决策） | D-33 | **D-34** | dashboard `DECISIONS` 数组里的当日决策 | §五 |
 | **C**（客户痛点） | C-012 | **C-013** | dashboard `CUSTOMER_PAIN` 数组 | §六 |
 
 > **如果你的 series 不在上面**：在 §七"新 series 注册"加一行（e.g. 新增 TC-SEC 安全扫描 series），然后回到本表加一行下个空号。
@@ -65,6 +65,7 @@
 | ADR-039 | **Activity 持久化与 audit event 存储选型** ← 让号自 ADR-037 | PRD-008 让号 / 2026-06-01 | 草稿（占号待 PRD-008 Phase 0 落地） | 架构设计.md §9（待写） |
 | ADR-040 | **DR Topology SVG 视觉规范** ← 让号自 ADR-038 | PRD-010 让号 / 2026-06-01 | 草稿（占号待 PRD-010 实施落地） | 架构设计.md §9（待写） |
 | ADR-041 | **项目编号统一台账 (LEDGER.md) + Rule G 取号 SOP**（跨 PRD/ADR/TC/D/C 全 series 防撞号；并发由 main agent 预分配；让号 forward-only；漂移检查 gen-data.mjs） | Claude (Rule G 演练) / 2026-06-01 | **草稿** ✅（架构设计.md §9 正文已写, 含 Context/Decision/Consequences/Alternatives/Verification/References 7 段） | 架构设计.md §9 ADR-041 |
+| ADR-042 | **开发主体环境上云 (Azure AKS) + CI/CD 三集群推送策略** (关闭本机 docker-desktop; push to main → aks-dev 自动; tag → aks-test; manual gate → aks-prod; dev-deploy.sh 退役; 保留 amd64+arm64 多架构) | Mars 决策 / Claude 起草 / 2026-06-01 | **草稿** ✅（架构设计.md §9 正文 8 段已写: Context/Decision/Consequences/Alternatives/§5 prod 集群待建/§6 dev-deploy 退役时间线/Verification/References；cd.yaml 三阶段已扩；dev-deploy.sh 头加 DEPRECATED notice） | 架构设计.md §9 ADR-042 / cd.yaml / hack/dev-deploy.sh |
 
 ---
 
@@ -127,6 +128,7 @@
 | D-30 | 2026-06-01 | ADR-037/038 让号治理 |
 | D-31 | 2026-06-01 | MEMORY.md 项目级落地 |
 | D-32 | 2026-06-01 | **草稿** ✅ Rule G + LEDGER.md 立 + ADR-041（4 步 SOP 首次演练成功；正文已写入 dashboard `DECISIONS`） |
+| D-33 | 2026-06-01 | **草稿** ✅ 开发主体上云（ADR-042 + cd.yaml 三阶段 + dev-deploy.sh DEPRECATED；Rule G 第二次演练; 正文已写入 dashboard `DECISIONS`） |
 
 （D-23/24/25 跳过号或归并到 D-26；如发现实际占用请补回此表）
 

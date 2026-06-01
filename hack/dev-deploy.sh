@@ -1,5 +1,22 @@
 #!/usr/bin/env bash
 # ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  ⚠⚠⚠  DEPRECATED (2026-06-01, ADR-042)  ⚠⚠⚠                              ║
+# ║                                                                          ║
+# ║  本脚本已退役。新流程见 .github/workflows/cd.yaml + 架构设计.md ADR-042：  ║
+# ║    - push to main          → 自动推 aks-jumborca-dev (Mars 日常)         ║
+# ║    - tag v*                → 推 aks-jumborca-test                        ║
+# ║    - manual approval       → 推 aks-jumborca-prod                        ║
+# ║                                                                          ║
+# ║  本机不再需要 docker-desktop (已关). 所有部署走 CI/CD 闭环。              ║
+# ║                                                                          ║
+# ║  为何还留这个文件:                                                        ║
+# ║    1. 历史 git blame 参考 (60+ commits 的踩坑总结都在注释里)             ║
+# ║    2. CI 完全瘫痪时的应急 fallback                                       ║
+# ║    3. ADR-042 §6 "渐进退役" — 下个 sprint 在 v0.9.1.15 真正删除          ║
+# ║                                                                          ║
+# ║  ⛔ 不要日常使用. 用 `git push` 触发 cd.yaml 才是新流程 (ADR-042)。       ║
+# ║                                                                          ║
+# ║  ──────────────────── (legacy header preserved below) ──────────────────  ║
 # ║  dev-deploy.sh — fast, end-to-end SupKube dev iteration loop             ║
 # ║                                                                          ║
 # ║  build (multi-arch) → push (ACR for AKS, local daemon for docker-       ║

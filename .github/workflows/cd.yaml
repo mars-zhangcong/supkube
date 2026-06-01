@@ -1,18 +1,24 @@
 name: CD
 
-# 发布管道：打 v* tag（正式发布）或手动 dispatch 触发。
-# 日常 PR/合并只跑 ci.yaml；只有"打版本 tag"才进入构建→推 ACR→部署，
-# 与 ENGINEERING.md §4 发布流程一致（tag = 一次正式发布的开始）。
+# 发布管道 (v0.9.1.14 ADR-042 修订):
+#   - push to main           → 自动推 aks-jumborca-dev (Mars 笔记本 → 云上 dev 闭环)
+#   - tag v*-test / v*-rc.*  → 推 aks-jumborca-test
+#   - tag v* (正式版)        → 推 aks-jumborca-test → manual gate → aks-jumborca-prod
+#   - workflow_dispatch      → 手动选 environment (dev/test/prod 任一)
+#
+# 与 ENGINEERING.md §4 发布流程 + ADR-042 一致 (架构设计.md §9)。
+# ADR-042 收口了 docker-desktop 退役 + CI 接管所有部署 + dev-deploy.sh 退役。
 on:
   push:
-    tags: ["v*"]                 # 例：git tag v0.9.1.10-alpha && git push origin v0.9.1.10-alpha
+    branches: ["main"]            # ⬅ ADR-042 新增: main 提交即自动推 aks-dev
+    tags: ["v*"]                  # 仅 v* tag (e.g. v0.9.1.10-alpha) 才推 test/prod
   workflow_dispatch:
     inputs:
       environment:
         description: 部署目标环境
         type: choice
-        options: [test, prod]
-        default: test
+        options: [dev, test, prod]
+        default: dev
 
 permissions:
   id-token: write                # OIDC 换 Azure token 必需（无密码）
@@ -22,8 +28,10 @@ env:
   ACR_LOGIN_SERVER: supkube.azurecr.io
   ACR_NAME: supkube
   CHART_DIR: supkube-helm/supkube
-  AKS_NAME: aks-jumborca-dev
-  AKS_RG: Research_and_Development   # 已按 az aks list 实测填入
+  AKS_RG: Research_and_Development   # 已按 az aks list 实测填入 (同 RG 内 dev/test/prod)
+  AKS_NAME_DEV: aks-jumborca-dev
+  AKS_NAME_TEST: aks-jumborca-test
+  AKS_NAME_PROD: aks-jumborca-prod   # ⚠ 该集群尚未创建 (ADR-042 §5)，deploy-prod 启动前需先 az aks create
 
 jobs:
   # ─────────────── 1) 构建多架构镜像并推 ACR ───────────────
@@ -98,9 +106,44 @@ jobs:
           echo "backend 架构: $archs"
           echo "$archs" | grep -qx amd64 || { echo "::error::backend:$V 缺 amd64 架构，AKS 将 ImagePull/exec format error"; exit 1; }
 
-  # ─────────────── 2) 部署测试环境（自动） ───────────────
+  # ─────────────── 2a) 部署 dev 集群（ADR-042：main 提交即推） ───────────────
+  deploy-dev:
+    name: Deploy → aks-jumborca-dev (auto, on main push)
+    needs: build-push
+    runs-on: ubuntu-latest
+    environment: dev                          # 无审批，自动 (push to main 或 manual=dev)
+    if: github.ref == 'refs/heads/main' || github.event.inputs.environment == 'dev'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: 取 aks-jumborca-dev 凭据
+        run: az aks get-credentials -n "$AKS_NAME_DEV" -g "$AKS_RG" --overwrite-existing
+      - uses: azure/setup-helm@v4
+        with: { version: v3.14.0 }
+      - name: helm upgrade → supkube ns（aks-dev = Mars 日常验证）
+        run: |
+          helm repo add vmware-tanzu https://vmware-tanzu.github.io/helm-charts
+          helm dependency build "$CHART_DIR"
+          helm upgrade --install supkube "$CHART_DIR" \
+            -n supkube --create-namespace \
+            --set eula.accept=true \
+            --set backend.image.repository=$ACR_LOGIN_SERVER/backend \
+            --set backend.image.tag=${{ needs.build-push.outputs.version }} \
+            --set frontend.image.repository=$ACR_LOGIN_SERVER/frontend \
+            --set frontend.image.tag=${{ needs.build-push.outputs.version }} \
+            --wait --timeout 5m
+      - name: Verify-before-ship（Rule D · aks-dev）
+        run: |
+          chmod +x hack/ci-verify.sh
+          ./hack/ci-verify.sh supkube ${{ needs.build-push.outputs.version }}
+
+  # ─────────────── 2b) 部署 test 集群（tag 触发自动） ───────────────
   deploy-test:
-    name: Deploy → test (auto)
+    name: Deploy → aks-jumborca-test (auto, on v* tag)
     needs: build-push
     runs-on: ubuntu-latest
     environment: test                         # 无审批，自动
@@ -112,30 +155,30 @@ jobs:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      - name: 取 AKS 凭据
-        run: az aks get-credentials -n "$AKS_NAME" -g "$AKS_RG" --overwrite-existing
+      - name: 取 aks-jumborca-test 凭据
+        run: az aks get-credentials -n "$AKS_NAME_TEST" -g "$AKS_RG" --overwrite-existing
       - uses: azure/setup-helm@v4
         with: { version: v3.14.0 }
-      - name: helm upgrade（测试命名空间 supkube-staging）
+      - name: helm upgrade → supkube ns（aks-test = QA 集群, 含 Kasten K10 + KubeVirt 共存）
         run: |
           helm repo add vmware-tanzu https://vmware-tanzu.github.io/helm-charts
           helm dependency build "$CHART_DIR"
           helm upgrade --install supkube "$CHART_DIR" \
-            -n supkube-staging --create-namespace \
+            -n supkube --create-namespace \
             --set eula.accept=true \
             --set backend.image.repository=$ACR_LOGIN_SERVER/backend \
             --set backend.image.tag=${{ needs.build-push.outputs.version }} \
             --set frontend.image.repository=$ACR_LOGIN_SERVER/frontend \
             --set frontend.image.tag=${{ needs.build-push.outputs.version }} \
             --wait --timeout 5m
-      - name: Verify-before-ship（Rule D）
+      - name: Verify-before-ship（Rule D · aks-test）
         run: |
           chmod +x hack/ci-verify.sh
-          ./hack/ci-verify.sh supkube-staging ${{ needs.build-push.outputs.version }}
+          ./hack/ci-verify.sh supkube ${{ needs.build-push.outputs.version }}
 
-  # ─────────────── 3) 部署生产（人工审核卡点） ───────────────
+  # ─────────────── 3) 部署 prod 集群（人工卡点 · ADR-042 §5 集群待创建） ───────────────
   deploy-prod:
-    name: Deploy → prod (manual approval)
+    name: Deploy → aks-jumborca-prod (manual approval, cluster guard)
     needs: [build-push, deploy-test]
     runs-on: ubuntu-latest
     environment: prod                         # GH Environment 的 Required reviewers = 人工卡点
@@ -147,11 +190,18 @@ jobs:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      - name: 取 AKS 凭据
-        run: az aks get-credentials -n "$AKS_NAME" -g "$AKS_RG" --overwrite-existing
+      - name: Guard — 确认 prod 集群已创建（ADR-042 §5）
+        run: |
+          if ! az aks show -n "$AKS_NAME_PROD" -g "$AKS_RG" >/dev/null 2>&1; then
+            echo "::error::aks-jumborca-prod 尚未创建（ADR-042 §5 未启动）。先 az aks create 再 retry。"
+            echo "::notice::命令参考: az aks create -g $AKS_RG -n $AKS_NAME_PROD --node-count 3 ..."
+            exit 1
+          fi
+      - name: 取 aks-jumborca-prod 凭据
+        run: az aks get-credentials -n "$AKS_NAME_PROD" -g "$AKS_RG" --overwrite-existing
       - uses: azure/setup-helm@v4
         with: { version: v3.14.0 }
-      - name: helm upgrade（生产命名空间 supkube）
+      - name: helm upgrade → supkube ns（aks-prod = 生产, --atomic 失败自动回滚）
         run: |
           helm repo add vmware-tanzu https://vmware-tanzu.github.io/helm-charts
           helm dependency build "$CHART_DIR"
