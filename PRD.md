@@ -64,6 +64,7 @@
 | [PRD-010](#prd-010) | DR Topology v2（Cluster/BSL 视觉重构 + Local Snapshot + Backup Copy 节点显示 · 5 类节点对齐 ADR-031 5 层模型） | **改正中（2026-06-02 F1-F4 finding 闭环）** | #150 |
 | [PRD-011](#prd-011) | AI Backup Advisor MVP（智能业务梳理 + 数据安全综合评分 + 备份建议 · 规则算分 + LLM 解释 · Canonical DSL · 本地分析小闭环） | **改正中（2026-06-02）** | #164 |
 | [PRD-012](#prd-012) | Call Home / Auto-Support（三档连接 · 采集器上送 + 自动开 Case · opt-in · 复用 ADR-033 脱敏） | **改正中（2026-06-02, I2 仍 Blocked）** | #165 |
+| [PRD-013](#prd-013) | SupKube Four-Eyes Authorization（备份安全二次审批 + MFA · 4 大类 15 受保护操作 · ApprovalPolicy/ApprovalRequest CRD · Veeam VBR 13 对标 + Kasten 没有 = 真差异化） | **草稿（2026-06-02 立项，Mars D-WAIT-002 frame shift 派生）** | TBD（取号待 Mars 批后建 task） |
 
 ---
 
@@ -4508,4 +4509,393 @@ PRD-012 出境字段**跟 PRD-011 SaaS / PRD-003 共用同一管线**——SECUR
 | 13 | **I1 闭环 (a)**：UI Send to Support 抽屉**默认逐次确认**, 展示 SanitizeReport 全文 + 客户点 "Send" 才发; "预授权自动" 模式是 Settings 二级开关 + warning banner + audit log |
 | 14 | **I1 闭环 (b)**：Call Home 出境字段表写入 **SECURITY.md §6.C**，跟 PRD-003/PRD-011 共用一份白名单; `internal/sanitize/sanitize.go` 是 SSOT, 3 处调用方都走它 |
 | 15 | **I2 设计就绪**：等 Mars 给 Case API spec (URL/auth/schema), 拿到后 customer-token 经 HMAC 派生 customer-id 走 identity section; helm `--set callHome.customerToken=` 注入 K8s Secret (跟 fingerprint secret 同模式) |
+
+---
+
+<a id="prd-013"></a>
+## PRD-013 — SupKube Four-Eyes Authorization（备份安全二次审批 + MFA 平台集成）
+
+| 字段 | 值 |
+|---|---|
+| **PRD 编号** | PRD-013 |
+| **任务编号** | TBD（Mars 批后建 task） |
+| **状态** | **草稿（2026-06-02 立项, Mars D-WAIT-002 frame shift 派生）** |
+| **作者** | Claude / Mars |
+| **目标版本** | v0.11.x（晚于 PRD-011 MVP, 不卡 Demo 核心闭环） |
+| **关联 ADR** | 拟 **ADR-044**（ApprovalPolicy/ApprovalRequest CRD 设计 + Dex MFA 集成模式） |
+| **关联 PRD** | **PRD-011 §6 维度 3 / MFA+二次审批 10 分**（本 PRD ship 前此项标 N/A 不计入分母）/ **PRD-008 §RP 删除**（Delete RP 进入 Four-Eyes 受保护清单）/ **PRD-009 §Import Policy**（跨集群 Restore-to-PROD 受保护）/ PRD-003 §AI Advisor（AI 推荐执行也走 Four-Eyes）|
+| **关联文档** | `SECURITY.md` §X 新章 "Four-Eyes Authorization & Privileged Operations Audit" / `USER_MANUAL.md` §X 新章 "MFA 启用与二次审批工作流" / 测试用例.md TC-SEC-001~005 新建（取号待 LEDGER 新 series TC-SEC）|
+| **反向兼容** | 向后兼容: ApprovalPolicy 默认**全 disabled**, 客户必须显式 enable 才生效, 0 默认行为变更; MFA toggle 默认 off, 启用后立即对所有 user 生效（强制 TOTP enrollment grace period 7 天）|
+
+> **立项缘由（2026-06-02）**：Mars 在 D-WAIT-002 PRD-011 评分细则讨论时提出"MFA 我就自己加在我们的平台上 + 二次审批只要启用了二次审批策略就 OK, 比如, 操作员要删除一个备份集, 要在另一个管理员、主管, 这样的人做二次审批"。这等价于 **Veeam VBR 13 的 Four-Eyes Authorization** ([helpcenter.veeam.com](https://helpcenter.veeam.com/docs/vbr/userguide/four_eyes_authorization.html?ver=13))——企业 DR 反勒索的金标准, 防"单管理员账号被攻陷后恶意清空备份" + "员工误操作"。**Kasten K10 当前没有这一层**, SupKube 实现后是真差异化护城河。本 PRD 落 Veeam 4 大类策略 + 加 SupKube K8s 多集群特有的 3 个护身符（跨集群 Restore-to-PROD / DR Drill 关闭 / BSL Object Lock 解锁）= **合计 15 个受保护操作**。
+
+### 1. Goal
+
+把 SupKube 从"单管理员账号即可执行任意操作"升级到 **"4 大类 15 个危险操作强制 Four-Eyes Authorization（双人审批 + MFA）"**, 让 SupKube 满足等保 2.0 三级 + ISO 27002:2022 §8.13 + NIST SP 1800-26 (反勒索) 的"特权操作两人责任"要求, 提供 **Kasten K10 没有的真差异化卖点**。
+
+### 2. Epic
+
+**"备份安全反勒索"** Epic ——把"特权操作单人即可"升级为"特权操作两人责任", 跟 Veeam VBR 13 + 金融行业 DR 实践对齐, 是 SupKube **从 SMB 工具升 enterprise 级**的最关键安全特性。本 PRD 是该 Epic 的首个全面落地。
+
+### 3. User Stories
+
+- 作为 **SupKube 平台管理员（Admin）**, 我在 Settings → Security → Approval Policies 启用 Four-Eyes Authorization, 选择哪些操作类别需要双人审批（4 大类 × 15 操作的复选), 设置每个 ApprovalPolicy 的 approvers (一个 Role / 一组 Users), 让平台**强制对危险操作走两人责任流程**, 我自己删 RP 时也需要另一管理员 approve。
+- 作为 **运维操作员（Operator）**, 我点击 "Delete Restore Point" 按钮, UI 立刻提示"该操作需 Four-Eyes Authorization, 已发起审批请求, 等待 approver 批准"; 我看到 Pending Approval 列表知道我的请求被谁审; approver 批准后操作自动执行, 我不用重新点; 拒绝或超时后操作取消, 我看到原因。
+- 作为 **审批人（Approver）**, 我打开 Pending Approval tab, 看到运维 Alice 发起的"Delete Restore Point: prod-mysql-2026-06-01"请求, 我看到 (a) 申请人 / 时间 / 申请理由 (operator 填) / (b) 操作详情（哪个 RP, 什么时间创建, 多少 GB, 关联哪个 Application）/ (c) 风险评估（这个 RP 是否是该应用最近的有效备份? 删除后 RPO 退化多少?）/ (d) Approve / Reject 按钮（Reject 必须填理由）/ (e) MFA 二次确认（点 Approve 后必须输入 TOTP 才生效, 防 approver session 被劫持）。
+- 作为 **审计 / 合规官员（Auditor）**, 我打开 Activity → Privileged Operations 看到所有 Four-Eyes 请求的完整链路: 申请人 / 操作 / 申请时间 / 批准人 / 批准时间 / 操作执行结果, 这些事件**全部走 PRD-008 audit event** 持久化（与 ADR-019 audit log 共用），不可篡改, 满足等保 2.0 / SOC2 / ISO 27001 审计要求。
+- 作为 **被入侵的攻击者**（红队场景）, 我攻陷了 Admin Alice 的账号, 想清空所有备份准备勒索; 但当我点击 Force Delete Backup 时, **请求被 Four-Eyes 拦截**, 我必须再攻陷一个独立账号（且对应 approver role）才能执行; 加上 MFA 要求, 我必须**同时获得**两个账号的 TOTP secret, 极大提高攻击成本（"两人责任 = 攻击成本翻倍"）。
+
+### 4. Functions
+
+#### 4.1 受保护操作清单（4 大类 15 操作）
+
+> **来源**: Veeam VBR 13 Four-Eyes Authorization 4 大类 12 操作 + SupKube K8s 多集群 + DR 视角特有 3 操作（合计 15）。**未启用 ApprovalPolicy** 的操作走原路径, 启用后强制走审批流程。
+
+| # | 类别 | 操作 (SupKube API/UI) | Veeam 对应 | 风险描述 |
+|---|---|---|---|---|
+| 1 | **类 1 删数据** | `DELETE /restore-points/:name` (UI: Restore Points 行 → Delete) | 从磁盘删除备份 | 操作员误删或被攻陷后恶意清空 RP |
+| 2 | **类 1 删数据** | `DELETE /volumesnapshots/:ns/:name` (UI: Application Items → Delete VS) | 删除存储快照 | 直接删 CSI VolumeSnapshot CR 等同 RP 失效 |
+| 3 | **类 1 删数据** | `DELETE /backups/:name` (UI: 老 Backup CR 清理 / 孤儿元数据) | 从配置 DB 移除备份 | 删 Velero Backup CR 等同 RP 元数据消失 |
+| 4 | **类 1 删数据** | `POST /backups/:name/force-delete` (UI: PRD-008 Force Delete 入口) | (Veeam Purge) | 绕 finalizer + 不删 BSL 对象 = 数据残留陷阱（PRD-008 §11 已警告）|
+| 5 | **类 2 基建** | `DELETE /bsls/:name` (UI: Settings → Storage Locations → Delete) | 移除备份存储库 | 解绑 BSL 等同所有 RP 失联（虽 BSL 对象仍在云上）|
+| 6 | **类 2 基建** | `DELETE /vsls/:name` (UI: Settings → VolumeSnapshotLocations → Delete) | 移除生产存储 | VSL 失联等同 snapshot 路径断 |
+| 7 | **类 2 基建** | `DELETE /clusters/:name` (UI: MC Manager → Cluster → Remove) | 移除云提供商 | MC cluster 移除 → 跨集群 RP 入口失效（PRD-009 v2 Import Policy 信任链断）|
+| 8 | **类 3 用户** | `POST/PATCH/DELETE /users` (UI: Settings → Users) | 增/改/删用户 | 攻击者建后门高权账号 |
+| 9 | **类 3 用户** | `PATCH /users/:id/role` (UI: Settings → Users → Change Role) | 修改用户角色 | 攻击者提权自己为 Admin |
+| 10 | **类 4 安全** | `PATCH /settings/approval-policies` set `enabled=false` | 禁用四眼原则本身（**递归保护**） | **关键**: 关 Four-Eyes 本身也必须走 Four-Eyes（防"先关再删"） |
+| 11 | **类 4 安全** | `PATCH /settings/mfa` set `globalMFA=false` | 全局 MFA 变更 | 关 MFA = 安全降级铺路 |
+| 12 | **类 4 安全** | `POST /users/:id/reset-mfa` | 重置特定用户 MFA | 攻击者重置 admin MFA 后用自己 device 登录 |
+| 13 | **类 4 安全** | `PATCH /settings/session` set `autoLogout` 改长或关 | 全局自动注销 | 关 auto-logout = session 永驻给攻击窗口 |
+| 14 | **SupKube 特有** | `POST /restores` to `cluster.tier=prod` (跨集群 Restore 到生产) | (Veeam 单集群无对应) | K8s 多集群独有: 误把 dev RP 还原到 prod = 数据覆盖灾难 |
+| 15 | **SupKube 特有** | `PATCH /policies/drill-schedule` set `enabled=false` 或 `PATCH /bsls/:name/object-lock` set `disabled=true` | (Veeam 无对应) | 关 DR Drill 或解锁 BSL Object Lock = PRD-011 评分维度 2/4 直接破防 |
+
+> **客户可选**: 上述 15 操作每条**单独可 enable/disable**, 客户按风险偏好配置（e.g. 中小客户只启用类 1 删数据 4 条）。Settings → Security → Approval Policies 提供 **"Veeam 标准 (12 条全开)"** + **"SupKube 增强 (15 条全开, 推荐)"** + **"自定义"** 三档 preset。
+
+#### 4.2 ApprovalPolicy CRD spec
+
+```yaml
+apiVersion: supkube.io/v1
+kind: ApprovalPolicy
+metadata:
+  name: prod-cluster-strict
+  namespace: supkube-system           # cluster-scoped 也行, 设计为 namespaced 便于 RBAC
+spec:
+  # —— 适用范围 —— 
+  enabled: true                       # 启用本策略
+  scope:
+    operations:                       # 受保护操作列表 (引用 §4.1 #1-#15 op IDs)
+      - delete-restore-point          # #1
+      - delete-volumesnapshot         # #2
+      - force-delete-backup           # #4
+      - delete-bsl                    # #5
+      - cross-cluster-restore-to-prod # #14
+    clusters:                         # 仅对这些 cluster 生效（空 = 所有）
+      - aks-jumborca-prod
+    namespaces:                       # 仅对这些 namespace 生效（空 = 所有）
+      - prod-finance
+      - prod-orders
+  
+  # —— 审批要求 ——
+  approvers:                          # 谁能审批（满足任一条即可）
+    roles:                            # K8s ClusterRole names
+      - supkube-admin
+      - supkube-security-officer
+    users:                            # 显式 user list（OIDC sub claim）
+      - boss@company.com
+    minApprovers: 1                   # 需多少个 approver 同意（默认 1, 可调到 2 / 3 = "三眼" / "四眼"）
+  selfApproveForbidden: true          # 申请人不能 approve 自己（强制）
+  
+  # —— 请求生命周期 ——
+  requestTtl: 24h                     # 请求 TTL, 超时自动 Rejected
+  
+  # —— MFA 要求 ——
+  mfaRequired: true                   # approver 点 Approve 时强制输 TOTP
+  
+  # —— 通知 ——
+  notifications:
+    email:
+      enabled: true
+      to:                             # 显式收件人（除自动通知 approvers）
+        - security-team@company.com
+    slack:
+      enabled: false
+      webhook: ""
+      channel: "#supkube-approvals"
+    inApp:
+      enabled: true                   # SupKube UI 顶栏红点 + Pending Approval tab badge
+```
+
+#### 4.3 ApprovalRequest CRD + 状态机
+
+```yaml
+apiVersion: supkube.io/v1
+kind: ApprovalRequest
+metadata:
+  name: req-2026060214301a3f          # 自动生成 UUID-like
+  namespace: supkube-system
+spec:
+  policyRef:                          # 关联的 ApprovalPolicy
+    name: prod-cluster-strict
+  
+  operation:
+    type: delete-restore-point         # §4.1 op ID
+    target:                           # 操作目标（用于 approver 看上下文）
+      kind: RestorePoint
+      apiVersion: supkube.io/v1
+      namespace: prod-finance
+      name: orders-mysql-2026-06-01
+    parameters:                       # 透传原 API 调用的 body（脱敏后）
+      reason: "test cleanup"          # operator 填的申请理由
+    
+  requester:                          # 申请人
+    username: alice@company.com
+    role: supkube-operator
+    userAgent: "Mozilla/5.0 ..."
+    sourceIP: "10.0.1.42"
+  
+status:
+  phase: Pending                      # Pending → Approved → Executing → Executed (终态)
+                                      #         → Rejected (终态)
+                                      #         → Expired (终态, requestTtl 过)
+                                      #         → Cancelled (终态, requester 主动撤回)
+  approvals:                          # 已收到的批准（数量 ≥ minApprovers → phase 进 Approved）
+    - approver: boss@company.com
+      approvedAt: "2026-06-02T15:30:00Z"
+      mfaVerified: true               # MFA 验证通过证据
+      comment: "OK, but next time cleanup before EOD"
+  rejection: null                     # 若 Rejected, 这里填理由
+  executionResult: null               # Approved → 实际执行后填: success / failed + error msg
+  expiresAt: "2026-06-03T14:30:00Z"
+```
+
+**状态机**:
+
+```
+Pending ──(approvals ≥ minApprovers)──> Approved ──(controller 执行原操作)──> Executing ──> Executed (成功) / Executed (失败 + errorMsg)
+   │
+   ├──(任一 approver Reject)──> Rejected (终态)
+   ├──(requestTtl 过)──> Expired (终态)
+   └──(requester 撤回)──> Cancelled (终态)
+```
+
+**幂等性**: Approved → Executing 由 controller 单次执行（leader election + idempotent guard, 防 controller 重启重复执行）。
+
+#### 4.4 MFA 平台集成（Dex OIDC + TOTP/WebAuthn）
+
+| 模块 | 设计 |
+|---|---|
+| **认证流程** | Dex OIDC 已是 SupKube login backend（ADR-010）, 增加 Dex **TOTP connector** + **WebAuthn connector**（passkey 支持）。客户登录 = OIDC 主认证 + (若 MFA 启用) TOTP 6 位码 或 WebAuthn 触摸 |
+| **Enrollment** | 客户首次登录后, UI 强制 enrollment 页：扫二维码绑定 Authenticator app（Google Authenticator / 1Password / Authy）/ 注册 WebAuthn passkey; grace period 7 天可暂时跳过, 之后必须绑定才能登录 |
+| **存储** | TOTP secret 存 K8s Secret `mfa-secrets`（type=Opaque, encrypted at rest with K8s default + sealed-secrets 推荐）, secret name = `mfa-totp-{userId-sha256}` |
+| **二次确认** | approver 点 Approve / 执行任一 §4.1 受保护操作时, 即使 session 内已登录, UI 弹"输入当前 TOTP 6 位码"对话框, 验证通过后才生效（防 session hijacking） |
+| **管理员重置** | 客户丢手机时, Admin 在 Settings → Users → Reset MFA 重置, 但此操作本身是 §4.1 #12 受保护操作, 必须走 Four-Eyes（防攻击者用"假装丢手机"绕过 MFA）|
+| **Recovery codes** | Enrollment 时一次性给 8 个 recovery code（哈希存 Secret）, 客户打印保存; 登录时 TOTP 失败 N 次可用 recovery code（每个一次性, 用完 invalidate）|
+
+#### 4.5 UI/UX
+
+##### 4.5.1 Settings → Security → Approval Policies (新页)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Security & Compliance                                          │
+│  ├─ Authentication (MFA)  ├─ Approval Policies ◀──  ├─ Audit   │
+│                                                                  │
+│  ☑ Enable Four-Eyes Authorization (Global)                      │
+│                                                                  │
+│  Preset:  ○ Veeam Standard (12 ops)  ● SupKube Enhanced (15)   │
+│           ○ Custom                                              │
+│                                                                  │
+│  Policy: [prod-cluster-strict ▾]  [+ New Policy]               │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ Scope:                                                       ││
+│  │   Clusters: [aks-jumborca-prod] [+]                          ││
+│  │   Namespaces: [prod-finance, prod-orders] [+]                ││
+│  │                                                              ││
+│  │ Operations (15 selectable):                                  ││
+│  │   类 1 删数据 (4):  ☑☑☑☑                                  ││
+│  │   类 2 基建 (3):    ☑☑☑                                    ││
+│  │   类 3 用户 (2):    ☑☑                                      ││
+│  │   类 4 安全 (4):    ☑☑☑☑                                  ││
+│  │   SupKube 特有 (2): ☑☑                                      ││
+│  │                                                              ││
+│  │ Approvers:                                                   ││
+│  │   Roles: [supkube-admin, supkube-security-officer] [+]      ││
+│  │   Users: [boss@company.com] [+]                              ││
+│  │   Min approvers: [1 ▾]  ☑ Self-approve forbidden            ││
+│  │                                                              ││
+│  │ Request TTL: [24h ▾]  ☑ MFA required for approvers         ││
+│  │ Notifications: ☑ Email  ☐ Slack  ☑ In-App                  ││
+│  └─────────────────────────────────────────────────────────────┘│
+│  [Save]  [Test (simulate a request)]                           │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+##### 4.5.2 Operator 视角 - 发起受保护操作
+
+```
+[User clicks "Delete Restore Point" on Restore Points page]
+
+┌─────────────────────────────────────────────────────────────────┐
+│  ⚠ This operation requires Four-Eyes Authorization              │
+│                                                                  │
+│  Operation: Delete Restore Point                                │
+│  Target:    prod-finance / orders-mysql-2026-06-01              │
+│  Policy:    prod-cluster-strict                                 │
+│  Approvers needed: 1 (from supkube-admin / supkube-security-officer) │
+│                                                                  │
+│  Reason for request: *                                          │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ Routine cleanup of old test backup, RP > 30 days, no       ││
+│  │ active restore needed                                       ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                                                  │
+│  Notification: Approvers will be notified via Email + In-App.   │
+│  Request TTL: 24h (auto-rejected if not approved)               │
+│                                                                  │
+│             [Cancel]  [Submit Approval Request]                  │
+└─────────────────────────────────────────────────────────────────┘
+
+→ Submitted! Request ID: req-2026060214301a3f
+→ Status: Pending Approval (you'll be notified when approved/rejected)
+→ View in: My Requests
+```
+
+##### 4.5.3 Approver 视角 - Pending Approval 列表
+
+```
+┌────────────────────────────────────────────────────────────────────┐
+│  Pending Approval (3)                                              │
+│  ┌──────────────────────────────────────────────────────────────┐ │
+│  │ 🔶 Delete Restore Point: orders-mysql-2026-06-01             │ │
+│  │    Requested by: alice@company.com (operator)                │ │
+│  │    Submitted:    2026-06-02 14:30 (28 min ago)               │ │
+│  │    Expires:      2026-06-03 14:30 (23h 32m left)             │ │
+│  │    Reason:       "Routine cleanup of old test backup..."     │ │
+│  │                                                                │ │
+│  │    🔍 Operation Details                                        │ │
+│  │    ├─ Target:        RP orders-mysql-2026-06-01               │ │
+│  │    ├─ Created:       2026-06-01 03:00 (35h ago, by Policy "..")│
+│  │    ├─ Size:          18 GB                                    │ │
+│  │    ├─ Application:   prod-finance/orders-mysql                │ │
+│  │    └─ Risk:          ⚠ This is the 2nd most recent RP. After │ │
+│  │                       deletion, RPO of orders-mysql may worsen│ │
+│  │                       from 24h to 48h.                        │ │
+│  │                                                                │ │
+│  │    [✓ Approve (MFA required)]  [✗ Reject]                     │ │
+│  └──────────────────────────────────────────────────────────────┘ │
+│                                                                    │
+│  ┌──────────────────────────────────────────────────────────────┐ │
+│  │ 🔶 Force Delete Backup: stuck-backup-xyz                     │ │
+│  │ ... (collapsed)                                              │ │
+│  └──────────────────────────────────────────────────────────────┘ │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+##### 4.5.4 Activity → Privileged Operations (新 tab)
+
+跟 PRD-008 Activity 持久化层共用, 显示所有 §4.1 #1-#15 操作的完整链路 (申请人 / 操作 / 申请时间 / approver / 批准时间 / 执行结果)。审计员可按 approver / requester / operation type / time range filter。
+
+#### 4.6 通知
+
+| 通知渠道 | 触发时机 | 内容 |
+|---|---|---|
+| **Email** | (a) 请求新建 → 通知 approvers; (b) 请求 approved/rejected → 通知 requester; (c) 请求 24h 过半未审批 → 提醒 approvers | 包含请求详情 + UI deep-link `https://supkube.../approvals/req-xxx` |
+| **In-App** | 同上, UI 顶栏铃铛红点 + Pending Approval tab badge 数字 | 实时（SSE 推送）|
+| **Slack** | Opt-in, Settings 配 webhook | Slack block kit message + Approve/Reject 按钮（点按钮走 Slack OAuth 鉴权后回 SupKube）|
+
+#### 4.7 审计（与 PRD-008 共用 audit event）
+
+每个 ApprovalRequest 生命周期事件 → audit event 落 PRD-008 §audit store:
+- `APPROVAL_REQUEST_CREATED` (requester, operation, target)
+- `APPROVAL_GRANTED` (approver, mfa_verified, comment)
+- `APPROVAL_REJECTED` (approver, reason)
+- `APPROVAL_EXPIRED` (auto)
+- `APPROVAL_CANCELLED` (requester)
+- `PROTECTED_OPERATION_EXECUTED` (final outcome, success/failed)
+
+事件**不可删除**（PRD-008 D2 hash-chain + admission webhook + WORM 三层防御兼用）。审计员通过 PRD-005 Log Viewer + `auditCategory=approval` filter 查询。
+
+### 5. UI/UX 细节
+
+(留 §4.5 三个 mockup 已覆盖主线, 详细组件库设计 + tokens 见 UI_GUIDELINES.md 更新)
+
+### 6. Out of Scope（明确不做）
+
+- **基于 risk score 的自动 escalation**: 高风险操作自动升 minApprovers=2/3, 复杂度高且策略主观, v1 不做（v2 可考虑）
+- **审批工作流编排（多级审批链）**: e.g. operator → team lead → security officer 三级串行, v1 只做 "minApprovers" 平行模式（同时通知所有 approver, 满足 N 个即可）, 多级编排 v2 考虑
+- **第三方 IdP 强 MFA 透传**: 客户 Azure AD / Okta 自带 MFA 时, 是否信任 IdP 的 MFA claim 跳过 SupKube TOTP, v1 不做（统一走 SupKube TOTP, 简化威胁模型）
+- **离线 approver**: 完全断网时通过其他渠道发起的 approval（电话 + 物理 token）, v1 不做
+
+### 7. 非功能性要求
+
+- **可用性**: ApprovalPolicy controller / ApprovalRequest controller 高可用（leader election 模式, 单实例 down 不丢未决请求）
+- **性能**: 请求创建 < 100ms (含 K8s CR write); 列表查询 < 500ms (每页 50, 按 user filter)
+- **可观测**: Prometheus metrics `supkube_approval_requests_total{phase}` / `supkube_approval_latency_seconds`（创建→批准时长）
+- **安全**: TOTP secret 加密存储 + sealed-secrets 推荐; recovery code 哈希存（bcrypt + salt）; MFA enrollment QR code 在 HTTPS-only 显示 + 5 分钟 TTL
+
+### 8. 验收标准（DoD）
+
+| # | 验收点 |
+|---|---|
+| 1 | ApprovalPolicy CRD + ApprovalRequest CRD schema 通过 kubectl explain 校验; OpenAPI v3 schema 完整 |
+| 2 | controller (`internal/approvalpolicy/`) reconcile 状态机正确: Pending → Approved → Executing → Executed; 任一状态机转换均有单元测试 |
+| 3 | §4.1 #1-#15 操作的 API handler 全部拦截: 受保护时返回 202 + ApprovalRequest URL; 未启用时走原路径; e2e 测试每个 op id 各一条 |
+| 4 | Dex MFA connector (TOTP) 集成: 客户首次登录强制 enrollment / grace period 7 天 / recovery code 8 个一次性 |
+| 5 | UI Settings → Security → Approval Policies 完整: 3 个 preset + 自定义 + scope 选择 (cluster/ns) + approver 选择 (role/user) |
+| 6 | Operator 发起受保护操作: 弹 §4.5.2 申请抽屉, 必填 reason, submit 后转 Pending Approval |
+| 7 | Approver 看 Pending Approval 列表 §4.5.3: 含申请人 / 操作详情 / 风险评估 / Approve(MFA) + Reject 按钮 |
+| 8 | MFA 二次确认: approver 点 Approve 后弹 TOTP 输入框, 验证通过才 ApprovalRequest.approvals 写入 |
+| 9 | self-approve 拒绝: requester 在 approver 名单内时, UI 灰化 Approve 按钮 + tooltip "self-approve forbidden by policy"; 后端二重验证（绕 UI 直调 API 也拒）|
+| 10 | requestTtl 到期自动 Reject: controller 定期扫 Pending 请求, 超 TTL 改 Expired + audit event; e2e 验证 |
+| 11 | recursive 保护: §4.1 #10 "Disable ApprovalPolicy" 操作本身走 Four-Eyes (即使 enabled=false 想生效也要 approval); 单测验证 |
+| 12 | 通知: Email + In-App + Slack (opt-in) 三通道工作; deep-link 点击直接进对应 ApprovalRequest 页 |
+| 13 | 审计 event 6 条 (`APPROVAL_REQUEST_CREATED` / `APPROVAL_GRANTED` / `APPROVAL_REJECTED` / `APPROVAL_EXPIRED` / `APPROVAL_CANCELLED` / `PROTECTED_OPERATION_EXECUTED`) 走 PRD-008 audit store + hash-chain 防篡改 |
+| 14 | Prometheus metrics 3 条暴露: `approval_requests_total` (counter, labels phase/policy) / `approval_latency_seconds` (histogram, 创建→批准) / `mfa_verifications_total` (counter, labels result) |
+| 15 | helm chart 加 `approval-policy-controller` deployment + RBAC + CRD; values.yaml `security.fourEyes.enabled` 默认 false (向后兼容); `security.mfa.enabled` 默认 false |
+| 16 | USER_MANUAL §X "MFA 启用 + Approval Policies" 新章; SECURITY.md §X "Four-Eyes Authorization & Privileged Operations Audit" 新章; 测试用例 TC-SEC-001~005 |
+| 17 | **反勒索演练**: 模拟攻击者拿到 admin Alice 凭据 → 尝试 force-delete 所有 Backup CR → 被 ApprovalRequest 拦截 + audit log 留痕 (e2e 测试) |
+
+### 9. 任务拆分
+
+> 估时 ~13 天 = **5d MFA + 8d 二次审批**。可以拆 2 sprint 推进。
+
+| Phase | 内容 | 估时 |
+|---|---|---|
+| **P0 ADR-044 + skeleton** (1d) | ApprovalPolicy/ApprovalRequest CRD types + 头表 ADR + 状态机图 | 1d |
+| **P1 MFA 后端** (3d) | Dex TOTP connector 集成 + secret 存储 + enrollment flow + recovery code | 3d |
+| **P2 MFA UI** (2d) | Enrollment 页 + 登录 TOTP 输入 + Recovery code 展示 + Settings → Authentication | 2d |
+| **P3 ApprovalPolicy controller** (2d) | reconciler + ApprovalRequest 状态机 + TTL controller + self-approve 拒绝 | 2d |
+| **P4 API handler 拦截** (2d) | 15 个 op handler middleware: 检查 ApprovalPolicy → 返回 202 + URL; 测试 e2e 每条 | 2d |
+| **P5 Settings UI** (1.5d) | Approval Policies 页 (preset 3 档 + 自定义) + scope 选择器 | 1.5d |
+| **P6 Pending Approval UI** (1d) | List + Detail + Approve(MFA)/Reject + 风险评估卡 | 1d |
+| **P7 通知** (1d) | Email + In-App SSE + Slack (opt-in) | 1d |
+| **P8 审计 + Activity 集成** (0.5d) | 6 条 audit event 落 PRD-008 store + Activity Privileged Operations tab | 0.5d |
+| **P9 测试 + 文档** (1d) | TC-SEC-001~005 + USER_MANUAL + SECURITY.md + 反勒索 e2e | 1d |
+
+### 10. 关联文档与任务
+
+- **ADR-044**（拟）: ApprovalPolicy/ApprovalRequest CRD 设计 + Dex MFA 集成模式
+- **PRD-011 §6 维度 3 / MFA + 二次审批 10 分**: 本 PRD ship 前标 N/A 不计入分母; ship 后此 10 分激活
+- **PRD-008 §audit event**: 本 PRD 6 条 event 复用 PRD-008 hash-chain + WORM 三层防御
+- **PRD-005 Log Viewer §audit category filter**: 审计员通过 `category=approval` 查询 ApprovalRequest 全生命周期
+- **PRD-007 §4.6 DR Drill**: 关闭 Drill (op #15) 进入受保护清单
+- **SECURITY.md §X 新章**: "Four-Eyes Authorization & Privileged Operations Audit" + 威胁模型 + 反勒索 narrative
+- **测试用例.md TC-SEC-001~005**: (1) 受保护操作拦截 / (2) MFA enrollment + login / (3) self-approve 拒绝 / (4) recursive 保护 / (5) 反勒索演练 e2e
+- **关联任务**: 本 PRD 落地后建 task (Mars 批后取号)
+
+### 11. 开放问题（Q1-Q5）
+
+- **Q1**: Approver 池如果都不在线（节假日 / 时区错峰）, requestTtl 自动 Reject 还是允许 Admin **超级权限 override**？(我推: 默认 reject + 提供 "Emergency Bypass" 二级权限给 super-admin, 但本身也走 audit; Mars 拍)
+- **Q2**: ApprovalPolicy 数量限制？多个 policy 命中同一操作时优先级（最严格 / 第一个匹配 / 合并 minApprovers）？(我推: 同操作多 policy 命中 → 取 max minApprovers + union approvers + AND mfaRequired; Mars 拍)
+- **Q3**: MFA enrollment grace period 7 天是否合理？金融客户可能要求 0 天（立即强制）；中小客户可能要求 30 天。(我推: Settings 可配 0/7/30, 默认 7; Mars 拍)
+- **Q4**: Recovery code 用尽后流程？(我推: 必须管理员 reset MFA, reset 本身走 Four-Eyes, Lock-in 防绕过; Mars 拍)
+- **Q5**: AI Advisor (PRD-003 / PRD-011) 推荐执行操作时, 自身是 "AI agent identity" 还是 "代理 user identity"？前者意味 AI 不能 self-approve, 必须人 approve, 防 AI 幻觉执行毁灭操作（推荐 ✅）；后者意味 AI 借用执行者身份, 简单但风险高（不推）。Mars 拍。
+
+### 12. 评审历史
+
+| 日期 | 操作人 | 状态变化 | 反馈 |
+|---|---|---|---|
+| 2026-06-02 | Claude (Auto 5h, Mars D-WAIT-002 frame shift 派生) | — → **草稿** | PRD-013 v1 完成。**核心决策**: (1) 4 大类受保护操作 = Veeam VBR 13 对标 12 条 + SupKube K8s 多集群 + DR 视角特有 3 条 = 合计 15 条; (2) ApprovalPolicy / ApprovalRequest 两层 CRD 设计（前者策略, 后者每请求实例）, 状态机 7 状态; (3) MFA 走 Dex OIDC TOTP connector + WebAuthn passkey, 强制二次确认防 session hijack; (4) recursive 保护 — Disable ApprovalPolicy 操作本身也走 Four-Eyes; (5) self-approve forbidden + minApprovers 可调 1/2/3 = 双眼/三眼/四眼; (6) 6 条 audit event 走 PRD-008 hash-chain + WORM 三层防御兼用; (7) 默认全 disabled, 向后兼容 0 风险。**Q1-Q5 待 Mars 拍**: 紧急 bypass / policy 优先级 / MFA grace period / Recovery code 用尽 / AI Advisor identity。**关键依赖**: 本 PRD ship 后 PRD-011 §6 维度 3 / 10 分激活; 不卡 Demo 核心闭环 (Mars 决策延后, 进流水线)。 |
+
+---
 

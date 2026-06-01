@@ -11,8 +11,8 @@
 
 | Series | 已占最高号 | **下个空号** | 用途 | 详表 |
 |---|---|---|---|---|
-| **PRD** | PRD-012 | **PRD-013** | Product Requirements Document（影响 UX/数据模型的功能） | §二 |
-| **ADR** | ADR-042 | **ADR-043** | Architecture Decision Record（架构级决策，含让号占位） | §三 |
+| **PRD** | PRD-013 | **PRD-014** | Product Requirements Document（影响 UX/数据模型的功能） | §二 |
+| **ADR** | ADR-043 | **ADR-044** | Architecture Decision Record（架构级决策，含让号占位） | §三 |
 | **TC-REG** | TC-REG-011 | **TC-REG-012** | Regression test case（bug fix 强制回归） | §四 |
 | **TC-POL** | TC-POL-008 | **TC-POL-009** | Policy 测试用例 | §四 |
 | **TC-APP** | TC-APP-003 | **TC-APP-004** | Applications 测试用例 | §四 |
@@ -28,7 +28,7 @@
 
 ---
 
-## 二、PRD 已占号 (PRD-001 ~ PRD-012)
+## 二、PRD 已占号 (PRD-001 ~ PRD-013)
 
 | 号 | 主题 | 占号人 / 时间 | 状态 | 详情位置 |
 |---|---|---|---|---|
@@ -44,10 +44,11 @@
 | PRD-010 | DR Topology v2（可视化重构 + Local Snapshot/Backup Copy 节点） | Claude / 2026-05-31 | 改正中（F1-F4 finding 闭环 2026-06-02, §13 修订段 + §8 DoD #13-#16, 等 Mars 重审） | PRD.md `#prd-010` |
 | PRD-011 | AI Backup Advisor MVP（规则算分 + LLM 解释 · Canonical DSL · 本地小闭环） | Claude / 2026-06-01 | 改正中（H1/H2/H5 finding 闭环 2026-06-02, §12 修订段 + §8 DoD #14-#17; H1 Q1 权重 + Q4 阈值 deferred 等 Mars 拍 → D-WAIT-002） | PRD.md `#prd-011` |
 | PRD-012 | Call Home / Auto-Support（三档连接 · 自动开 Case · opt-in） | Claude / 2026-06-01 | 改正中（I1 finding 闭环 2026-06-02 默认逐次确认 + SECURITY §6.C 并入, §10 修订段 + §8 DoD #13-#15; I2 customer-id 仍 Blocked 等 Case API spec） | PRD.md `#prd-012` |
+| PRD-013 | SupKube Four-Eyes Authorization（备份安全二次审批 + MFA · 4 大类 15 受保护操作 · Veeam VBR 13 对标 + Kasten 没有差异化） | Claude / 2026-06-02（Mars D-WAIT-002 frame shift 派生） | 草稿（占号 + 头表 + 立项缘由 + Goal/Stories/Functions/UI/DoD/Tasks/History 待 ship；不卡 PRD-011 Demo 闭环，PRD-011 §6 维度 3 / MFA+二次审批 10 分标 N/A → 等本 PRD ship 激活） | PRD.md `#prd-013` |
 
 ---
 
-## 三、ADR 已占号 (ADR-001 ~ ADR-040)
+## 三、ADR 已占号 (ADR-001 ~ ADR-043)
 
 > **本段是号源 SSOT**。架构设计.md 顶部 "ADR 号台账" 段保留作 ADR **详细元数据**（含 decision 摘要 / Alternatives 等），但**取号先看这里**。
 > ADR-001~031 已固化在 架构设计.md §9 正文，本表只列号 + 主题；ADR-032+ 列完整状态。
@@ -66,6 +67,7 @@
 | ADR-040 | **DR Topology SVG 视觉规范** ← 让号自 ADR-038 | PRD-010 让号 / 2026-06-01 | 草稿（占号待 PRD-010 实施落地） | 架构设计.md §9（待写） |
 | ADR-041 | **项目编号统一台账 (LEDGER.md) + Rule G 取号 SOP**（跨 PRD/ADR/TC/D/C 全 series 防撞号；并发由 main agent 预分配；让号 forward-only；漂移检查 gen-data.mjs） | Claude (Rule G 演练) / 2026-06-01 | **草稿** ✅（架构设计.md §9 正文已写, 含 Context/Decision/Consequences/Alternatives/Verification/References 7 段） | 架构设计.md §9 ADR-041 |
 | ADR-042 | **开发主体环境上云 (Azure AKS) + CI/CD 三集群推送策略** (关闭本机 docker-desktop; push to main → aks-dev 自动; tag → aks-test; manual gate → aks-prod; dev-deploy.sh 退役; 保留 amd64+arm64 多架构) | Mars 决策 / Claude 起草 / 2026-06-01 | **草稿** ✅（架构设计.md §9 正文 8 段已写: Context/Decision/Consequences/Alternatives/§5 prod 集群待建/§6 dev-deploy 退役时间线/Verification/References；cd.yaml 三阶段已扩；dev-deploy.sh 头加 DEPRECATED notice） | 架构设计.md §9 ADR-042 / cd.yaml / hack/dev-deploy.sh |
+| ADR-043 | **AI Backup Advisor 评分细则 v1.0.0**（Mars 100 分制 4 维 + 行业对标 ISO 27002 §8.13 / NIST CSF / NIST SP 1800-26 / NIST SP 800-53 Rev.5 CP-9 + Mars frame shift "采客户→采平台" 5 个采集 SOP: Tier label / Air-Gapped Vault (WORM+Glacier+Archive Tier) / Vault 间接检测 / MFA 等 PRD-013 / DR Drill 等 PRD-007 §4.6） | Mars D-WAIT-002 / Claude 起草 / 2026-06-02 | **草稿**（占号 + 待写入 架构设计.md §9 正文 7 段: Context/Decision/Consequences/Alternatives/Verification/References + 评分公式细则表 + 维度采集分档表） | 架构设计.md §9 ADR-043 |
 
 ---
 
