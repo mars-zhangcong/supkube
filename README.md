@@ -47,6 +47,15 @@ npm install
 npm run dev
 ```
 
+### Fast Debug Mode (one-command inner loop)
+Skip the slow build-image → push → deploy cycle while iterating. One command
+starts the backend + Vite (HMR) locally so saved changes show up in <1s:
+```bash
+./hack/dev-local.sh            # full stack (go run backend + Vite)
+./hack/dev-local.sh --mode ui  # UI-only: port-forward the deployed backend, run Vite only
+```
+See [FAST-DEBUG-MODE.md](FAST-DEBUG-MODE.md) for what it covers and the git-push cadence.
+
 ## Tech Stack
 
 - **Backend**: Go, Gin, client-go, controller-runtime
