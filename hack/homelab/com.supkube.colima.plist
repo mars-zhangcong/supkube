@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- LaunchAgent（用户会话级，需开启"自动登录"才会开机自启）：
+     看门狗模式 —— 开机即跑一次(RunAtLoad)，之后每 60s(StartInterval) 检查，
+     Colima 挂了就自动拉起。配合 colima 内置 k3s，集群异常可自愈。
+     装到 ~/Library/LaunchAgents/com.supkube.colima.plist -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.supkube.colima</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/supkube-colima-up.sh</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StartInterval</key>
+  <integer>60</integer>
+  <key>StandardOutPath</key>
+  <string>/tmp/supkube-colima-up.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/supkube-colima-up.log</string>
+</dict>
+</plist>
