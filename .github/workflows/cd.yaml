@@ -154,8 +154,7 @@ jobs:
             --set frontend.image.repository=$ACR_LOGIN_SERVER/frontend \
             --set frontend.image.tag=${{ needs.build-push.outputs.version }} \
             --set service.frontend.type=LoadBalancer \
-            --wait --timeout 15m \
-            --burst-limit 300
+            --wait --timeout 15m --burst-limit 300
       - name: Verify-before-ship（Rule D · aks-dev）
         run: |
           chmod +x hack/ci-verify.sh
@@ -183,6 +182,8 @@ jobs:
         run: |
           helm repo add vmware-tanzu https://vmware-tanzu.github.io/helm-charts
           helm dependency build "$CHART_DIR"
+          # -f values-test.yaml: 关认证(便于冒烟直连) + 声明 Azure BSL(velero-dr-test)。
+          # 见 supkube-helm/values-test.yaml（不含密钥；凭据用集群内已建 secret）。
           # 2026-06-02 fix: --timeout 5m → 15m + --burst-limit 300
           # CD #6 实测撞 "client rate limiter Wait ... context deadline exceeded"
           # 根因: test cluster 跟 Kasten K10 + KubeVirt + CDI + demo-vm* 共存,
@@ -193,13 +194,12 @@ jobs:
           # 已 ready, 不会再大量 install API 调用, 但保留宽配置防 chart 加新 CRD.
           helm upgrade --install supkube "$CHART_DIR" \
             -n supkube --create-namespace \
-            --set eula.accept=true \
+            -f supkube-helm/values-test.yaml \
             --set backend.image.repository=$ACR_LOGIN_SERVER/backend \
             --set backend.image.tag=${{ needs.build-push.outputs.version }} \
             --set frontend.image.repository=$ACR_LOGIN_SERVER/frontend \
             --set frontend.image.tag=${{ needs.build-push.outputs.version }} \
-            --wait --timeout 15m \
-            --burst-limit 300
+            --wait --timeout 15m --burst-limit 300
       - name: Verify-before-ship（Rule D · aks-test）
         run: |
           chmod +x hack/ci-verify.sh
@@ -313,8 +313,7 @@ jobs:
             --set backend.image.tag=${{ needs.build-push.outputs.version }} \
             --set frontend.image.repository=$ACR_LOGIN_SERVER/frontend \
             --set frontend.image.tag=${{ needs.build-push.outputs.version }} \
-            --wait --timeout 15m \
-            --burst-limit 300 \
+            --wait --timeout 15m --burst-limit 300 \
             --atomic                          # 升级失败自动回滚到上一个 release
       - name: Verify-before-ship（生产）
         run: |
