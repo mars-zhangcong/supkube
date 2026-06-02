@@ -1,0 +1,27 @@
+{{- /*
+  Dex publicURL install-time gate (companion to eula-check.yaml).
+
+  When embedded Dex is enabled, the OIDC issuer + redirect URLs must point at
+  the EXTERNAL address the browser uses to reach SupKube. There is no safe
+  default for that address, so we REQUIRE auth.dex.publicURL and fail the
+  install fast with an actionable message when it's missing.
+
+  History (why this gate exists):
+    The chart used to default auth.dex.publicURL to "http://localhost:30888".
+    That made `helm install` succeed everywhere but silently broke login on
+    every non-local install: after sign-in Dex redirected the browser back to
+    its OWN localhost:30888 → ERR_CONNECTION_REFUSED. The failure surfaced at
+    first login (hard to diagnose, customer already onboarded) instead of at
+    install time. Fail-fast moves that error to where it's cheap to fix.
+
+  Pure {{ fail }} (no ConfigMap, unlike eula-check) — there is nothing to
+  persist; this is a precondition check, not acceptance metadata.
+
+  Note: issuer auto-derives from publicURL (<publicURL>/dex) via the
+  supkube.dex.issuer helper, so operators set only ONE value here.
+*/}}
+{{- if .Values.auth.dex.enabled }}
+{{-   if not .Values.auth.dex.publicURL }}
+{{-     fail "\n\n  ❌ SupKube install error: embedded Dex is enabled but auth.dex.publicURL is empty.\n\n  Dex needs the EXTERNAL URL your users' browsers use to reach SupKube.\n  There is no default — a localhost guess silently breaks login after sign-in.\n\n  Add it to your helm install command:\n\n    --set auth.dex.publicURL=https://supkube.example.com\n\n  Pick the value that matches how SupKube is exposed:\n    local dev / NodePort : --set auth.dex.publicURL=http://localhost:30888\n    Ingress / domain     : --set auth.dex.publicURL=https://supkube.example.com\n    Tailscale homelab    : --set auth.dex.publicURL=https://host.tailnet.ts.net\n\n  issuer derives automatically as <publicURL>/dex (override: --set auth.dex.issuer=...).\n\n  Not using SupKube's built-in login? Disable embedded Dex instead:\n    --set auth.dex.enabled=false\n\n  Full install reference: USER_MANUAL §23\n" }}
+{{-   end }}
+{{- end }}

@@ -45,7 +45,7 @@ spec:
               # Browser-facing issuer — must match the `iss` claim Dex/IdP
               # stamps into JWTs. Derived from dex.issuer when embedded Dex
               # is on; falls back to externally-configured oidc.issuerURL.
-              value: {{ if .Values.auth.dex.enabled }}{{ .Values.auth.dex.issuer | quote }}{{ else }}{{ .Values.auth.oidc.issuerURL | quote }}{{ end }}
+              value: {{ if .Values.auth.dex.enabled }}{{ include "supkube.dex.issuer" . | quote }}{{ else }}{{ .Values.auth.oidc.issuerURL | quote }}{{ end }}
             - name: OIDC_DISCOVERY_URL
               # In-cluster URL where the backend fetches /.well-known/...
               # For embedded Dex this is the Service DNS (browser URL would

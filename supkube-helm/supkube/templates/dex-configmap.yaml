@@ -25,7 +25,7 @@ data:
     # The issuer URL is what browsers see — must match what's in JWTs.
     # We proxy /dex/* through the SupKube frontend nginx so there's a
     # single user-facing URL/port (issuer == public hostname).
-    issuer: {{ .Values.auth.dex.issuer | quote }}
+    issuer: {{ include "supkube.dex.issuer" . | quote }}
 
     # Storage: in-memory is fine for stateless Dex. Sessions live in
     # the browser; tokens are signed JWTs that Dex doesn't track once
