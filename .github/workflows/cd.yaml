@@ -153,6 +153,7 @@ jobs:
             --set backend.image.tag=${{ needs.build-push.outputs.version }} \
             --set frontend.image.repository=$ACR_LOGIN_SERVER/frontend \
             --set frontend.image.tag=${{ needs.build-push.outputs.version }} \
+            --set service.frontend.type=LoadBalancer \
             --wait --timeout 15m \
             --burst-limit 300
       - name: Verify-before-ship（Rule D · aks-dev）
