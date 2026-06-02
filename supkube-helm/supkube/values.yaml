@@ -470,13 +470,26 @@ auth:
       repository: dexidp/dex
       tag: v2.39.1
       pullPolicy: IfNotPresent
-    # Public URL the BROWSER uses to reach Dex (through frontend nginx).
-    # For local Docker Desktop: http://localhost:30888
-    # For production: https://supkube.example.com
-    # Issuer = publicURL + dexProxyPath. Must be reachable from the user's
-    # browser AND from the backend pod (we use this to fetch OIDC discovery).
-    publicURL: "http://localhost:30888"
-    issuer: "http://localhost:30888/dex"
+    # Public URL the BROWSER uses to reach SupKube (Dex is proxied at
+    # <publicURL>/dex through the frontend nginx). **REQUIRED when dex.enabled
+    # — there is NO default.** An install with dex.enabled and an empty
+    # publicURL fails fast at `helm install` time (see dex-check.yaml).
+    #
+    # Why no default: the old `http://localhost:30888` default silently broke
+    # login on EVERY non-local install — after sign-in Dex redirected the
+    # browser back to its OWN localhost:30888 (nothing there → ERR_CONNECTION_
+    # REFUSED). Better to fail loudly at install than to break at first login.
+    #
+    # Set it to exactly the address users type in the browser:
+    #   local dev / NodePort : http://localhost:30888
+    #   Ingress / domain     : https://supkube.example.com
+    #   Tailscale homelab    : https://host.tailnet.ts.net
+    publicURL: ""
+    # OIDC issuer. Leave empty (recommended) to auto-derive as <publicURL>/dex
+    # via the supkube.dex.issuer helper — operators then set only publicURL.
+    # Override ONLY if Dex is exposed at a different host/path than
+    # publicURL + "/dex".
+    issuer: ""
     # Client secret SupKube uses to authenticate to its own Dex. In demo
     # this is a fixed string; in production override via Helm. The backend
     # reads the same value from auth.oidc.clientSecret (auto-wired).

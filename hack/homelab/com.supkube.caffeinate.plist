@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- LaunchDaemon：系统级常驻 caffeinate，兜底防止空闲睡眠。
+     -d 显示 / -i 空闲 / -m 磁盘 / -s 系统(接电时) / -u 模拟用户活动。
+     KeepAlive=true → 进程退出/被杀立刻重启。RunAtLoad → 开机即起。 -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.supkube.caffeinate</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/caffeinate</string>
+    <string>-dimsu</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/tmp/supkube-caffeinate.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/supkube-caffeinate.log</string>
+</dict>
+</plist>

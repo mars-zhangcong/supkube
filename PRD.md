@@ -59,11 +59,12 @@
 | [PRD-005](#prd-005) | Log Viewer v2 — 完整运维级日志观察平台（Virtual Scroll + SSE + 三层日志 + 错误代码 + Minimap + Forwarding + AI 根因） | **已评审（2026-05-31）** | #118 |
 | [PRD-006](#prd-006) | Activity Task Detail Timeline（任务详情阶段时间线 + Log Viewer 跳转 + AI 排错位） | **已评审（2026-05-31）** | #117 |
 | [PRD-007](#prd-007) | 完整 3-2-1-1-0 数据韧性（5 层可视化 + Layer 4 Backup Copy + Fingerprint + Lifecycle + DR Drill） | **已评审（2026-05-31）** | #126 |
-| [PRD-008](#prd-008) | RP 删除生命周期 + Activity 持久化 + Force Delete 副作用治理（Activity 不依赖 Velero CR · 删除中锁定 · 孤儿清理） | **草稿（2026-05-31）** | #148 |
-| [PRD-009](#prd-009) | Policy 模型对齐 Kasten（Snapshot Policy + Import Policy 双 Action · Continuous/Scheduled 子模式 · fingerprint enforce/warn/disabled · 替代 Velero `backupSyncPeriod` 60s 兜底） | **v1 Phase 2 进行中（2026-06-01）** — Phase 1 (Snapshot/Export 词汇) 已 ship；Phase 2 扩 Action 类型 + ImportPolicy CRD/controller 进行中 | #149 / #156 / #157-163 |
-| [PRD-010](#prd-010) | DR Topology v2（Cluster/BSL 视觉重构 + Local Snapshot + Backup Copy 节点显示 · 5 类节点对齐 ADR-031 5 层模型） | **草稿（2026-05-31）** | #150 |
-| [PRD-011](#prd-011) | AI Backup Advisor MVP（智能业务梳理 + 数据安全综合评分 + 备份建议 · 规则算分 + LLM 解释 · Canonical DSL · 本地分析小闭环） | **草稿（2026-06-01）** | #164（待建） |
-| [PRD-012](#prd-012) | Call Home / Auto-Support（三档连接 · 采集器上送 + 自动开 Case · opt-in · 复用 ADR-033 脱敏） | **草稿（2026-06-01）** | #165（待建） |
+| [PRD-008](#prd-008) | RP 删除生命周期 + Activity 持久化 + Force Delete 副作用治理（Activity 不依赖 Velero CR · 删除中锁定 · 孤儿清理） | **改正中（2026-06-02 D1-D5 finding 闭环）** | #148 |
+| [PRD-009](#prd-009) | Policy 模型对齐 Kasten（Snapshot Policy + Import Policy 双 Action · Continuous/Scheduled 子模式 · fingerprint enforce/warn/disabled · 替代 Velero `backupSyncPeriod` 60s 兜底） | **v2 改正中（2026-06-02 G1-G5 全闭环）** — Phase 1 ship + Phase 2 任务拆 7 阶段; PRD-Review 第六份 5 finding 全部闭环 (G5 Phase 2 DoD/§9 任务/§9.3 风险; G1 卖点诚实表述; G2 backupSyncPeriod 默认 60s; G3 fingerprint warn 半成品标注; G4 Action Type save 不可改 UI alert), 等 Mars 重审 | #149 / #156 / #157-163 |
+| [PRD-010](#prd-010) | DR Topology v2（Cluster/BSL 视觉重构 + Local Snapshot + Backup Copy 节点显示 · 5 类节点对齐 ADR-031 5 层模型） | **改正中（2026-06-02 F1-F4 finding 闭环）** | #150 |
+| [PRD-011](#prd-011) | AI Backup Advisor MVP（智能业务梳理 + 数据安全综合评分 + 备份建议 · 规则算分 + LLM 解释 · Canonical DSL · 本地分析小闭环） | **改正中（2026-06-02）** | #164 |
+| [PRD-012](#prd-012) | Call Home / Auto-Support（三档连接 · 采集器上送 + 自动开 Case · opt-in · 复用 ADR-033 脱敏） | **改正中（2026-06-02, I2 仍 Blocked）** | #165 |
+| [PRD-013](#prd-013) | SupKube Four-Eyes Authorization（备份安全二次审批 + MFA · 4 大类 15 受保护操作 · ApprovalPolicy/ApprovalRequest CRD · Veeam VBR 13 对标 + Kasten 没有 = 真差异化） | **草稿（2026-06-02 立项，Mars D-WAIT-002 frame shift 派生）** | TBD（取号待 Mars 批后建 task） |
 
 ---
 
@@ -2655,11 +2656,12 @@ Integrity Check:  ✅ Verified
 |---|---|
 | **PRD 编号** | PRD-008 |
 | **任务编号** | #148 (placeholder, 待建) |
-| **状态** | 草稿（2026-05-31） |
+| **状态** | **改正中**（2026-06-02 PRD-Review 第六份 D1-D5 finding 修订, 见 §13） |
 | **作者** | Claude / Mars |
 | **目标版本** | v0.9.x |
 | **关联 ADR** | ADR-031（5 层韧性）/ ADR-035（结构化日志）/ **拟 ADR-039（Activity 持久化与 audit event 存储选型）** ← 让号 2026-06-01：ADR-037 已分配给 PRD-011/012 统一数据采集架构（台账自洽，PRD-Review 第六份要求让号） |
-| **关联 PRD** | **PRD-006（Activity Task Detail Timeline）—— 本 PRD 是 PRD-006 的数据层基石** / PRD-005（Log Viewer v2）/ PRD-007（5 层韧性, ForceDelete 同源）|
+| **关联 PRD** | **PRD-006（Activity Task Detail Timeline）—— 本 PRD 是 PRD-006 的数据层基石** / PRD-005（Log Viewer v2）/ PRD-007（5 层韧性, ForceDelete 同源 + D5 孤儿清理 Kopia 同源 P1）|
+| **PRD-Review 状态** | 2026-05-31 评审 → 5 finding 已记 → 2026-06-02 finding 修订收口（§13） |
 
 ### 1. Goal（目标）
 
@@ -3039,6 +3041,108 @@ POST /api/v1/maintenance/orphan-cleanup
 | 2026-05-31 | Mars (testing 20260531.md #2) | — | 提出三件: (a) 清理 RP 应作为 Activity Task 记录有日志可查; (b) 删除中 RP 应锁定不可操作; (新增) **Activity 数据被清空 = 严重 bug**——"本身即使是还原点不在了, 也应该是给客户看到执行的历史的" |
 | 2026-05-31 | Claude | — → **草稿 (v1)** | 起草 PRD-008。**关键架构判定**: 当前 `ListActions` 从 Velero CR 派生 = 实时 view 不是持久化 audit log → Backup CR 被删 Activity 立刻消失 = Mars 反馈的根因。修复方向: 独立 audit event 流 (拟 ADR-039 选 K8s Event / CRD / 独立 store), ListActions 改 union。**定位**: 本 PRD 是 PRD-006 Activity Timeline 的数据层基石——没有 audit 持久化, PRD-006 全是空中楼阁。删除 Task 化 5 阶段 + RP 列表锁定 + Force Delete 改名/警告 + 孤儿清理 endpoint 一并解决。Q1-Q8 待 Mars 评审拍板, 重点 Q1 存储选型决定整个 Phase 0 路径。|
 | 2026-06-01 | Claude (PRD-Review 第六份 跨文档 finding) | — | **ADR-037 让号 → ADR-039**：原 PRD-008 占 ADR-037（审计存储选型），但 2026-06-01 PRD-011/012 立项时 Agent A 把 037 分配给"统一数据采集架构"，台账内部自洽但 PRD-008 仍占旧号 = 撞号复发。按 PRD-Review 第六份 §二建议让号到 ADR-039。本 PRD 全文 6 处 037→039 替换 + 架构设计.md ADR 台账登记。|
+| 2026-06-02 | Claude (PRD-Review 第六份 D1-D5 finding 闭环) | 草稿 → **改正中** | 加 §13 PRD-Review 第六份 D1-D5 finding 修订段：**D1** audit 存储选型 (拟方案 a 嵌入式 store on PV, 避 etcd 反模式 + 跟 ADR-019 分工: PRD-008 audit 管 Task 生命周期, ADR-019 audit 管业务操作行为) / **D2** 不可篡改 3 层防御 (hash-chain + admission webhook + WORM hint, "tamper-evident not tamper-proof" 客户预期管理) / **D3** 集群损毁后 audit 存活 (每日/每 1000 事件批量归档到 BSL + HMAC 签名 + `supkube audit verify-archive` 命令在 fresh 集群可拉+验签+重建 timeline) / **D4** deletionState 从 task store 派生不 list DBR (跟 PRD-006 task store SSOT 共用) / **D5** 孤儿清理 mode 参数区分纯元数据 (裸 mc rm OK) vs 带数据 (走 Kopia maintenance run, 跟 PRD-007 P1 共用 BSL 删除指引)。§8 DoD 加 #19-#23 五条新验收点。状态草稿→改正中, 可转研发中。|
+
+### 13. PRD-Review 第六份 D1-D5 finding 修订段（2026-06-02 闭环）
+
+> **修订动因**：PRD-Review-2026-05-31-PRD008-009.md（PRD-Review 第六份 §三）对 PRD-008 给出 5 个 finding（D1-D5），未在原 §4-§12 闭环；本段是**独立闭环段**，每个 finding 给出**修订后的拟方案** + **写进 §8 DoD 的可验证条目**。
+>
+> **优先**：本段优先于 §1-§12 中冲突点（如果原文跟本段矛盾，以本段为准）。Phase 0 起跑前**先实测本段拟方案**（Verify-Before-Architect, MEMORY §五）。
+
+#### D1（High）audit event 存储选型不可走 etcd 反模式 + 跟 ADR-019 既有审计对账
+
+**finding 原文**：etcd 有容量配额（默认 2-8 GB）+ 与集群状态共享, 不适合高写入 append-only 审计流；大量 CRD 对象损害 apiserver list/watch 与 informer 内存。同时 SupKube 已有 ADR-019 审计日志 (K8s Events + stdout)，本 PRD 必须说清是**取代**还是**并存**。
+
+**拟方案（Phase 0 实测后定）**：
+
+| 选项 | 优点 | 缺点 | 评级 |
+|---|---|---|---|
+| **(a)** 嵌入式 store on PV（BadgerDB / BoltDB / SQLite）+ K8s PVC | 0 apiserver 压力, append-only 写性能高 (>10k/s), 容量可扩展, 跟 ADR-019 完全互补 | 需要 PVC; 集群损毁后随 PVC 丢失（D3 需归档到 BSL）; pod 重启需 fsync | ⭐ **推荐 (拟方案)** |
+| (b) 独立 K8s Event with custom reason | 复用 K8s 原生机制 + apiserver list/watch 已 work; ADR-019 同款 | etcd 反模式（K8s Event 也存 etcd）; etcd 容量 2-8 GB 顶天; 1 万 event = ~50 MB | ❌ 拒（确认 finding 担忧）|
+| (c) 自建 CRD 类（每个 audit event 一个 CR）| 强 schema, kubectl 可查 | etcd 反模式 + apiserver 内存爆炸 | ❌ 拒 |
+| (d) 外部时序数据库（Loki / TimescaleDB） | 专业方案 | 增运维依赖 + airgap 客户额外采购 + 跟一站式定位冲突 | ⏸ v2 候选 |
+
+**与 ADR-019 关系**：**并存 / 分工**。
+- ADR-019 audit = **操作行为审计**（actor / verb / resource / timestamp，"who logged in / who created policy"）
+- PRD-008 audit = **Task 生命周期审计**（task_id / state_transition / cause / linked_resource，"DeleteBackup task Pending → Releasing → Done"）
+- ADR-039 §6 写明**字段不重叠** + 客户排查时分别查
+
+**DoD 入 §8**：见下方 §8.D1 条目（追加 #19）。
+
+#### D2（High）"不可篡改"必须落实到真实机制
+
+**finding 原文**：原 §4 说"audit event 不可篡改"，但实现层面**没有真实机制**——`internal/audit/event.go` 如果只是普通 Go struct 写 PV，运维 SSH 改 BadgerDB 文件就能改。合规审计不认账。
+
+**拟方案（3 层防御, Phase 1 实施）**：
+
+1. **写入路径强制**：Append API 在写 PV 前**自动追加 hash-chain**（`event.prev_hash = sha256(prev_event_content)`），任何中间 event 改了 → 后续 hash 全错 → `audit verify` 命令检出。
+2. **K8s admission webhook**：拦截**所有**对 audit store PVC 的 mount + 对 backend pod 的 exec/cp 请求，凡是不带 `audit-admin-bypass-token` 一律拒。
+3. **WORM 文件系统 hint**：PVC 的 StorageClass 加 `worm: true`（Phase 2, 仅 Azure Disk Ultra SSD / AWS EBS io2 支持）。Best-effort，不依赖。
+
+**安全等级**：三层 ranged，不是绝对不可篡改（cloud provider 控制台仍能改 disk）。文档化：
+
+> ⚠ "Tamper-evident" not "tamper-proof"：cloud 控制台权限不收的话，最终管理员仍能改。本系统提供应用层 hash-chain + K8s admission 两道防线，足以应付**审计师视角 + 内部 SRE 视角**的检查。
+
+**DoD 入 §8**：见 §8.D2（#20）。
+
+#### D3（High）集群损毁后 audit 必须存活
+
+**finding 原文**：当前方案 audit 写 PVC，集群 DR 场景下 audit 跟 SupKube 一起死。客户需要 audit 证明"我之前确实备份过, 不是事后伪造"——audit 必须**比业务集群活得久**。
+
+**拟方案（Phase 2 实施, 4 路径）**：
+
+| 路径 | 描述 | 取舍 |
+|---|---|---|
+| **(a)** Audit 持续归档到 BSL（每日 / 每 1000 事件批量上传 `.audit-archive.jsonl.gz`） | 客户 BSL 一般独立 region; SupKube 死 BSL 不死 | ⭐ **拟主方案** |
+| (b) Audit 跨集群 replicate 到管理集群 | 多集群部署可用 | v1.x; 单集群客户白搭 |
+| (c) ImportPolicy 同款机制 audit 跨集群 sync | 复用 PRD-009 v2 fingerprint + BSL | ⏸ v2 候选 |
+| (d) Customer's SIEM (Splunk/DataDog) syslog forward | 真专业 | airgap 客户不可用 |
+
+**Archive 文件格式**：`.supkube-audit-archive-<from>-<to>.jsonl.gz`，跟 fingerprint json 同源签名（HMAC + clusterUID + sourceClusterName）。
+
+**Archive 验证**：`supkube audit verify-archive --bsl=<bucket>` 在 fresh 集群上拉回 + 验签 + 恢复 audit timeline。
+
+**DoD 入 §8**：见 §8.D3（#21）。
+
+#### D4（Med）deletionState 由 Task 状态驱动, 不要 list DBR
+
+**finding 原文**：原 §4.4 GET /backups 加 deletionState 字段，建议 controller list DBR (`DeleteBackupRequest`) 算 deletionState。但 DBR list 性能差 + DBR 是 Velero internal CR 不该作 SupKube 状态机。
+
+**拟方案**：**deletionState 字段从 Task store 派生**：
+- Task store 已经有 `task_id` + `state` + `linked_backup_name`（本 PRD 自身设计的核心数据模型）
+- GET /backups handler 改: 拿 backup name → query task store `WHERE task_type IN ('DeleteBackup','ForceDeleteBackup') AND linked_backup_name=<name> AND state IN ('InProgress','Pending')` → 命中 = `deletionState=InProgress`
+- 不再 list DBR; DBR 是 Velero internal, 用 task store 是 SupKube 自己的状态机
+- 性能: in-memory cache + index by linked_backup_name, 增量 < 5ms
+
+**与 PRD-006 关系**：Task store 就是 PRD-006 Activity Timeline 后端那张 SSOT 表，两 PRD 共用 task 表 = SSOT。
+
+**DoD 入 §8**：见 §8.D4（#22）。
+
+#### D5（High）孤儿清理在 Kopia 共享去重仓库不可裸 mc rm
+
+**finding 原文**（也是 PRD-007 P1 同源）：Velero 卷数据走 Kopia 共享仓库 `bucket/kopia/<ns>/`，**同 ns 多个 Backup 数据块去重共享**。用户 `mc rm bucket/kopia/<ns>/` 会**误删同 ns 其它 backup 卷数据**。
+
+**拟方案**：孤儿清理流程**区分元数据 vs 数据**：
+
+1. **纯元数据孤儿**（`bucket/backups/<name>/` 有目录但 K8s 无 CR）→ 可裸 mc rm（数据不在这）
+2. **带数据孤儿**（同 ns kopia 仓库里有数据 block 但 K8s 无任何 backup CR 引用）→ **必须走 Kopia maintenance**:
+   - `kopia maintenance run --full` 让 Kopia 自己 GC 没引用的 block（Kopia 用 retention/snapshot tag 跟踪引用计数）
+   - 或 Velero DBR 走标准路径自动触发 Kopia GC
+3. **UI / endpoint 强制提示**：用户点 "清理孤儿" 必须先选 `--mode=metadata-only` 或 `--mode=full-with-kopia-maintenance`，后者**额外二次确认 + 警示横条**
+
+**文档化**：USER_MANUAL §X "Velero/Kopia 共享仓库正确删除操作指引"——本 PRD 跟 PRD-007 P1 共用一份。
+
+**DoD 入 §8**：见 §8.D5（#23）。
+
+#### §8 DoD 新增条目（D1-D5 finding 落地, 接在原 #18 之后）
+
+| # | 验收点 | finding |
+|---|---|---|
+| 19 | **D1 闭环**：ADR-039 给出选型决定（拟方案 a 嵌入式 store on PV），含 Phase 0 实测数据（1 万 event 写 < 500ms, list 100 条 < 100ms, 容量增长 < 10MB / 1 万 events）；§6 写明跟 ADR-019 对账规则 |
+| 20 | **D2 闭环**：`audit verify <store-path>` 命令存在 + 能检出 hash-chain 篡改; admission webhook 拒任何不带 token 的 audit PVC mount 请求 (e2e test 验); 文档化"tamper-evident not tamper-proof" 客户预期管理 |
+| 21 | **D3 闭环**：audit 每日 / 每 1000 事件批量归档到 BSL `.supkube-audit-archive-*.jsonl.gz` (HMAC 签名); `supkube audit verify-archive` 命令在 fresh 集群可拉 + 验签 + 重建 timeline (e2e test 验) |
+| 22 | **D4 闭环**：GET /backups deletionState 字段从 task store 派生（不 list DBR），增量延时 < 5ms（benchmark 数据贴 PR）|
+| 23 | **D5 闭环**：孤儿清理 endpoint 必须接 `mode` 参数（`metadata-only` 或 `full-with-kopia-maintenance`），后者二次确认 + 真触发 `kopia maintenance run`（或 Velero DBR）而非裸 mc rm; USER_MANUAL §X 共用 PRD-007 P1 的 BSL 删除指引 |
 
 ---
 
@@ -3161,6 +3265,7 @@ POST /api/v1/maintenance/orphan-cleanup
 - Action Type pill group **必须最顶**, 在 Name 字段之上（先决定走哪条数据流, 再填业务字段）
 - pill 选中后**切换分支表单**, 老分支字段清空（防 stale state）
 - pill **不可逆**（Save 后该 Policy 的 Action Type 不可改, 只能删了重建）——Snapshot Policy 写到 Velero Schedule, Import Policy 写到新 ImportPolicy CR, 数据模型不同, 改类型 = 改 CRD 类型, 无法 in-place migration
+- **(G4 Low 2026-06-02 PRD-Review 闭环)**: Save 前 UI 防呆——Action Type pill 下方加固定 inline alert（El-Alert type=warning, 不可关闭）"⚠ Action Type (Snapshot/Import) 保存后**不可更改**, 选错需删除策略后重建。当前选择: <Snapshot ▾>"; 编辑现有 Policy 时该 pill 灰化为只读, 后跟 "(Action Type 不可改, 这是设计约束, 见 USER_MANUAL §Policy)" 文案; Save 按钮触发 confirm dialog "你正在创建 <Snapshot|Import> 类型的 Policy, 此类型不可更改, 是否继续？"（首次创建强制弹一次, localStorage 记 dismissed 标记）
 - 列表页 Policy 行加 Action Type icon 前缀（📸 / 📥）+ filter 下拉支持按 Action Type 过滤
 
 #### 4.1 Policy 新建 / 编辑抽屉重构（前端 P0）
@@ -3257,7 +3362,7 @@ POST /api/v1/maintenance/orphan-cleanup
 | 模式 | 行为 | 适用场景 | 与 PRD-007 §4.4 关系 |
 |---|---|---|---|
 | **enforce** （**跨集群默认**, hard required） | `FingerprintStatus != ok` → 拒绝 Import, RP 不出现在本集群列表, audit `ERR_FINGERPRINT_REQUIRED`; 缺签名 / 签名无效 / hash 对不上 → 全部拒 | 生产 DR / 跨账号 / 跨地域, 任何被 BSL 篡改的 RP 都不能进 | PRD-007 §4.4 "跨集群场景 signature 必需" 的 Policy 层落地 |
-| **warn** | `FingerprintStatus != ok` → RP 仍 Import 但 UI 标 `⚠ 完整性未校验` chip + audit `ERR_FINGERPRINT_WARN`; 用户点 Restore 时**额外** confirm dialog "该 RP 未通过 fingerprint 校验, 仍要恢复?" | 单集群 dev / staging, admin 知道没配 shared secret 但想用 | PRD-007 §4.4 "单集群 signature optional" 的扩展（生产严格化 + UI 提示） |
+| **warn** | `FingerprintStatus != ok` → RP 仍 Import 但 UI 标 `⚠ 完整性未校验` chip + audit `ERR_FINGERPRINT_WARN`; 用户点 Restore 时**额外** confirm dialog "该 RP 未通过 fingerprint 校验, 仍要恢复?"。**(G3 Low 2026-06-02 PRD-Review 闭环)**: hover chip 时 tooltip 补一行 "fingerprint 缺失也意味着 RP **可能未完成** —— 源备份完成才会写 fingerprint, enforce 模式天然兼"备份完成"门信号; warn 模式失去该保护, 这个 RP 可能是源正在写、尚未完成的半成品, 用前请人工确认源 backup status"; 列表行的 Import 时间列加 `<source RP 状态>` 显示来源 backup phase（Completed/InProgress/Failed）| 单集群 dev / staging, admin 知道没配 shared secret 但想用 | PRD-007 §4.4 "单集群 signature optional" 的扩展（生产严格化 + UI 提示） |
 | **disabled** | 完全跳过 fingerprint 校验, 信任 BSL 上的所有 fingerprint JSON, RP 直接 Import | 客户已有外部 WORM / Object Lock 兜底（PRD-007 §4.2）, 不想叠加 HMAC 层 | PRD-007 §4.4 威胁模型注脚 "WORM 替代 HMAC" 的 Policy 层 opt-out |
 
 **默认值**:
@@ -3474,14 +3579,87 @@ status:
 11. 兼容期 i18n key（`policy.actionSnapshot = "L1 Snapshot"` 等）**保留**在 locale 文件但**不被新 UI 引用**（grep 验证）。
 12. Audit log 字段 `policy.export_enabled` + `policy.tier`（兼容期双写）正确出现, 文档同步。
 
-### 9. 任务拆分（2-3 phase, 估时 ~3-4 人日）
+> **2026-06-01 PRD-Review G5 修订**：上 12 条是 **Phase 1（词汇重构）DoD**。Phase 2 引入 ImportPolicy CRD/controller/fingerprint, **完整规范在 §4.5**，**独立 Phase 2 DoD 在下方 §8.2**。
 
-| Phase | 内容 | 估时 | 依赖 |
+### 8.2 Phase 2 验收标准（DoD, 14 条 — 对应 §4.5 ImportPolicy 规范）
+
+> **2026-06-01 PRD-Review 第六份 G5 finding 闭环补**：原 §8 没覆盖 Phase 2 ImportPolicy CRD/controller/fingerprint 三档/状态机/错误码。这一段补齐, 每条可通过 e2e test 或 kubectl 实测验证。
+
+**CRD + Schema**:
+
+13. **ImportPolicy CRD 已注册**（`importpolicies.supkube.io/v1`），`kubectl get crd importpolicies.supkube.io` 返回 + `kubectl explain importpolicy.spec` 列出全部 §4.5.5 字段。
+14. **OpenAPI v3 schema 严格校验**：错配的 spec.continuousInterval（如 `10s`/`abc`）+ spec.schedule（非 5 字段 cron）+ spec.fingerprintMode（非 enum 值）→ `kubectl apply` 直接拒（不进 controller, validation webhook 层就 reject）+ error code 准确（见 §16）。
+
+**Controller 行为**:
+
+15. **Continuous 模式实际跑**：建一个 `mode=Continuous, continuousInterval=60s` 的 ImportPolicy → controller 每 60s 触发一次 syncOnce（看 controller log + `status.lastSyncAt` 时间戳推进）+ 没人为操作 12h 不漂时间（无 drift）。
+16. **Scheduled 模式实际跑**：建 `mode=Scheduled, schedule="*/5 * * * *"` 的 ImportPolicy → 5 min 边界时刻 ±2s 内 `status.lastSyncAt` 更新（看 kubectl get -w）。
+17. **状态机所有合法转换都覆盖**：Pending→Active（首次成功 sync）/ Active→Paused（spec.paused=true）/ Paused→Active（spec.paused=false） / Active→Failed（连 3 次 sync 失败）/ Failed→Active（重新成功）。每条转换 controller log 有明确日志行。
+
+**fingerprint 三档行为**:
+
+18. **enforce 模式**：源 cluster 新建 backup → fingerprint 写入 BSL `.supkube-fingerprint.json` → target ImportPolicy controller 拉取 → HMAC 验签通过 → 创建 Velero Backup CR 含 `supkube.io/fingerprint-status=valid` label。**篡改 fingerprint json 任意字段**（mc 命令改 tarballSHA256） → controller log 显示 `ERR_FINGERPRINT_HMAC_INVALID` + Backup CR **不创建** + `status.rejectedCount +1`。
+19. **warn 模式**：源 cluster 缺 fingerprint json（删掉文件）→ target controller 仍创建 Backup CR 但 label `supkube.io/fingerprint-status=missing` + UI Restore Points 行 chip 显示 "⚠ 未签名"。
+20. **disabled 模式**：完全跳过 fingerprint 校验 → 100% 接受 source backup → Backup CR label `supkube.io/fingerprint-status=disabled` + Settings 有 audit `AUDIT_FINGERPRINT_DISABLED_BY_USER` 记录 + UI 警告 chip "🚨 已关闭校验"。
+
+**RPO + UI**:
+
+21. **UI 实时显示 worst-case RPO**：Policies 行新建 ImportPolicy 时，下方提示 "🛡 Worst-case RPO ≤ {source_backup_interval + import_poll_interval} min"，数字随 user input 即时更新。
+22. **跨集群真实 sync**：docker-desktop 或 aks-dev 建 Snapshot Policy 备份 ns demo-app 到共享 BSL → AKS-test 建 ImportPolicy mode=Continuous interval=60s → 60s+ε 内 AKS-test `kubectl get backup -n velero` 看到该 backup 名 + Imported chip。
+
+**错误码 + 可观测**:
+
+23. **14 条错误码完整**：`ERR_FINGERPRINT_MISSING` / `_TAMPERED` / `_HMAC_INVALID` / `_REQUIRED` + `ERR_IMPORTPOLICY_BSL_NOTFOUND` / `_CRON_INVALID` / `_INTERVAL_TOO_SHORT` / 等共 14 条 全部有 e2e test 触发（见 测试用例.md §9.5 TC-IMP-001~004 + 拓展）。
+24. **`status.lastError` 字段**：失败原因写入 ImportPolicy status, kubectl get/describe 看得到, UI 列表行红色 indicator + tooltip 显示。
+25. **GC 行为**：`paused=true` 时 controller 不删已 Imported 的 Backup CR, 仅停止新 poll（防误删客户已恢复的 RP）。
+26. **Drift detection**：observed cluster ID 跟 spec.sourceClusterID 不符 → `status.lastError = "source cluster ID drift"` + 跳过该次 sync（防止恶意 swap source cluster）。
+
+### 9. 任务拆分
+
+#### 9.1 Phase 1（v1 词汇重构, ~3.5d, **2026-06-01 已 ship**）
+
+| Phase | 内容 | 估时 | 依赖 | 实际 |
+|---|---|---|---|---|
+| **P1.1** | Policies.vue 新建抽屉重构（移除 L1/L2 按钮组, 实现 Snapshot 固定 + Enable Export toggle + BSL 下拉过滤）+ i18n（en + zh-CN）+ a11y | 2d | 无 | ✅ 2026-06-01 task #156 |
+| **P1.2** | Policy 列表 badge 替换 + USER_MANUAL §Policy 词汇替换 + 截图更新 + 迁移说明 | 1d | P1.1 | ✅ task #156 |
+| **P1.3** | 老 L1 / L2 Policy 加载兼容测试 + Audit log 双写验证 | 0.5d | P1.1+P1.2 | ✅ task #156 |
+| **Phase 1 总计** | | **~3.5d** ✅ | | **已 ship v0.9.1.12-alpha** |
+
+#### 9.2 Phase 2（ImportPolicy CRD + controller + fingerprint, ~5-6d, **2026-06-01 进行中**）
+
+> **2026-06-01 PRD-Review G5 修订**：原 §9 没列 Phase 2 任务, 这一段补齐。Phase 2 工程量比 Phase 1 大 5x, 不再是"0 迁移风险" — 见 §9.3 风险评级。
+
+| Phase | 内容 | 估时 | 依赖 | 实际 |
+|---|---|---|---|---|
+| **P2.1** | **Backend ImportPolicy CRD types + controller**（`internal/importpolicy/` 8 文件 + controller-runtime reconciler + Continuous time.Ticker + Scheduled robfig/cron/v3 + REST handlers 8 个 + 单测 ≥70%）| 1.5d | Phase 1 | ✅ Agent B 2026-06-01 task #159 |
+| **P2.2** | **Backend fingerprint 模块**（`internal/fingerprint/` 6 文件 — Writer/Validator/TrustStore/HMAC/SecretLoader + 41/41 单测）| 1d | P2.1 共 interface | ✅ Agent C 2026-06-01 task #160 |
+| **P2.3** | **Backend 直 S3 BackupLister**（替代 Velero sync 依赖, 真正 30s/60s RPO）| 0.5d | P2.2 | ✅ Agent G 2026-06-01 task #157 |
+| **P2.4** | **Frontend Policies.vue Action Type pill + Import Policy 表单** + Continuous/Scheduled 模式选 + RPO 实时计算 + fingerprintMode 三档 + i18n 30+ key | 1d | P2.1 REST 契约 | ✅ Agent D 2026-06-01 task #161 |
+| **P2.5** | **Helm chart**：CRD `importpolicies.yaml` + `supkube-fingerprint-secret` 模板 + RBAC verbs + values.yaml 添加 `fingerprint.sharedSecret` + 调 Velero backupSyncPeriod 60s | 0.5d | P2.1 schema | ✅ Agent E 2026-06-01 task #162 |
+| **P2.6** | **测试用例.md §9.5 TC-IMP-001~004 + USER_MANUAL.md §24 Import Policy 章 + ROADMAP #88 ✅** | 0.5d | P2.1~P2.5 | ✅ Agent F 2026-06-01 task #163 |
+| **P2.7** | **Phase 2 真跨集群 verify**（TC-IMP-001 实跑：docker-desktop 建 SnapshotPolicy + AKS 建 ImportPolicy + 60s 跨集群验 fingerprint chip 显示）| 0.5d | P2.1~P2.6 | ⏳ 等 ADR-042 CD#2 deploy-dev 修好后, 真验在 aks-dev+aks-test 两集群 |
+| **Phase 2 总计** | | **~5.5d** | | **6/7 已 ship; P2.7 等 deploy-dev 通** |
+
+#### 9.3 Phase 2 风险评级（2026-06-01 PRD-Review G5 修订补）
+
+> **重要修订**：Phase 1 标"0 迁移风险"，**Phase 2 不再 0 风险**。引入 CRD + controller + Secret + Helm 模板 + RBAC + 新错误码体系 = 多个工程层面的复杂度增加。
+
+| 维度 | Phase 1 | Phase 2 | 评级 |
 |---|---|---|---|
-| **Phase 1** | Policies.vue 新建抽屉重构（移除 L1/L2 按钮组, 实现 Snapshot 固定 + Enable Export toggle + BSL 下拉过滤）+ i18n（en + zh-CN）+ a11y | 2d | 无 |
-| **Phase 2** | Policy 列表 badge 替换（"L1"→"Snapshot only", "L2"→"Snapshot + Export"）+ USER_MANUAL §Policy 词汇替换 + 截图更新 + 迁移说明 | 1d | Phase 1 |
-| **Phase 3** | 老 L1 / L2 Policy 加载兼容测试（手动构造 v0.9.x Policy YAML, 加载到新 UI 验证视觉 + 编辑保存后 dual annotation 不变）+ Audit log 双写验证 | 0.5d | Phase 1+2 |
-| **总计** | | **~3.5d**（中等改造, 不涉及后端 / controller / CR）| |
+| **数据模型变更** | 0（仅 i18n + UI 改） | 新 CRD `importpolicies.supkube.io/v1` + 新 Secret + 新 ConfigMap (`supkube-fingerprint-truststore`) | 🟡 Med — 升级期老集群无 ImportPolicy CR，旧 Velero sync 继续兜底，无 brownfield broken |
+| **后端 controller 复杂度** | 0（无后端改） | 新 reconciler + 跨集群 BSL 读 + HMAC 签名/验签 + 状态机 5 个 transition | 🟡 Med — controller 跑在 backend pod, 单点故障重启即恢复 |
+| **跨集群信任契约** | N/A | `supkube-fingerprint-secret` 必须双集群同值, 失同步 = enforce 模式所有 import 拒收 | 🔴 High — 客户运维不当会断 import 链路 |
+| **客户操作风险** | 0（升级即看到新 UI, 无 break） | 客户需 `helm install --set fingerprint.sharedSecret=...` 跨集群同步 | 🟡 Med — USER_MANUAL §24 + helm NOTES 已说明 |
+| **回退路径** | i18n revert | helm uninstall importpolicies CRD（已写 keep policy, 不会清 secret）→ 退回 Velero 默认 backupSyncPeriod 60s sync | 🟢 Low — 单向 forward but 退路存在 |
+| **新错误码引入** | 0 | 14 条 `ERR_FINGERPRINT_*` + `ERR_IMPORTPOLICY_*`（沿 ADR-035 风格）| 🟢 Low — 跟现有错误码体系一致 |
+
+**整体 Phase 2 风险等级**：🟡 **Med**（不 High——因 fingerprint enforce/warn/disabled 三档让客户能渐进信任 + Velero 默认 sync 退后兜底 + helm chart `keep` policy 防 secret 误删）
+
+**Mitigations 已采取**:
+- 文档化（USER_MANUAL §24 + helm NOTES + 测试用例 §9.5 TC-IMP-001~004 含 sharedSecret 三态对照）
+- fingerprintMode `warn` 默认（不立即 enforce, 给客户观察期）
+- helm Secret `keep` annotation（uninstall 不删客户的 sharedSecret）
+- Velero backupSyncPeriod 维持 60s（ImportPolicy 死了不阻断老路径）
 
 ### 10. 关联文档与任务
 
@@ -3510,6 +3688,7 @@ status:
 | 2026-05-31 | PRD-Review 第四轮（INDEX.md） | 草稿 → **基本通过（低风险）** | 4 finding: E1 Snapshot 语义澄清 CSI vs MinIO (Med) / E2 无快照集群 always-on 退化路径 (Med, 可能 High) / E3 贴 Kasten 官方措辞 "Enable Backups via Snapshot Exports" 复数 (Low) / E4 跨 PRD-007 L1-L5 术语映射 (Med)。结论: 方向通过, 4 finding 不阻断 v1 ship, 可在 v1.x 渐进闭环。|
 | 2026-06-01 | Claude (task #156) | 基本通过 → **v1 Phase 1 已实施** | Mars 客户阻断要求"快速落地"。**已 ship 内容**: (1) Policies.vue create drawer 移除 L1/L2 pill 按钮组, 替换为 Kasten K10 模型 — 顶部 locked pill "📸 快照（CSI）· 始终启用" + 下方 el-switch "启用通过快照导出做备份（Enable Backups via Snapshot Exports）"; (2) i18n key 保留 `actionSnapshot`/`actionSnapshotExport`（代码 ref 不破）, 仅 value 改; 新增 `snapshotSectionTitle` / `snapshotAlwaysOnPill` / `enableExportLabel` / `enableExportHelp` 等 8 个 key (en+zh-CN); (3) 贴 Kasten 官方复数措辞 (E3 闭环); (4) snapshotOnlyWarn / dataPathHelp / dataPathSection 全部去 L1/L2 字眼; (5) Data Path 两列保留视觉, 改注释 "Export OFF/ON" 替代 L1/L2; (6) 后端 `createForm.export.enabled` boolean 0 改动 → ADR-025 dual-schedule + policypair controller 0 影响, audit `policy.export_enabled` 字段自然继承。**未 ship Phase 2 留尾**: E1 Snapshot CSI tooltip (有 dataPathTip.csi 现成的简单 tooltip, 但未明确"vs MinIO"); E2 无 VSC 集群 always-on 退化路径 (现有 capability check 触发警告, 但 Snapshot 仍强制 on); E4 与 PRD-007 Posture 卡 L1-L5 术语映射表 (INDEX.md 标 🔴 open, 等"层↔动作"统一映射敲定)。**实证 verify**: npm run build 通过, frontend image 推 ACR + 双集群 rollout 收敛, 新 chunk `index--yAMMqg0.js` 双集群一致, chunk grep 含新 EN/中文 label 各 1 处, 旧 "L1 Local"/"L1 本地" 字符串 grep = 0, index.html cache-busting 3 meta 在位。**Phase 1 状态**: 已等待 Mars 用户验收。|
 | 2026-06-01 (later today) | Claude (Agent A, task #157-163 立项) | v1 Phase 1 已实施 → **v2 修正中（扩 scope 进 Phase 2）** | **v1.0 漏读 Mars 真实需求"Snapshot 与 Import 并列"**——昨天 ship PRD-009 v1 时仅做 Snapshot Policy 单一 Action 的 Kasten 词汇对齐, 漏了 Mars 一开始就明确的 "Policy 顶部应该有 Action Type 二选一: Snapshot Policy + Import Policy" 这条核心需求; 同时任务 #88（Export/Import 配对模型 + fingerprint, PRD-007 §4.4 设计完整但一直 pending 没动）应在本 PRD 升 P0 落用户面。**v2 修正**: (1) **新增 §4.0 Action 类型**——Policy 顶部 pill group 二选一 Snapshot Policy vs Import Policy + 决策树 + UI mockup + Kasten K10 概念对齐; (2) **新增 §4.5 Import Policy 完整规范**——Continuous/Scheduled 双子模式 (30s/60s/2m/5m 枚举 + cron preset+custom) + RPO 公式 + UI 实时显示 + 卖点对比表 (Kasten 5min floor vs SupKube 30s floor + BSL API 成本 trade-off) + fingerprint enforce/warn/disabled 三档 + ImportPolicy CRD spec 完整字段 + 状态机 (Pending→Active⇄Paused / Active→Failed→Active) + 错误码 family (`ERR_FINGERPRINT_*` + `ERR_IMPORTPOLICY_*` 共 14 条) + 与 PRD-007 §4.4 关系分层说明; (3) **原 §4.5 USER_MANUAL 同步 → 改 §4.6**（无内容变更, 仅编号让位）; (4) **§头表更新**: 任务 +#88 升 P0 + #157-163; 关联 ADR + ADR-038; 关联 PRD + PRD-007 §4.4; 目标版本 v0.9.1.13; 反向兼容澄清 "60s Velero `backupSyncPeriod` 调 5min 退后兜底, 主路径走 ImportPolicy controller"; (5) **顶部索引表 PRD-009 行更新**: 状态 "v1 Phase 2 进行中 (2026-06-01)", 任务 "#149 / #156 / #157-163"。**待评审**: ADR-038 草稿同步 (架构设计.md §9), INDEX.md 已加 PRD-009 v2 评审待跟进 + 术语轴注记 ImportPolicy 加入。|
+| 2026-06-02 | Claude (Auto 5h, task #165) | v2 修正中 → **v2 改正中（G1-G5 全闭环）** | PRD-Review 第六份 2026-06-01-PRD009v2-011-012.md 5 finding 全部闭环: **G5 (High)** Phase 2 DoD 14 条 §8.2 + Phase 2 任务 7 阶段 §9 + 风险评级独立写 §9.3 (不再"0 迁移风险"); **G1 (Med)** 卖点对比表 §4.5.3 撤回"10x RPO"过度承诺, 改诚实表述"RPO 公式由源备份周期主导, 默认 60s/2m, 30s 仅亚分钟级源备份场景"; **G2 (Med)** 头表反向兼容行明确 `backupSyncPeriod` 保持默认 60s（不调长避免无 ImportPolicy 的 BSL 退化是行为 regression）, Agent G v0.9.1.13.1 直 S3 BackupLister 与 Velero sync 并行 race-safe (IsAlreadyExists 跳过); **G3 (Low)** §4.5.4 warn 模式行加注 "fingerprint 缺失也意味着 RP 可能未完成 — 源备份完成才写 fp, warn 失保护, hover tooltip 标 '该 RP 可能是源未完成半成品' + 列表行加来源 backup phase 显示"; **G4 (Low)** §4 Action Type pill 加 inline alert "保存后不可更改, 选错需删除重建" + Save 首次 confirm dialog + 编辑现有 Policy 时 pill 灰化只读。**状态 → 改正中**, 等 Mars 重审 → 排队评审 → 研发中。 |
 
 ---
 
@@ -3785,6 +3964,96 @@ Posture: 80/100   (L1✓ L2✓ L3✓ L4✓ L5✗)
 |---|---|---|---|
 | 2026-05-31 | Mars（testing20260531.md 第 1 条）| — | 提出 3 件: (a) Cluster card 显示 "This Cluster" 不直观, 应改 control-plane node 名; (b) Cluster card 跟 BSL card 紫色撞色难区分; (c) 缺 Local Snapshot / Snapshot Export / Backup Copy 路径的视觉表达。(a) 部分今晚 Agent O 已 ship `clusters.go:buildThisClusterDTO` 改造（DisplayName 走 control-plane node label）, (b)+(c) 需立 PRD 重构。|
 | 2026-05-31 | Claude | — → **草稿** | 起草 PRD-010 v1。**核心决策**: (1) 6 类节点色系彻底解决紫色撞色（Cluster 蓝 / Cloud BSL 紫 / Local BSL 橙 / L1 青绿 / L4 粉 / L5 灰）; (2) ADR-031 5 层模型可视化对偶 —— 5 类节点 + Layer 1-5 徽章 + 未启用层占位 + Posture 总分; (3) 数据流箭头 5 类区分（snapshot/export 实线 + sync/copy 虚线 + restore 单向弧）; (4) 沿用现有 SVG 引擎（681 行 DRTopology.vue）不引入图库; (5) 后端 aggregator JSON 扩字段 `localSnapshots` / `backupCopies` / `virtualLabs` / `posture`, 向后兼容 0 风险; (6) cluster name 改造已 ship 本 PRD 不重做; (7) 多 cluster 留 PRD-013（MCM Dashboard, 待立）; (8) Q1-Q5 待 Mars 评审拍板（重点 Q1 色系是否需 designer 介入、Q2 L1 占位按钮跳哪里、Q3 Layer 5 是否真接 DR Drill）。待 Mars 评审决定是否 → 排队评审。|
+| 2026-06-02 | Claude (PRD-Review 第六份 F1-F4 finding 闭环) | 草稿 → **改正中** | 加 §13 PRD-Review 第六份 F1-F4 finding 修订段：**F1** Posture 分数消费后端 PRD-007 §4.7 单一权威 score 不再 "层数×20" 误导 (跨 003/007/010 共用一个真按 3-2-1-1-0 加权的 score, 不是层数计数) / **F2** 数据流箭头按 ADR-025 真实 dual schedule 渲染 (snapshot 实线 / export 实线 / 不再混色) / **F3** L1-L5 vs PRD-009 v2 Snapshot/Export 术语映射表 (每个 Layer 节点 hover tooltip 显示对应 Policy Action Type) / **F4** Layer 5 改为 "DR Drill 验证徽章" 而非独立节点 (语义自洽: Layer 5 是周期性 verify 行为, 不是 Layer 1-4 的物理实体节点)。§8 DoD 加 #13-#16 四条新验收点。状态草稿→改正中, 可转研发中。|
+
+### 13. PRD-Review 第六份 F1-F4 finding 修订段（2026-06-02 闭环）
+
+> **修订动因**：PRD-Review-2026-05-31-PRD010.md（PRD-Review 第六份 §五）对 PRD-010 给出 4 个 finding（F1-F4）。本段是**独立闭环段**。
+
+#### F1（Med-High）Posture 分数第三套口径 — "层数×20" 误导
+
+**finding 原文**：PRD-010 §4.7 把 Posture 分数算成"已启用层数 × 20"（5 层全启用=100）。但 PRD-003 应用韧性分（5 维加权）/ PRD-007 §4.7 集群 Posture 层覆盖分（按 3-2-1-1-0 实际贡献加权）已经存在两套定义；PRD-010 又造第三套 = **跨 PRD 分数语义打架**。"层数×20" 误导客户：只装本地快照（Layer 1）就 20 分？只 import 不 export（Layer 4）就 80 分？这违反 3-2-1-1-0 的安全直觉。
+
+**拟方案**：PRD-010 **不另算 score**，**直接消费 PRD-007 §4.7 单一权威 score**（HTTP GET /api/v1/dashboard/posture → 单一分数 source-of-truth）：
+- 前端 DRTopology.vue **只渲染**后端给的 `posture.totalScore` + `posture.breakdown[]` 数组
+- 不在前端做任何"层数计数 × 20" 计算
+- PRD-007 §4.7 锁定单一加权规则（按 3 copies / 2 media / 1 offsite / 1 immutable / 0 errors 各自的实际贡献加权）
+- PRD-003 应用韧性分跟 PRD-010 集群 Posture 分**是两个独立指标**（per-app vs per-cluster）但**共享同一后端规则引擎**（PRD-011 evaluator.go SSOT）
+
+**与 PRD-007 P5 同源**：本 finding 跟 PRD-007 P5 "Score 口径厘清" 是同一 issue 的不同切面。**两 PRD 共同闭环**：PRD-007 §4.7 定权重表 + PRD-010 §4.7 引用 PRD-007（不另算）。
+
+**DoD 入 §8**：#13。
+
+#### F2（Med）数据流箭头与 ADR-025 双 Schedule 不符
+
+**finding 原文**：PRD-010 §4.5 把"snapshot/export"画成同色实线，但 ADR-025 实际是 **dual schedule pair**——Snapshot 走 CSI snapshot 类型 Schedule（写本地 CSI driver）/ Export 走 file-system 类型 Schedule（写 BSL 对象存储）。两个 Schedule 物理路径不同，UI 应该**区分着色**。
+
+**拟方案**：
+
+| 数据流路径 | ADR-025 来源 | DRTopology 渲染 |
+|---|---|---|
+| Snapshot Schedule（CSI snapshot type, dual=false 半 / 单 ns 单存储路径） | Cluster → Local Snapshot 节点 | 实线 #3b82f6 蓝色 + "Snapshot" label |
+| Export Schedule（file-system type, dual=true 半 / 同 ns 上传 BSL） | Cluster → Cloud BSL 节点 | 实线 #8b5cf6 紫色 + "Export" label |
+| Import Policy（PRD-009 v2 §4.5 跨集群） | Cloud BSL → Cluster | 虚线 #ec4899 粉色 + "Import" label |
+| Backup Copy（PRD-007 Layer 4） | Cloud BSL → 第 2 Cloud BSL | 虚线 #f59e0b 橙色 + "Copy" label |
+| Restore（按需触发） | BSL → Cluster | 实线弧 #10b981 绿色 + "Restore" label |
+
+后端 aggregator JSON 加 `flows[].type` 字段（enum: snapshot/export/import/copy/restore），前端按类型映射颜色 + 实线/虚线。
+
+**DoD 入 §8**：#14。
+
+#### F3（Med）L1-L5 vs PRD-009 v2 Snapshot/Export 术语映射
+
+**finding 原文**：PRD-009 v2 把 Policy 词汇从 "L1/L2" 改成 "Snapshot Policy / Import Policy"，但 PRD-010 DRTopology 仍用 "Layer 1-5" 徽章 + "L1 占位按钮"。同一产品**两套词汇并行**让客户困惑：Policy 面是 Snapshot/Export，Dashboard 面是 L1-L5。
+
+**拟方案**：**两套词汇并存 + 映射表显式**（不消灭一套, 因为 5 层 3-2-1-1-0 模型跟 Policy Action Type 是两个正交概念, 共存合理）：
+
+| 5 层（3-2-1-1-0 韧性模型, PRD-007 + PRD-010 用）| 对应 Policy Action Type（PRD-009 v2 用） | 节点 hover tooltip |
+|---|---|---|
+| **Layer 1** 本地快照 (CSI snapshot) | Snapshot Policy（无 Export toggle） | "本层由 Snapshot Policy 提供 — 点击跳转新建 Snapshot Policy" |
+| **Layer 2** 同集群另一存储介质 | Snapshot Policy（Enable Backups via Snapshot Exports = local BSL） | "本层 = Snapshot + Export 到 local BSL" |
+| **Layer 3** 异地副本 | Snapshot Policy（Enable Backups via Snapshot Exports = cloud BSL）| "本层 = Snapshot + Export 到 cloud BSL（异地）" |
+| **Layer 4** 第 2 异地副本（Backup Copy） | Snapshot Policy + Backup Copy（PRD-007 Layer 4） | "本层 = Layer 3 + 跨第 2 云 Backup Copy" |
+| **Layer 5** DR Drill（演练验证） | 跟 Policy 无关（验证行为，不是 Policy）| "本层是周期性 DR Drill 验证 — 见 PRD-007 §4.7" |
+
+每个 Layer 节点 hover tooltip 显式映射 + 点击节点跳对应 Policy 创建抽屉（已有 PRD-009 v2 Action Type 双 pill）。
+
+**DoD 入 §8**：#15。
+
+#### F4（Low-Med）Layer 5 作为节点语义不自洽
+
+**finding 原文**：Layer 1-4 都是"物理实体"（本地 snapshot / 本地 BSL / 异地 BSL / 第 2 异地 BSL），Layer 5 "虚拟实验室 DR Drill" 是**周期性验证行为**，不是一个**节点**。把它画成跟 Layer 1-4 同等的节点违反语义自洽。
+
+**拟方案**：Layer 5 **不画节点**，改画 **"验证徽章"（Verification Badge）**——展示在整个 DR Topology SVG 顶部 / 边角：
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  DR Topology                              🛡 Layer 5    │  ← 验证徽章
+│                                          ✓ Last drill   │
+│  [Cluster]─────[Snapshot]                  6 hours ago  │
+│       │                                                  │
+│       └──[Local BSL]──[Cloud BSL]──[Copy → 第 2 Cloud]   │
+│                                                          │
+│  Posture: 4/5  ◆◆◆◆◇                                    │
+└─────────────────────────────────────────────────────────┘
+```
+
+徽章状态:
+- 🛡 ✓ "Last drill 6h ago" (周期内, 绿)
+- 🛡 ⚠ "Last drill 8d ago" (周期 7d, 超期, 黄)
+- 🛡 ❌ "Never drilled" (从未跑, 红)
+- 🛡 — "Not enabled" (PRD-007 §4.7 DR Drill 未启用, 灰)
+
+**DoD 入 §8**：#16。
+
+#### §8 DoD 新增条目（F1-F4 finding 落地, 接在原 #12 之后）
+
+| # | 验收点 | finding |
+|---|---|---|
+| 13 | **F1 闭环**：前端 DRTopology.vue **不算 score**, 只渲染 `GET /api/v1/dashboard/posture` 返回的 `totalScore` + `breakdown[]`; grep 前端代码确认无 `layerCount * 20` 这种计算; PRD-007 §4.7 锁定单一加权规则; PRD-003 应用韧性分 + PRD-010 集群 Posture 分共享 PRD-011 evaluator.go 规则引擎 |
+| 14 | **F2 闭环**：后端 aggregator JSON `flows[]` 数组加 `type` 字段（enum: `snapshot`/`export`/`import`/`copy`/`restore`），前端按 5 类映射颜色 + 线型；ADR-025 dual schedule pair 实际跑出来 SVG 真显示 2 条不同色实线（screenshot 归档） |
+| 15 | **F3 闭环**：每个 Layer 节点 hover tooltip 显示 PRD-009 v2 对应 Action Type + "点击跳转" link → 真跳 Policies 抽屉 + Action Type 预选；术语映射表写入 USER_MANUAL §X 单一来源 |
+| 16 | **F4 闭环**：Layer 5 不画节点，改画顶部"验证徽章"(4 状态: 周期内✓/超期⚠/从未❌/未启用—); SVG 渲染数据从 `GET /api/v1/dashboard/posture` 的 `lastDrillAt` + `drillEnabled` 字段读 |
 
 ---
 
@@ -3978,6 +4247,105 @@ v1 的"业务梳理"**只**呈现**能从 K8s 客观推导**的依赖关系: Ser
 | 日期 | 操作人 | 状态变化 | 反馈 |
 |---|---|---|---|
 | 2026-06-01 | Claude | — → **草稿** | 由 Mars 与外部专家 3 轮讨论（RAG 维护 / 数据流水线 / SupEye DSL / Call Home）收敛而成。**核心决策**: (1) 分数由 Go 规则引擎算, LLM 只解释（finding #2）; (2) 置信度三档不用百分比（finding #3）; (3) 缺失数据用 status 枚举显式建模; (4) 采用 SupEye 四段 DSL（fact/observation/inferred/evidence）; (5) A/B 双面知识库物理隔离, chroma-go + 结构化标签预过滤; (6) 默认 Ollama 0 出网, SaaS opt-in 经 sanitize; (7) 非自治, 应用建议只预填不写。MVP 锁单应用/同步/规则评分小闭环, 自动学习/异步/跨集群留迭代。待 Mars 评审拍板 Q1-Q5。|
+| 2026-06-02 | Claude (PRD-Review 第六份 H1/H2/H5 finding 闭环, H1 数值待 Mars 拍) | 草稿 → **改正中** | 加 §12 PRD-Review 第六份 H1/H2/H5 finding 修订段（H3 ADR-037 撞号已修 / H4 chroma-go vs 全量注入留 v1.x 决策不阻断）：**H1** 规则集版本化 (`scoreRulesVersion` 字段输出每次评分 + 历史可复现) + 每条扣分依据写入 evaluator.go 注释 + **Mars 需拍 Q1 权重表 + Q4 硬阈值 (写 等待决策.md D-WAIT-002)** / **H2** 异地判定采 BSL `region` + `provider` 元数据 (不只 local/cloud type 二分), "异地"严格定义=不同 region 且/或不同 provider, 同 region 不同 provider 也算异地半档 / **H5** `/ai/analyze` API 拆 2 endpoints: `/ai/score` 快速同步返回 score+evidence+confidence (<5s, 仅规则引擎跑, 不调 LLM), `/ai/explain?taskId=` 流式返回 LLM 解释 (Server-Sent Events, 不阻塞首屏)。§8 DoD 加 #14-#17 四条新验收点。状态草稿→改正中, 部分 Blocked 待 Mars 拍 H1 数值 + 升级到已评审。|
+
+### 12. PRD-Review 第六份 H1/H2/H5 finding 修订段（2026-06-02 闭环）
+
+> **修订动因**：PRD-Review-2026-06-01-PRD009v2-011-012.md（PRD-Review 第六份 §四）对 PRD-011 给出 5 个 finding（H1-H5）。H3 已闭环（ADR-037 撞号 PRD-011 让号给 PRD-008 → ADR-039，PRD-011 仍用 037），H4 MVP 决策接受全量注入 + 标签预过滤（chroma-go v1.x 评估）。本段闭 H1/H2/H5。
+
+#### H1（Med-High）评分权重需版本化 + 专家校准 + 写明依据
+
+**finding 原文**：评分权重（30/20/30/15/5）与扣分值（-10~-25）是合理但**主观的判断**（Q1 自己在问要不要专家校准）。这套规则正是分数可信度的全部来源，"经得起客户问凭什么"取决于它。
+
+**拟方案（3 件事）**：
+
+1. **规则集版本化**：每次评分输出**带 `scoreRulesVersion: "v1.0.0"`** 字段（语义化版本，破坏性改动 major++ / 加新规则 minor++ / 调阈值 patch++）。
+   - 客户拿到 score=85 + scoreRulesVersion=v1.0.0 → 永远可以问"v1.0.0 规则下 85 分怎么算的"
+   - 后端 evaluator 包多版本并存：`v1_0_0.go`, `v1_1_0.go`, ... 老分数永远可重算
+   - 升级 SupKube 时, dashboard 警示"评分规则从 v1.0.0 升到 v1.1.0, 历史分数下方括号显示新规则下重算结果"
+
+2. **每条扣分依据写入 evaluator.go 注释**：
+   ```go
+   // CheckBackupCoverage 检查应用是否有 backup policy 覆盖
+   // 评分逻辑：
+   //   - 没有任何 backup policy → 扣 25 分（封顶 30, 即 CRITICAL 等级）
+   //   - 依据：3-2-1-1-0 原则首条 = 3 copies, 0 copies 直接 critical;
+   //     Kasten K10 "Protection Status: Unmanaged" 也是类似处理
+   //   - 决策出处：PRD-011 §6 度量表 + Mars 与灾备专家 2026-06-XX 校准
+   func CheckBackupCoverage(app *AppContext) Finding {
+   ```
+
+3. **请 Mars / 灾备专家校准**：评分维度 (30/20/30/15/5) + 关键扣分阈值 (Q4 硬阈值 "无备份封顶 30 / 高分校准 30")，**Mars 拍数值前 PRD-011 不能进研发**。已写入 `等待决策.md D-WAIT-002`。
+
+**DoD 入 §8**：#14。
+
+#### H2（Med）异地判定需真实 region/provider 元数据
+
+**finding 原文**："3-2-1 满足度" / "跨地域" / "同存储后端单点" 这些扣分**依赖准确判定异地/介质多样性**。M3 只采"BSL 数量与类型（local/cloud）"——两个同区域 cloud BSL 不算异地，"cloud" 也可能同区域。判错会误导分数（DR 面板最忌讳）。
+
+**拟方案**：M3 显式采 BSL `region` + `provider` + `bucket` 三元组（不只 local/cloud type 二分）。"异地"严格定义：
+
+| 场景 | 定义 | 评级 |
+|---|---|---|
+| 两个 BSL 都 = local on-cluster MinIO | 0 异地（同集群存储）| 🔴 critical for 3-2-1 |
+| 两个 BSL = (local MinIO + cloud Azure Blob 同 region eastus) | 1 异地（半档, 不同 provider 但同 region）| 🟡 部分满足 |
+| 两个 BSL = (cloud Azure Blob eastus + cloud Azure Blob westus) | 1 异地（半档, 同 provider 但不同 region）| 🟡 部分满足 |
+| 两个 BSL = (cloud Azure Blob eastus + cloud AWS S3 us-west-2) | 2 异地（全档, 不同 provider 不同 region）| 🟢 满足 |
+| 任何 = on-cluster + cloud 不同 region | 2 异地（全档）| 🟢 满足 |
+
+"同存储后端单点" 严格定义：两个 BSL 同 provider + 同 region + 同 bucket prefix。
+
+**Collector 改造**：`internal/collector/app_context.go` 抓 BSL 时 `region` + `provider` 字段必抓（从 Velero BSL CR `.spec.provider` + `.spec.config.region` 读）；如果客户填的 BSL 没 region 字段 → status=`missing`, 评分时按 worst case 算。
+
+**DoD 入 §8**：#15。
+
+#### H5（Med）LLM 解释别阻塞 60s, 分数先返回
+
+**finding 原文**：`/ai/analyze` 同步 60s 跑完采集+评分+LLM 解释。本地 Ollama 在 CPU 节点生成一段解释常需 10-40s，大 ns 采集+LLM 可能破 60s（Q5 已问转异步）。
+
+**拟方案**：拆 2 endpoints, 分数先返回, LLM 解释异步:
+
+```
+POST /api/v1/ai/score
+  Request:  { appNamespace: "demo-app" }
+  Response: { score: 75, evidence: [...], confidence: "medium", scoreRulesVersion: "v1.0.0",
+              explainTaskId: "uuid-1234" }
+  Time: < 5s (仅规则引擎, 不调 LLM, evidence 是 collector 抓的 fact/observation)
+
+GET /api/v1/ai/explain/:taskId  (Server-Sent Events stream)
+  Stream:
+    event: chunk
+    data: {"text": "你这个应用"}
+    event: chunk
+    data: {"text": "的备份覆盖率"}
+    ...
+    event: done
+    data: {"totalTokens": 245, "modelUsed": "ollama:llama3:8b"}
+  Time: 10-40s (LLM 流式输出)
+
+UI 行为:
+  1. 点 "Analyze" → /ai/score 5s 内返回 → UI 立即显示 score + evidence + confidence
+  2. UI 自动 SSE 连 /ai/explain/:taskId → 解释**实时增量**显示在抽屉里 (类似 ChatGPT 打字效果)
+  3. 用户随时关掉抽屉, /ai/explain 自动 abort
+```
+
+**降级**：如果 SSE 失败 (e.g. proxy 不支持) → fallback 到轮询 `GET /ai/explain/:taskId` 返回 `{ status: "running" | "done", text: "..." }`。
+
+**DoD 入 §8**：#16。
+
+#### H4 + H3 备注（不动）
+
+- **H3 (Info)** ADR-037 撞号在 PRD-Review 第六份建议让号 PRD-008 → ADR-039。**PRD-011 仍占 ADR-037**（统一数据采集架构）。已闭环。
+- **H4 (Low)** chroma-go + 30 条知识库 vs 全量注入决策 → MVP 接受 finding 建议 "tag 预过滤 + 全量注入"，条目过百再上向量库。Q3 留 v1.x 评估。
+
+#### §8 DoD 新增条目（H1/H2/H5 落地, 接在原 #13 之后）
+
+| # | 验收点 | finding |
+|---|---|---|
+| 14 | **H1 闭环**：所有 `/ai/score` 响应含 `scoreRulesVersion` 字段; `internal/advisor/evaluator/v1_0_0.go` 每条规则带注释含权重/依据/校准来源; **Mars 在 等待决策.md D-WAIT-002 拍 Q1 权重表 + Q4 硬阈值后**, PRD-011 进研发 |
+| 15 | **H2 闭环**：Collector 抓 BSL 含 region + provider + bucket 字段; "异地"判定按 §H2 5 级表; 实测一个客户场景 (e.g. local MinIO + cloud Azure same region) 评分对得上预期 |
+| 16 | **H5 闭环**：`/ai/score` 同步返回 < 5s + `/ai/explain/:taskId` SSE 流式返回; UI 抽屉打开 5s 内出 score + 抽屉内 LLM 解释**实时打字效果**; abort 抽屉自动 abort LLM 请求 |
+| 17 | **H3/H4 备注**：ADR-037 让号已闭环（PRD-008 → ADR-039）；chroma-go v1 不上，MVP 全量注入 + 标签预过滤 (Q3 留 v1.x 决策)|
 
 ---
 
@@ -4055,4 +4423,479 @@ ADR-037 三档连接形态中"**Call Home 半连**"档的产品化。复用 PRD-
 | 日期 | 操作人 | 状态变化 | 反馈 |
 |---|---|---|---|
 | 2026-06-01 | Claude | — → **草稿（Blocked）** | 由 Mars 战略判断"SaaS-for-Kubernetes 比 AirGap 易调试 + collector 自动建 Case"收敛。**核心决策**: (1) 定位为 ADR-037 三档连接的"半连"档产品化; (2) 复用 PRD-011 Collector + DSL, 0 重复; (3) 默认关闭, 显式 opt-in + 脱敏预览 + SanitizeReport; (4) 单向出站、无入站、非自治, 只开 Case 给人不自动改集群; (5) 市场先例对标 NetApp/Dell/Pure/Veeam。**Blocked**: 待 Mars 提供公司售后系统 Case API 规格方可进入开发。|
+| 2026-06-02 | Claude (PRD-Review 第六份 I1 finding 闭环, I2 仍 Blocked) | 草稿 (Blocked) → **改正中 (仍 Blocked 等 Case API)** | 加 §10 PRD-Review 第六份 I1 finding 修订段：**I1** Story 3.2 + Q1 "预授权自动"模式有数据外泄风险——改默认 **逐次确认**（every outbound payload 需人工 review SanitizeReport 后点 Send）, "预授权自动"降级为显式高级 opt-in（Settings 二级开关 + 警告横条 + audit log）+ Call Home payload 字段并入 **SECURITY.md §6 出境白名单**（跟 PRD-011 SaaS / PRD-003 同一可审计管线, 客户可逐项关）。**I2** 客户身份方案（customer-id 一次性 K8s Secret 注入）见 §11 待补——**仍 Blocked 等 Mars 提供 Case API spec**。|
+
+### 10. PRD-Review 第六份 I1 finding 修订段（2026-06-02 闭环, I2 仍 Blocked）
+
+> **修订动因**：PRD-Review-2026-06-01-PRD009v2-011-012.md（PRD-Review 第六份 §五）对 PRD-012 给出 4 个 finding（I1-I4）。本段修 I1 (默认逐次确认 + §6 白名单); I2 (客户身份) 跟 Case API spec 强依赖, 写进 §11 待补 + 等 Mars。I3/I4 已闭环。
+
+#### I1（Med-High）默认逐次确认 + Call Home payload 并入 SECURITY §6 出境白名单
+
+**finding 原文**：Story 3.2 + Q1 的"预授权自动"模式——数据**无每次人工复核**就离开集群。脱敏一旦漏一项即外泄。
+
+**拟方案（两件事）**：
+
+**1. 默认逐次确认（每次 Send 都人工 review）**：
+
+| 场景 | 触发 | 默认行为 |
+|---|---|---|
+| Score ≤ HIGH + 备份连续 N 次失败 → Call Home 准备 | Collector 跑完 + sanitize 准备好 payload | **不自动 send**, UI 弹窗 "准备 Send to Support" + 展示 SanitizeReport 全文 (≤ 100 KB 全展开 / >100 KB 折叠+下载) + 客户点 "Send" / "Cancel" |
+| **"预授权自动"模式**（Settings 二级开关 + 警告横条 + audit log）| 客户在 Settings 显式 enable + accept disclaimer + 二次确认 | 自动 send（仍走 sanitize 管线）, 但 UI 显示 "上次 send: 5h ago" 实时通知 + 客户可随时 disable |
+
+UI mockup：
+```
+┌─ Send Diagnostic Report to Support ─────────────────────────┐
+│  下面是将外发到 jumborca 售后系统的字段（已脱敏）：             │
+│                                                              │
+│  Tap to expand 8 sections (245 lines, 12 KB)                │
+│  ► identity { customer-id, cluster-id (HMAC) }              │
+│  ► app_context { ns, workloads, ... }                       │
+│  ► backup_health { last_backup_at, failure_count, ... }     │
+│  ► sanitize_report { redacted: 14, fields: [pvcName,...] }  │
+│                                                              │
+│  □ I've reviewed the payload and want to send it.           │
+│                                                              │
+│  [Cancel]                                  [Send to Support] │
+└──────────────────────────────────────────────────────────────┘
+```
+
+**2. Call Home payload 并入 SECURITY.md §6 出境白名单**：
+
+PRD-012 出境字段**跟 PRD-011 SaaS / PRD-003 共用同一管线**——SECURITY.md §6.X 一张白名单:
+
+| section | fields | 谁可关 | 关掉后果 |
+|---|---|---|---|
+| identity | customer-id (一次性 K8s Secret 注入, I2 范围), cluster-id (HMAC of kube-system UID), product-version | 不可关（Case 无法关联） | 关 = Call Home disable 整体 |
+| app_context | namespaces[], workloads[], pvc_count, ... | 可关 | Case 没应用上下文, 售后无法定位 |
+| backup_health | last_backup_at, failure_count, snapshot_size_bytes | 可关 | Case 没失败 timeline, 售后猜瓶颈难 |
+| sanitize_report | redacted_count, fields_redacted[] | 可关（但建议不关）| 关 = 客户不知道我们脱了什么 |
+
+**实施**：
+- `SECURITY.md §6.C` 加 PRD-012 出境字段表
+- `internal/sanitize/sanitize.go` 是 SSOT, PRD-003 / PRD-011 / PRD-012 都走它
+- 客户在 Settings 看到的 "AI / Call Home 出境字段管理" 是 §6 表的可视化
+
+**DoD 入 §8**：#13。
+
+#### I2（Med, Blocked）客户身份方案
+
+**finding 原文**：出站需让售后系统识别"这是哪个客户/合同"，但项目刻意无 license server（ADR-034）。无客户身份则 Case 无法关联。
+
+**拟方案（待 Case API spec 后确认）**：
+- 安装期 helm 命令传 `--set callHome.customerToken=<one-time-token>` (jumborca 售后系统发的)
+- helm 模板把 token 写入 `supkube-callhome-customer` K8s Secret（namespace=supkube, 跟 fingerprint secret 同模式）
+- Call Home payload identity.customer-id = HMAC(token, "callhome-identity-salt")（不直传原 token）
+- 售后系统侧根据 customer-id 关联 Case → 客户合同
+
+**Blocked**：等 Mars 提供 Case API spec:
+- API endpoint URL (e.g. `https://support.jumborca.com/api/v1/cases`)
+- Auth (Bearer token? mTLS?)
+- Request schema（customer-id 字段名 / payload section 名 / 是否需 signature）
+- Response schema（case-id / status / 后续追踪 url）
+
+**等 Mars 给规格** → 写入 §11 待补 → 解 Blocker → PRD-012 转研发中。
+
+**DoD 入 §8**：#14 (等 spec)。
+
+#### I3 + I4（备注, 不动）
+
+- **I3 (Info)** SanitizeReport 预览是亮点。已有, 保留 §8.2。
+- **I4 (Info, 赞)** Blocked 状态用得对。保持。
+
+#### §8 DoD 新增条目（I1-I2 落地）
+
+| # | 验收点 | finding |
+|---|---|---|
+| 13 | **I1 闭环 (a)**：UI Send to Support 抽屉**默认逐次确认**, 展示 SanitizeReport 全文 + 客户点 "Send" 才发; "预授权自动" 模式是 Settings 二级开关 + warning banner + audit log |
+| 14 | **I1 闭环 (b)**：Call Home 出境字段表写入 **SECURITY.md §6.C**，跟 PRD-003/PRD-011 共用一份白名单; `internal/sanitize/sanitize.go` 是 SSOT, 3 处调用方都走它 |
+| 15 | **I2 设计就绪**：等 Mars 给 Case API spec (URL/auth/schema), 拿到后 customer-token 经 HMAC 派生 customer-id 走 identity section; helm `--set callHome.customerToken=` 注入 K8s Secret (跟 fingerprint secret 同模式) |
+
+---
+
+<a id="prd-013"></a>
+## PRD-013 — SupKube Four-Eyes Authorization（备份安全二次审批 + MFA 平台集成）
+
+| 字段 | 值 |
+|---|---|
+| **PRD 编号** | PRD-013 |
+| **任务编号** | TBD（Mars 批后建 task） |
+| **状态** | **草稿（2026-06-02 立项, Mars D-WAIT-002 frame shift 派生）** |
+| **作者** | Claude / Mars |
+| **目标版本** | v0.11.x（晚于 PRD-011 MVP, 不卡 Demo 核心闭环） |
+| **关联 ADR** | 拟 **ADR-044**（ApprovalPolicy/ApprovalRequest CRD 设计 + Dex MFA 集成模式） |
+| **关联 PRD** | **PRD-011 §6 维度 3 / MFA+二次审批 10 分**（本 PRD ship 前此项标 N/A 不计入分母）/ **PRD-008 §RP 删除**（Delete RP 进入 Four-Eyes 受保护清单）/ **PRD-009 §Import Policy**（跨集群 Restore-to-PROD 受保护）/ PRD-003 §AI Advisor（AI 推荐执行也走 Four-Eyes）|
+| **关联文档** | `SECURITY.md` §X 新章 "Four-Eyes Authorization & Privileged Operations Audit" / `USER_MANUAL.md` §X 新章 "MFA 启用与二次审批工作流" / 测试用例.md TC-SEC-001~005 新建（取号待 LEDGER 新 series TC-SEC）|
+| **反向兼容** | 向后兼容: ApprovalPolicy 默认**全 disabled**, 客户必须显式 enable 才生效, 0 默认行为变更; MFA toggle 默认 off, 启用后立即对所有 user 生效（强制 TOTP enrollment grace period 7 天）|
+
+> **立项缘由（2026-06-02）**：Mars 在 D-WAIT-002 PRD-011 评分细则讨论时提出"MFA 我就自己加在我们的平台上 + 二次审批只要启用了二次审批策略就 OK, 比如, 操作员要删除一个备份集, 要在另一个管理员、主管, 这样的人做二次审批"。这等价于 **Veeam VBR 13 的 Four-Eyes Authorization** ([helpcenter.veeam.com](https://helpcenter.veeam.com/docs/vbr/userguide/four_eyes_authorization.html?ver=13))——企业 DR 反勒索的金标准, 防"单管理员账号被攻陷后恶意清空备份" + "员工误操作"。**Kasten K10 当前没有这一层**, SupKube 实现后是真差异化护城河。本 PRD 落 Veeam 4 大类策略 + 加 SupKube K8s 多集群特有的 3 个护身符（跨集群 Restore-to-PROD / DR Drill 关闭 / BSL Object Lock 解锁）= **合计 15 个受保护操作**。
+
+### 1. Goal
+
+把 SupKube 从"单管理员账号即可执行任意操作"升级到 **"4 大类 15 个危险操作强制 Four-Eyes Authorization（双人审批 + MFA）"**, 让 SupKube 满足等保 2.0 三级 + ISO 27002:2022 §8.13 + NIST SP 1800-26 (反勒索) 的"特权操作两人责任"要求, 提供 **Kasten K10 没有的真差异化卖点**。
+
+### 2. Epic
+
+**"备份安全反勒索"** Epic ——把"特权操作单人即可"升级为"特权操作两人责任", 跟 Veeam VBR 13 + 金融行业 DR 实践对齐, 是 SupKube **从 SMB 工具升 enterprise 级**的最关键安全特性。本 PRD 是该 Epic 的首个全面落地。
+
+### 3. User Stories
+
+- 作为 **SupKube 平台管理员（Admin）**, 我在 Settings → Security → Approval Policies 启用 Four-Eyes Authorization, 选择哪些操作类别需要双人审批（4 大类 × 15 操作的复选), 设置每个 ApprovalPolicy 的 approvers (一个 Role / 一组 Users), 让平台**强制对危险操作走两人责任流程**, 我自己删 RP 时也需要另一管理员 approve。
+- 作为 **运维操作员（Operator）**, 我点击 "Delete Restore Point" 按钮, UI 立刻提示"该操作需 Four-Eyes Authorization, 已发起审批请求, 等待 approver 批准"; 我看到 Pending Approval 列表知道我的请求被谁审; approver 批准后操作自动执行, 我不用重新点; 拒绝或超时后操作取消, 我看到原因。
+- 作为 **审批人（Approver）**, 我打开 Pending Approval tab, 看到运维 Alice 发起的"Delete Restore Point: prod-mysql-2026-06-01"请求, 我看到 (a) 申请人 / 时间 / 申请理由 (operator 填) / (b) 操作详情（哪个 RP, 什么时间创建, 多少 GB, 关联哪个 Application）/ (c) 风险评估（这个 RP 是否是该应用最近的有效备份? 删除后 RPO 退化多少?）/ (d) Approve / Reject 按钮（Reject 必须填理由）/ (e) MFA 二次确认（点 Approve 后必须输入 TOTP 才生效, 防 approver session 被劫持）。
+- 作为 **审计 / 合规官员（Auditor）**, 我打开 Activity → Privileged Operations 看到所有 Four-Eyes 请求的完整链路: 申请人 / 操作 / 申请时间 / 批准人 / 批准时间 / 操作执行结果, 这些事件**全部走 PRD-008 audit event** 持久化（与 ADR-019 audit log 共用），不可篡改, 满足等保 2.0 / SOC2 / ISO 27001 审计要求。
+- 作为 **被入侵的攻击者**（红队场景）, 我攻陷了 Admin Alice 的账号, 想清空所有备份准备勒索; 但当我点击 Force Delete Backup 时, **请求被 Four-Eyes 拦截**, 我必须再攻陷一个独立账号（且对应 approver role）才能执行; 加上 MFA 要求, 我必须**同时获得**两个账号的 TOTP secret, 极大提高攻击成本（"两人责任 = 攻击成本翻倍"）。
+
+### 4. Functions
+
+#### 4.1 受保护操作清单（4 大类 15 操作）
+
+> **来源**: Veeam VBR 13 Four-Eyes Authorization 4 大类 12 操作 + SupKube K8s 多集群 + DR 视角特有 3 操作（合计 15）。**未启用 ApprovalPolicy** 的操作走原路径, 启用后强制走审批流程。
+
+| # | 类别 | 操作 (SupKube API/UI) | Veeam 对应 | 风险描述 |
+|---|---|---|---|---|
+| 1 | **类 1 删数据** | `DELETE /restore-points/:name` (UI: Restore Points 行 → Delete) | 从磁盘删除备份 | 操作员误删或被攻陷后恶意清空 RP |
+| 2 | **类 1 删数据** | `DELETE /volumesnapshots/:ns/:name` (UI: Application Items → Delete VS) | 删除存储快照 | 直接删 CSI VolumeSnapshot CR 等同 RP 失效 |
+| 3 | **类 1 删数据** | `DELETE /backups/:name` (UI: 老 Backup CR 清理 / 孤儿元数据) | 从配置 DB 移除备份 | 删 Velero Backup CR 等同 RP 元数据消失 |
+| 4 | **类 1 删数据** | `POST /backups/:name/force-delete` (UI: PRD-008 Force Delete 入口) | (Veeam Purge) | 绕 finalizer + 不删 BSL 对象 = 数据残留陷阱（PRD-008 §11 已警告）|
+| 5 | **类 2 基建** | `DELETE /bsls/:name` (UI: Settings → Storage Locations → Delete) | 移除备份存储库 | 解绑 BSL 等同所有 RP 失联（虽 BSL 对象仍在云上）|
+| 6 | **类 2 基建** | `DELETE /vsls/:name` (UI: Settings → VolumeSnapshotLocations → Delete) | 移除生产存储 | VSL 失联等同 snapshot 路径断 |
+| 7 | **类 2 基建** | `DELETE /clusters/:name` (UI: MC Manager → Cluster → Remove) | 移除云提供商 | MC cluster 移除 → 跨集群 RP 入口失效（PRD-009 v2 Import Policy 信任链断）|
+| 8 | **类 3 用户** | `POST/PATCH/DELETE /users` (UI: Settings → Users) | 增/改/删用户 | 攻击者建后门高权账号 |
+| 9 | **类 3 用户** | `PATCH /users/:id/role` (UI: Settings → Users → Change Role) | 修改用户角色 | 攻击者提权自己为 Admin |
+| 10 | **类 4 安全** | `PATCH /settings/approval-policies` set `enabled=false` | 禁用四眼原则本身（**递归保护**） | **关键**: 关 Four-Eyes 本身也必须走 Four-Eyes（防"先关再删"） |
+| 11 | **类 4 安全** | `PATCH /settings/mfa` set `globalMFA=false` | 全局 MFA 变更 | 关 MFA = 安全降级铺路 |
+| 12 | **类 4 安全** | `POST /users/:id/reset-mfa` | 重置特定用户 MFA | 攻击者重置 admin MFA 后用自己 device 登录 |
+| 13 | **类 4 安全** | `PATCH /settings/session` set `autoLogout` 改长或关 | 全局自动注销 | 关 auto-logout = session 永驻给攻击窗口 |
+| 14 | **SupKube 特有** | `POST /restores` to `cluster.tier=prod` (跨集群 Restore 到生产) | (Veeam 单集群无对应) | K8s 多集群独有: 误把 dev RP 还原到 prod = 数据覆盖灾难 |
+| 15 | **SupKube 特有** | `PATCH /policies/drill-schedule` set `enabled=false` 或 `PATCH /bsls/:name/object-lock` set `disabled=true` | (Veeam 无对应) | 关 DR Drill 或解锁 BSL Object Lock = PRD-011 评分维度 2/4 直接破防 |
+
+> **客户可选**: 上述 15 操作每条**单独可 enable/disable**, 客户按风险偏好配置（e.g. 中小客户只启用类 1 删数据 4 条）。Settings → Security → Approval Policies 提供 **"Veeam 标准 (12 条全开)"** + **"SupKube 增强 (15 条全开, 推荐)"** + **"自定义"** 三档 preset。
+
+#### 4.2 ApprovalPolicy CRD spec
+
+```yaml
+apiVersion: supkube.io/v1
+kind: ApprovalPolicy
+metadata:
+  name: prod-cluster-strict
+  namespace: supkube-system           # cluster-scoped 也行, 设计为 namespaced 便于 RBAC
+spec:
+  # —— 适用范围 —— 
+  enabled: true                       # 启用本策略
+  scope:
+    operations:                       # 受保护操作列表 (引用 §4.1 #1-#15 op IDs)
+      - delete-restore-point          # #1
+      - delete-volumesnapshot         # #2
+      - force-delete-backup           # #4
+      - delete-bsl                    # #5
+      - cross-cluster-restore-to-prod # #14
+    clusters:                         # 仅对这些 cluster 生效（空 = 所有）
+      - aks-jumborca-prod
+    namespaces:                       # 仅对这些 namespace 生效（空 = 所有）
+      - prod-finance
+      - prod-orders
+  
+  # —— 审批要求 ——
+  approvers:                          # 谁能审批（满足任一条即可）
+    roles:                            # K8s ClusterRole names
+      - supkube-admin
+      - supkube-security-officer
+    users:                            # 显式 user list（OIDC sub claim）
+      - boss@company.com
+    minApprovers: 1                   # 需多少个 approver 同意（默认 1, 可调到 2 / 3 = "三眼" / "四眼"）
+  selfApproveForbidden: true          # 申请人不能 approve 自己（强制）
+  
+  # —— 请求生命周期 ——
+  requestTtl: 24h                     # 请求 TTL, 超时自动 Rejected
+  
+  # —— MFA 要求 ——
+  mfaRequired: true                   # approver 点 Approve 时强制输 TOTP
+  
+  # —— 通知 ——
+  notifications:
+    email:
+      enabled: true
+      to:                             # 显式收件人（除自动通知 approvers）
+        - security-team@company.com
+    slack:
+      enabled: false
+      webhook: ""
+      channel: "#supkube-approvals"
+    inApp:
+      enabled: true                   # SupKube UI 顶栏红点 + Pending Approval tab badge
+```
+
+#### 4.3 ApprovalRequest CRD + 状态机
+
+```yaml
+apiVersion: supkube.io/v1
+kind: ApprovalRequest
+metadata:
+  name: req-2026060214301a3f          # 自动生成 UUID-like
+  namespace: supkube-system
+spec:
+  policyRef:                          # 关联的 ApprovalPolicy
+    name: prod-cluster-strict
+  
+  operation:
+    type: delete-restore-point         # §4.1 op ID
+    target:                           # 操作目标（用于 approver 看上下文）
+      kind: RestorePoint
+      apiVersion: supkube.io/v1
+      namespace: prod-finance
+      name: orders-mysql-2026-06-01
+    parameters:                       # 透传原 API 调用的 body（脱敏后）
+      reason: "test cleanup"          # operator 填的申请理由
+    
+  requester:                          # 申请人
+    username: alice@company.com
+    role: supkube-operator
+    userAgent: "Mozilla/5.0 ..."
+    sourceIP: "10.0.1.42"
+  
+status:
+  phase: Pending                      # Pending → Approved → Executing → Executed (终态)
+                                      #         → Rejected (终态)
+                                      #         → Expired (终态, requestTtl 过)
+                                      #         → Cancelled (终态, requester 主动撤回)
+  approvals:                          # 已收到的批准（数量 ≥ minApprovers → phase 进 Approved）
+    - approver: boss@company.com
+      approvedAt: "2026-06-02T15:30:00Z"
+      mfaVerified: true               # MFA 验证通过证据
+      comment: "OK, but next time cleanup before EOD"
+  rejection: null                     # 若 Rejected, 这里填理由
+  executionResult: null               # Approved → 实际执行后填: success / failed + error msg
+  expiresAt: "2026-06-03T14:30:00Z"
+```
+
+**状态机**:
+
+```
+Pending ──(approvals ≥ minApprovers)──> Approved ──(controller 执行原操作)──> Executing ──> Executed (成功) / Executed (失败 + errorMsg)
+   │
+   ├──(任一 approver Reject)──> Rejected (终态)
+   ├──(requestTtl 过)──> Expired (终态)
+   └──(requester 撤回)──> Cancelled (终态)
+```
+
+**幂等性**: Approved → Executing 由 controller 单次执行（leader election + idempotent guard, 防 controller 重启重复执行）。
+
+#### 4.4 MFA 平台集成（Dex OIDC + TOTP/WebAuthn）
+
+| 模块 | 设计 |
+|---|---|
+| **认证流程** | Dex OIDC 已是 SupKube login backend（ADR-010）, 增加 Dex **TOTP connector** + **WebAuthn connector**（passkey 支持）。客户登录 = OIDC 主认证 + (若 MFA 启用) TOTP 6 位码 或 WebAuthn 触摸 |
+| **Enrollment** | 客户首次登录后, UI 强制 enrollment 页：扫二维码绑定 Authenticator app（Google Authenticator / 1Password / Authy）/ 注册 WebAuthn passkey; grace period 7 天可暂时跳过, 之后必须绑定才能登录 |
+| **存储** | TOTP secret 存 K8s Secret `mfa-secrets`（type=Opaque, encrypted at rest with K8s default + sealed-secrets 推荐）, secret name = `mfa-totp-{userId-sha256}` |
+| **二次确认** | approver 点 Approve / 执行任一 §4.1 受保护操作时, 即使 session 内已登录, UI 弹"输入当前 TOTP 6 位码"对话框, 验证通过后才生效（防 session hijacking） |
+| **管理员重置** | 客户丢手机时, Admin 在 Settings → Users → Reset MFA 重置, 但此操作本身是 §4.1 #12 受保护操作, 必须走 Four-Eyes（防攻击者用"假装丢手机"绕过 MFA）|
+| **Recovery codes** | Enrollment 时一次性给 8 个 recovery code（哈希存 Secret）, 客户打印保存; 登录时 TOTP 失败 N 次可用 recovery code（每个一次性, 用完 invalidate）|
+
+#### 4.5 UI/UX
+
+##### 4.5.1 Settings → Security → Approval Policies (新页)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Security & Compliance                                          │
+│  ├─ Authentication (MFA)  ├─ Approval Policies ◀──  ├─ Audit   │
+│                                                                  │
+│  ☑ Enable Four-Eyes Authorization (Global)                      │
+│                                                                  │
+│  Preset:  ○ Veeam Standard (12 ops)  ● SupKube Enhanced (15)   │
+│           ○ Custom                                              │
+│                                                                  │
+│  Policy: [prod-cluster-strict ▾]  [+ New Policy]               │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ Scope:                                                       ││
+│  │   Clusters: [aks-jumborca-prod] [+]                          ││
+│  │   Namespaces: [prod-finance, prod-orders] [+]                ││
+│  │                                                              ││
+│  │ Operations (15 selectable):                                  ││
+│  │   类 1 删数据 (4):  ☑☑☑☑                                  ││
+│  │   类 2 基建 (3):    ☑☑☑                                    ││
+│  │   类 3 用户 (2):    ☑☑                                      ││
+│  │   类 4 安全 (4):    ☑☑☑☑                                  ││
+│  │   SupKube 特有 (2): ☑☑                                      ││
+│  │                                                              ││
+│  │ Approvers:                                                   ││
+│  │   Roles: [supkube-admin, supkube-security-officer] [+]      ││
+│  │   Users: [boss@company.com] [+]                              ││
+│  │   Min approvers: [1 ▾]  ☑ Self-approve forbidden            ││
+│  │                                                              ││
+│  │ Request TTL: [24h ▾]  ☑ MFA required for approvers         ││
+│  │ Notifications: ☑ Email  ☐ Slack  ☑ In-App                  ││
+│  └─────────────────────────────────────────────────────────────┘│
+│  [Save]  [Test (simulate a request)]                           │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+##### 4.5.2 Operator 视角 - 发起受保护操作
+
+```
+[User clicks "Delete Restore Point" on Restore Points page]
+
+┌─────────────────────────────────────────────────────────────────┐
+│  ⚠ This operation requires Four-Eyes Authorization              │
+│                                                                  │
+│  Operation: Delete Restore Point                                │
+│  Target:    prod-finance / orders-mysql-2026-06-01              │
+│  Policy:    prod-cluster-strict                                 │
+│  Approvers needed: 1 (from supkube-admin / supkube-security-officer) │
+│                                                                  │
+│  Reason for request: *                                          │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ Routine cleanup of old test backup, RP > 30 days, no       ││
+│  │ active restore needed                                       ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                                                  │
+│  Notification: Approvers will be notified via Email + In-App.   │
+│  Request TTL: 24h (auto-rejected if not approved)               │
+│                                                                  │
+│             [Cancel]  [Submit Approval Request]                  │
+└─────────────────────────────────────────────────────────────────┘
+
+→ Submitted! Request ID: req-2026060214301a3f
+→ Status: Pending Approval (you'll be notified when approved/rejected)
+→ View in: My Requests
+```
+
+##### 4.5.3 Approver 视角 - Pending Approval 列表
+
+```
+┌────────────────────────────────────────────────────────────────────┐
+│  Pending Approval (3)                                              │
+│  ┌──────────────────────────────────────────────────────────────┐ │
+│  │ 🔶 Delete Restore Point: orders-mysql-2026-06-01             │ │
+│  │    Requested by: alice@company.com (operator)                │ │
+│  │    Submitted:    2026-06-02 14:30 (28 min ago)               │ │
+│  │    Expires:      2026-06-03 14:30 (23h 32m left)             │ │
+│  │    Reason:       "Routine cleanup of old test backup..."     │ │
+│  │                                                                │ │
+│  │    🔍 Operation Details                                        │ │
+│  │    ├─ Target:        RP orders-mysql-2026-06-01               │ │
+│  │    ├─ Created:       2026-06-01 03:00 (35h ago, by Policy "..")│
+│  │    ├─ Size:          18 GB                                    │ │
+│  │    ├─ Application:   prod-finance/orders-mysql                │ │
+│  │    └─ Risk:          ⚠ This is the 2nd most recent RP. After │ │
+│  │                       deletion, RPO of orders-mysql may worsen│ │
+│  │                       from 24h to 48h.                        │ │
+│  │                                                                │ │
+│  │    [✓ Approve (MFA required)]  [✗ Reject]                     │ │
+│  └──────────────────────────────────────────────────────────────┘ │
+│                                                                    │
+│  ┌──────────────────────────────────────────────────────────────┐ │
+│  │ 🔶 Force Delete Backup: stuck-backup-xyz                     │ │
+│  │ ... (collapsed)                                              │ │
+│  └──────────────────────────────────────────────────────────────┘ │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+##### 4.5.4 Activity → Privileged Operations (新 tab)
+
+跟 PRD-008 Activity 持久化层共用, 显示所有 §4.1 #1-#15 操作的完整链路 (申请人 / 操作 / 申请时间 / approver / 批准时间 / 执行结果)。审计员可按 approver / requester / operation type / time range filter。
+
+#### 4.6 通知
+
+| 通知渠道 | 触发时机 | 内容 |
+|---|---|---|
+| **Email** | (a) 请求新建 → 通知 approvers; (b) 请求 approved/rejected → 通知 requester; (c) 请求 24h 过半未审批 → 提醒 approvers | 包含请求详情 + UI deep-link `https://supkube.../approvals/req-xxx` |
+| **In-App** | 同上, UI 顶栏铃铛红点 + Pending Approval tab badge 数字 | 实时（SSE 推送）|
+| **Slack** | Opt-in, Settings 配 webhook | Slack block kit message + Approve/Reject 按钮（点按钮走 Slack OAuth 鉴权后回 SupKube）|
+
+#### 4.7 审计（与 PRD-008 共用 audit event）
+
+每个 ApprovalRequest 生命周期事件 → audit event 落 PRD-008 §audit store:
+- `APPROVAL_REQUEST_CREATED` (requester, operation, target)
+- `APPROVAL_GRANTED` (approver, mfa_verified, comment)
+- `APPROVAL_REJECTED` (approver, reason)
+- `APPROVAL_EXPIRED` (auto)
+- `APPROVAL_CANCELLED` (requester)
+- `PROTECTED_OPERATION_EXECUTED` (final outcome, success/failed)
+
+事件**不可删除**（PRD-008 D2 hash-chain + admission webhook + WORM 三层防御兼用）。审计员通过 PRD-005 Log Viewer + `auditCategory=approval` filter 查询。
+
+### 5. UI/UX 细节
+
+(留 §4.5 三个 mockup 已覆盖主线, 详细组件库设计 + tokens 见 UI_GUIDELINES.md 更新)
+
+### 6. Out of Scope（明确不做）
+
+- **基于 risk score 的自动 escalation**: 高风险操作自动升 minApprovers=2/3, 复杂度高且策略主观, v1 不做（v2 可考虑）
+- **审批工作流编排（多级审批链）**: e.g. operator → team lead → security officer 三级串行, v1 只做 "minApprovers" 平行模式（同时通知所有 approver, 满足 N 个即可）, 多级编排 v2 考虑
+- **第三方 IdP 强 MFA 透传**: 客户 Azure AD / Okta 自带 MFA 时, 是否信任 IdP 的 MFA claim 跳过 SupKube TOTP, v1 不做（统一走 SupKube TOTP, 简化威胁模型）
+- **离线 approver**: 完全断网时通过其他渠道发起的 approval（电话 + 物理 token）, v1 不做
+
+### 7. 非功能性要求
+
+- **可用性**: ApprovalPolicy controller / ApprovalRequest controller 高可用（leader election 模式, 单实例 down 不丢未决请求）
+- **性能**: 请求创建 < 100ms (含 K8s CR write); 列表查询 < 500ms (每页 50, 按 user filter)
+- **可观测**: Prometheus metrics `supkube_approval_requests_total{phase}` / `supkube_approval_latency_seconds`（创建→批准时长）
+- **安全**: TOTP secret 加密存储 + sealed-secrets 推荐; recovery code 哈希存（bcrypt + salt）; MFA enrollment QR code 在 HTTPS-only 显示 + 5 分钟 TTL
+
+### 8. 验收标准（DoD）
+
+| # | 验收点 |
+|---|---|
+| 1 | ApprovalPolicy CRD + ApprovalRequest CRD schema 通过 kubectl explain 校验; OpenAPI v3 schema 完整 |
+| 2 | controller (`internal/approvalpolicy/`) reconcile 状态机正确: Pending → Approved → Executing → Executed; 任一状态机转换均有单元测试 |
+| 3 | §4.1 #1-#15 操作的 API handler 全部拦截: 受保护时返回 202 + ApprovalRequest URL; 未启用时走原路径; e2e 测试每个 op id 各一条 |
+| 4 | Dex MFA connector (TOTP) 集成: 客户首次登录强制 enrollment / grace period 7 天 / recovery code 8 个一次性 |
+| 5 | UI Settings → Security → Approval Policies 完整: 3 个 preset + 自定义 + scope 选择 (cluster/ns) + approver 选择 (role/user) |
+| 6 | Operator 发起受保护操作: 弹 §4.5.2 申请抽屉, 必填 reason, submit 后转 Pending Approval |
+| 7 | Approver 看 Pending Approval 列表 §4.5.3: 含申请人 / 操作详情 / 风险评估 / Approve(MFA) + Reject 按钮 |
+| 8 | MFA 二次确认: approver 点 Approve 后弹 TOTP 输入框, 验证通过才 ApprovalRequest.approvals 写入 |
+| 9 | self-approve 拒绝: requester 在 approver 名单内时, UI 灰化 Approve 按钮 + tooltip "self-approve forbidden by policy"; 后端二重验证（绕 UI 直调 API 也拒）|
+| 10 | requestTtl 到期自动 Reject: controller 定期扫 Pending 请求, 超 TTL 改 Expired + audit event; e2e 验证 |
+| 11 | recursive 保护: §4.1 #10 "Disable ApprovalPolicy" 操作本身走 Four-Eyes (即使 enabled=false 想生效也要 approval); 单测验证 |
+| 12 | 通知: Email + In-App + Slack (opt-in) 三通道工作; deep-link 点击直接进对应 ApprovalRequest 页 |
+| 13 | 审计 event 6 条 (`APPROVAL_REQUEST_CREATED` / `APPROVAL_GRANTED` / `APPROVAL_REJECTED` / `APPROVAL_EXPIRED` / `APPROVAL_CANCELLED` / `PROTECTED_OPERATION_EXECUTED`) 走 PRD-008 audit store + hash-chain 防篡改 |
+| 14 | Prometheus metrics 3 条暴露: `approval_requests_total` (counter, labels phase/policy) / `approval_latency_seconds` (histogram, 创建→批准) / `mfa_verifications_total` (counter, labels result) |
+| 15 | helm chart 加 `approval-policy-controller` deployment + RBAC + CRD; values.yaml `security.fourEyes.enabled` 默认 false (向后兼容); `security.mfa.enabled` 默认 false |
+| 16 | USER_MANUAL §X "MFA 启用 + Approval Policies" 新章; SECURITY.md §X "Four-Eyes Authorization & Privileged Operations Audit" 新章; 测试用例 TC-SEC-001~005 |
+| 17 | **反勒索演练**: 模拟攻击者拿到 admin Alice 凭据 → 尝试 force-delete 所有 Backup CR → 被 ApprovalRequest 拦截 + audit log 留痕 (e2e 测试) |
+
+### 9. 任务拆分
+
+> 估时 ~13 天 = **5d MFA + 8d 二次审批**。可以拆 2 sprint 推进。
+
+| Phase | 内容 | 估时 |
+|---|---|---|
+| **P0 ADR-044 + skeleton** (1d) | ApprovalPolicy/ApprovalRequest CRD types + 头表 ADR + 状态机图 | 1d |
+| **P1 MFA 后端** (3d) | Dex TOTP connector 集成 + secret 存储 + enrollment flow + recovery code | 3d |
+| **P2 MFA UI** (2d) | Enrollment 页 + 登录 TOTP 输入 + Recovery code 展示 + Settings → Authentication | 2d |
+| **P3 ApprovalPolicy controller** (2d) | reconciler + ApprovalRequest 状态机 + TTL controller + self-approve 拒绝 | 2d |
+| **P4 API handler 拦截** (2d) | 15 个 op handler middleware: 检查 ApprovalPolicy → 返回 202 + URL; 测试 e2e 每条 | 2d |
+| **P5 Settings UI** (1.5d) | Approval Policies 页 (preset 3 档 + 自定义) + scope 选择器 | 1.5d |
+| **P6 Pending Approval UI** (1d) | List + Detail + Approve(MFA)/Reject + 风险评估卡 | 1d |
+| **P7 通知** (1d) | Email + In-App SSE + Slack (opt-in) | 1d |
+| **P8 审计 + Activity 集成** (0.5d) | 6 条 audit event 落 PRD-008 store + Activity Privileged Operations tab | 0.5d |
+| **P9 测试 + 文档** (1d) | TC-SEC-001~005 + USER_MANUAL + SECURITY.md + 反勒索 e2e | 1d |
+
+### 10. 关联文档与任务
+
+- **ADR-044**（拟）: ApprovalPolicy/ApprovalRequest CRD 设计 + Dex MFA 集成模式
+- **PRD-011 §6 维度 3 / MFA + 二次审批 10 分**: 本 PRD ship 前标 N/A 不计入分母; ship 后此 10 分激活
+- **PRD-008 §audit event**: 本 PRD 6 条 event 复用 PRD-008 hash-chain + WORM 三层防御
+- **PRD-005 Log Viewer §audit category filter**: 审计员通过 `category=approval` 查询 ApprovalRequest 全生命周期
+- **PRD-007 §4.6 DR Drill**: 关闭 Drill (op #15) 进入受保护清单
+- **SECURITY.md §X 新章**: "Four-Eyes Authorization & Privileged Operations Audit" + 威胁模型 + 反勒索 narrative
+- **测试用例.md TC-SEC-001~005**: (1) 受保护操作拦截 / (2) MFA enrollment + login / (3) self-approve 拒绝 / (4) recursive 保护 / (5) 反勒索演练 e2e
+- **关联任务**: 本 PRD 落地后建 task (Mars 批后取号)
+
+### 11. 开放问题（Q1-Q5）
+
+- **Q1**: Approver 池如果都不在线（节假日 / 时区错峰）, requestTtl 自动 Reject 还是允许 Admin **超级权限 override**？(我推: 默认 reject + 提供 "Emergency Bypass" 二级权限给 super-admin, 但本身也走 audit; Mars 拍)
+- **Q2**: ApprovalPolicy 数量限制？多个 policy 命中同一操作时优先级（最严格 / 第一个匹配 / 合并 minApprovers）？(我推: 同操作多 policy 命中 → 取 max minApprovers + union approvers + AND mfaRequired; Mars 拍)
+- **Q3**: MFA enrollment grace period 7 天是否合理？金融客户可能要求 0 天（立即强制）；中小客户可能要求 30 天。(我推: Settings 可配 0/7/30, 默认 7; Mars 拍)
+- **Q4**: Recovery code 用尽后流程？(我推: 必须管理员 reset MFA, reset 本身走 Four-Eyes, Lock-in 防绕过; Mars 拍)
+- **Q5**: AI Advisor (PRD-003 / PRD-011) 推荐执行操作时, 自身是 "AI agent identity" 还是 "代理 user identity"？前者意味 AI 不能 self-approve, 必须人 approve, 防 AI 幻觉执行毁灭操作（推荐 ✅）；后者意味 AI 借用执行者身份, 简单但风险高（不推）。Mars 拍。
+
+### 12. 评审历史
+
+| 日期 | 操作人 | 状态变化 | 反馈 |
+|---|---|---|---|
+| 2026-06-02 | Claude (Auto 5h, Mars D-WAIT-002 frame shift 派生) | — → **草稿** | PRD-013 v1 完成。**核心决策**: (1) 4 大类受保护操作 = Veeam VBR 13 对标 12 条 + SupKube K8s 多集群 + DR 视角特有 3 条 = 合计 15 条; (2) ApprovalPolicy / ApprovalRequest 两层 CRD 设计（前者策略, 后者每请求实例）, 状态机 7 状态; (3) MFA 走 Dex OIDC TOTP connector + WebAuthn passkey, 强制二次确认防 session hijack; (4) recursive 保护 — Disable ApprovalPolicy 操作本身也走 Four-Eyes; (5) self-approve forbidden + minApprovers 可调 1/2/3 = 双眼/三眼/四眼; (6) 6 条 audit event 走 PRD-008 hash-chain + WORM 三层防御兼用; (7) 默认全 disabled, 向后兼容 0 风险。**Q1-Q5 待 Mars 拍**: 紧急 bypass / policy 优先级 / MFA grace period / Recovery code 用尽 / AI Advisor identity。**关键依赖**: 本 PRD ship 后 PRD-011 §6 维度 3 / 10 分激活; 不卡 Demo 核心闭环 (Mars 决策延后, 进流水线)。 |
+
+---
 

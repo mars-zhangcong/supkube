@@ -11,8 +11,8 @@
 
 | Series | 已占最高号 | **下个空号** | 用途 | 详表 |
 |---|---|---|---|---|
-| **PRD** | PRD-012 | **PRD-013** | Product Requirements Document（影响 UX/数据模型的功能） | §二 |
-| **ADR** | ADR-042 | **ADR-043** | Architecture Decision Record（架构级决策，含让号占位） | §三 |
+| **PRD** | PRD-013 | **PRD-014** | Product Requirements Document（影响 UX/数据模型的功能） | §二 |
+| **ADR** | ADR-044 | **ADR-045** | Architecture Decision Record（架构级决策，含让号占位） | §三 |
 | **TC-REG** | TC-REG-011 | **TC-REG-012** | Regression test case（bug fix 强制回归） | §四 |
 | **TC-POL** | TC-POL-008 | **TC-POL-009** | Policy 测试用例 | §四 |
 | **TC-APP** | TC-APP-003 | **TC-APP-004** | Applications 测试用例 | §四 |
@@ -21,14 +21,14 @@
 | **TC-LBS** | TC-LBS-003 | **TC-LBS-004** | Local Backup Store 测试用例 | §四 |
 | **TC-RP** | TC-RP-006 | **TC-RP-007** | Restore Point 测试用例 | §四 |
 | **TC-MC** | TC-MC-004 | **TC-MC-005** | Multi-Cluster 测试用例 | §四 |
-| **D**（战略/产品决策） | D-33 | **D-34** | dashboard `DECISIONS` 数组里的当日决策 | §五 |
+| **D**（战略/产品决策） | D-34 | **D-35** | dashboard `DECISIONS` 数组里的当日决策 | §五 |
 | **C**（客户痛点） | C-012 | **C-013** | dashboard `CUSTOMER_PAIN` 数组 | §六 |
 
 > **如果你的 series 不在上面**：在 §七"新 series 注册"加一行（e.g. 新增 TC-SEC 安全扫描 series），然后回到本表加一行下个空号。
 
 ---
 
-## 二、PRD 已占号 (PRD-001 ~ PRD-012)
+## 二、PRD 已占号 (PRD-001 ~ PRD-013)
 
 | 号 | 主题 | 占号人 / 时间 | 状态 | 详情位置 |
 |---|---|---|---|---|
@@ -39,15 +39,16 @@
 | PRD-005 | Log Viewer v2（运维级日志观察平台） | Claude / 2026-05-31 | 已评审 | PRD.md `#prd-005` |
 | PRD-006 | Activity Task Detail Timeline | Claude / 2026-05-31 | 已评审 | PRD.md `#prd-006` |
 | PRD-007 | 完整 3-2-1-1-0 数据韧性（5 层 + Layer 4 Copy + DR Drill） | Claude / 2026-05-31 | 已评审 v1.1 | PRD.md `#prd-007` |
-| PRD-008 | RP 删除生命周期 + Activity 持久化 + Force Delete 治理 | Claude / 2026-05-31 | 草稿（D1-D5 finding open） | PRD.md `#prd-008` |
-| PRD-009 | Policy 模型对齐 Kasten（Snapshot + Import Policy 双 Action） | Claude / 2026-05-31 | v2 研发中（Phase 1 ship） | PRD.md `#prd-009` |
-| PRD-010 | DR Topology v2（可视化重构 + Local Snapshot/Backup Copy 节点） | Claude / 2026-05-31 | 草稿（F1-F4 finding open） | PRD.md `#prd-010` |
-| PRD-011 | AI Backup Advisor MVP（规则算分 + LLM 解释 · Canonical DSL · 本地小闭环） | Claude / 2026-06-01 | 草稿（H1-H5 finding open） | PRD.md `#prd-011` |
-| PRD-012 | Call Home / Auto-Support（三档连接 · 自动开 Case · opt-in） | Claude / 2026-06-01 | 草稿（Blocked，待 Case API） | PRD.md `#prd-012` |
+| PRD-008 | RP 删除生命周期 + Activity 持久化 + Force Delete 治理 | Claude / 2026-05-31 | 改正中（D1-D5 finding 闭环 2026-06-02, §13 修订段 + §8 DoD #19-#23, 等 Mars 重审） | PRD.md `#prd-008` |
+| PRD-009 | Policy 模型对齐 Kasten（Snapshot + Import Policy 双 Action） | Claude / 2026-05-31 | v2 改正中（PRD-Review 第六份 G1-G5 全闭环 2026-06-02, §8.2 Phase 2 DoD/§9 任务/§9.3 风险/§4.5.3 卖点诚实化/§4.5.4 warn 半成品标注/§4 pill save 不可改 alert, 等 Mars 重审） | PRD.md `#prd-009` |
+| PRD-010 | DR Topology v2（可视化重构 + Local Snapshot/Backup Copy 节点） | Claude / 2026-05-31 | 改正中（F1-F4 finding 闭环 2026-06-02, §13 修订段 + §8 DoD #13-#16, 等 Mars 重审） | PRD.md `#prd-010` |
+| PRD-011 | AI Backup Advisor MVP（规则算分 + LLM 解释 · Canonical DSL · 本地小闭环） | Claude / 2026-06-01 | 改正中（H1/H2/H5 finding 闭环 2026-06-02, §12 修订段 + §8 DoD #14-#17; H1 Q1 权重 + Q4 阈值 deferred 等 Mars 拍 → D-WAIT-002） | PRD.md `#prd-011` |
+| PRD-012 | Call Home / Auto-Support（三档连接 · 自动开 Case · opt-in） | Claude / 2026-06-01 | 改正中（I1 finding 闭环 2026-06-02 默认逐次确认 + SECURITY §6.C 并入, §10 修订段 + §8 DoD #13-#15; I2 customer-id 仍 Blocked 等 Case API spec） | PRD.md `#prd-012` |
+| PRD-013 | SupKube Four-Eyes Authorization（备份安全二次审批 + MFA · 4 大类 15 受保护操作 · Veeam VBR 13 对标 + Kasten 没有差异化） | Claude / 2026-06-02（Mars D-WAIT-002 frame shift 派生） | 草稿（占号 + 头表 + 立项缘由 + Goal/Stories/Functions/UI/DoD/Tasks/History 待 ship；不卡 PRD-011 Demo 闭环，PRD-011 §6 维度 3 / MFA+二次审批 10 分标 N/A → 等本 PRD ship 激活） | PRD.md `#prd-013` |
 
 ---
 
-## 三、ADR 已占号 (ADR-001 ~ ADR-040)
+## 三、ADR 已占号 (ADR-001 ~ ADR-044)
 
 > **本段是号源 SSOT**。架构设计.md 顶部 "ADR 号台账" 段保留作 ADR **详细元数据**（含 decision 摘要 / Alternatives 等），但**取号先看这里**。
 > ADR-001~031 已固化在 架构设计.md §9 正文，本表只列号 + 主题；ADR-032+ 列完整状态。
@@ -66,6 +67,8 @@
 | ADR-040 | **DR Topology SVG 视觉规范** ← 让号自 ADR-038 | PRD-010 让号 / 2026-06-01 | 草稿（占号待 PRD-010 实施落地） | 架构设计.md §9（待写） |
 | ADR-041 | **项目编号统一台账 (LEDGER.md) + Rule G 取号 SOP**（跨 PRD/ADR/TC/D/C 全 series 防撞号；并发由 main agent 预分配；让号 forward-only；漂移检查 gen-data.mjs） | Claude (Rule G 演练) / 2026-06-01 | **草稿** ✅（架构设计.md §9 正文已写, 含 Context/Decision/Consequences/Alternatives/Verification/References 7 段） | 架构设计.md §9 ADR-041 |
 | ADR-042 | **开发主体环境上云 (Azure AKS) + CI/CD 三集群推送策略** (关闭本机 docker-desktop; push to main → aks-dev 自动; tag → aks-test; manual gate → aks-prod; dev-deploy.sh 退役; 保留 amd64+arm64 多架构) | Mars 决策 / Claude 起草 / 2026-06-01 | **草稿** ✅（架构设计.md §9 正文 8 段已写: Context/Decision/Consequences/Alternatives/§5 prod 集群待建/§6 dev-deploy 退役时间线/Verification/References；cd.yaml 三阶段已扩；dev-deploy.sh 头加 DEPRECATED notice） | 架构设计.md §9 ADR-042 / cd.yaml / hack/dev-deploy.sh |
+| ADR-043 | **AI Backup Advisor 评分细则 v1.0.0**（Mars 100 分制 4 维 + 行业对标 ISO 27002 §8.13 / NIST CSF / NIST SP 1800-26 / NIST SP 800-53 Rev.5 CP-9 + Mars frame shift "采客户→采平台" 5 个采集 SOP: Tier label / Air-Gapped Vault (WORM+Glacier+Archive Tier) / Vault 间接检测 / MFA 等 PRD-013 / DR Drill 等 PRD-007 §4.6） | Mars D-WAIT-002 / Claude 起草 / 2026-06-02 | **草稿**（占号 + 待写入 架构设计.md §9 正文 7 段: Context/Decision/Consequences/Alternatives/Verification/References + 评分公式细则表 + 维度采集分档表） | 架构设计.md §9 ADR-043 |
+| ADR-044 | **快速调试模式 (Fast Debug Mode)：本地秒级内循环 `hack/dev-local.sh` + feature 分支推送节奏**（与 ADR-042 云端部署通道互补；触发词"进入快速调试模式"→ Vite HMR + go run / port-forward 二模式，绕过 docker build/ACR/AKS；调试期每 2h(改动大 1h) push 到 feature 分支，仅触发 CI 校验不触发部署） | Mars 决策 / Claude 起草 / 2026-06-02 | **草稿** ✅（架构设计.md §9 正文 7 段已写: Context/Decision/Consequences/Alternatives/Coverage/Verification/References；hack/dev-local.sh + FAST-DEBUG-MODE.md + README 指引已落） | 架构设计.md §9 ADR-044 / hack/dev-local.sh / FAST-DEBUG-MODE.md |
 
 ---
 
@@ -129,6 +132,7 @@
 | D-31 | 2026-06-01 | MEMORY.md 项目级落地 |
 | D-32 | 2026-06-01 | **草稿** ✅ Rule G + LEDGER.md 立 + ADR-041（4 步 SOP 首次演练成功；正文已写入 dashboard `DECISIONS`） |
 | D-33 | 2026-06-01 | **草稿** ✅ 开发主体上云（ADR-042 + cd.yaml 三阶段 + dev-deploy.sh DEPRECATED；Rule G 第二次演练; 正文已写入 dashboard `DECISIONS`） |
+| D-34 | 2026-06-02 | **草稿** ✅ PRD-Review 第六份 finding 全 ship (Auto 5h 自主工作): PRD-009 v2 §8.2 G5 / PRD-008 D1-D5 / PRD-010 F1-F4 / PRD-011 H1/H2/H5 / PRD-012 I1 全部 finding 闭环。4 PRD 状态 草稿→改正中。PRD-011 H1 数值待 Mars 拍 (D-WAIT-002), PRD-012 I2 仍 Blocked 等 Case API。CD #2 deploy-dev OIDC 凭据缺失 D-WAIT-001 写进 等待决策.md 等 Mars 拍 A/B。 |
 
 （D-23/24/25 跳过号或归并到 D-26；如发现实际占用请补回此表）
 

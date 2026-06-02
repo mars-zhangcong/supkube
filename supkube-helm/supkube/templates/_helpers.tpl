@@ -73,3 +73,22 @@ override pattern for those.
   {{- printf "%s:%s" .repository .tag -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+supkube.dex.issuer — the OIDC issuer URL for embedded Dex.
+
+Precedence:
+  1. explicit auth.dex.issuer (operator override), else
+  2. derived as <auth.dex.publicURL>/dex
+
+This lets operators set ONE value (publicURL) for the common case while
+keeping issuer overridable. dex-check.yaml guarantees publicURL is non-empty
+whenever dex is enabled, so this never emits a bare "/dex".
+*/}}
+{{- define "supkube.dex.issuer" -}}
+{{- if .Values.auth.dex.issuer -}}
+{{- .Values.auth.dex.issuer -}}
+{{- else -}}
+{{- printf "%s/dex" (trimSuffix "/" .Values.auth.dex.publicURL) -}}
+{{- end -}}
+{{- end -}}

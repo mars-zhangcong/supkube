@@ -19,12 +19,10 @@ dist/
 .idea/
 .cachebust
 
-# Test cluster credentials — never commit kubeconfigs.
-# Mars's AKS kubeconfigs downloaded from Cloud Shell for multi-cluster
-# testing contain client-key-data; committing would leak admin access.
-engineer-testing/kc-*.yaml
-engineer-testing/kc-*.yml
-engineer-testing/*.kubeconfig
+# System Engineer's working notes — not part of the repo. Kept local only
+# (also avoids committing kubeconfigs here, which contain client-key-data
+# and would leak admin access).
+engineer-testing/
 *.kubeconfig
 
 # Helm subcharts downloaded by `helm dependency update`. Chart.lock

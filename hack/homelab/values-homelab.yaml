@@ -1,0 +1,38 @@
+# ============================================================================
+# values-homelab.yaml — SupKube 在 Homelab(Colima/k3s) 上的安装覆盖
+# ----------------------------------------------------------------------------
+# 用法： helm install supkube ../../supkube-helm/supkube \
+#          -n supkube --create-namespace -f values-homelab.yaml --wait
+# install-supkube.sh 会自动带上本文件。
+# ============================================================================
+
+# EULA 必须显式接受，否则安装会 fail-fast（见 values.yaml 说明）
+eula:
+  accept: true
+  company: "Homelab"
+  email: ""
+
+# 跨集群复制 Demo 的信任根：homelab 与云上集群必须用【同一个】base64 值。
+# 留空时 helm 会自动生成并在升级间保持不变 —— 但那样只能单集群信任。
+# 做云上↔云下复制时，取消下面注释并填入两边一致的值：
+#   echo -n "$(openssl rand -base64 32)"   # 生成一次，两个集群都用它
+# fingerprint:
+#   sharedSecret: "粘贴同一个 base64 值"
+
+# 内置本地 MinIO 作为 Velero 的备份存储，homelab 自给自足、不依赖外部 S3。
+# 这就是"云下"侧的对象存储；"云上"侧用真实 S3/Azure Blob 即可做复制对比。
+localStore:
+  enabled: true
+  bucket: supkube-local
+  # objectLock 默认开（防勒索/防误删的 WORM 保留），Demo 可保留
+
+# 前端用 NodePort 暴露；Colima/Lima 会把 VM 内 0.0.0.0:30888 转发到
+# Mac 宿主 localhost:30888，再用 `tailscale serve` 桥到 tailnet（见 README）。
+service:
+  frontend:
+    type: NodePort
+    nodePort: 30888
+
+# Velero 已由 chart 内置 v1.18（chart 12.0.1），保持默认即可
+velero:
+  enabled: true
