@@ -138,6 +138,14 @@ jobs:
         run: |
           helm repo add vmware-tanzu https://vmware-tanzu.github.io/helm-charts
           helm dependency build "$CHART_DIR"
+          # 2026-06-02 fix: --timeout 5m → 15m + --burst-limit 300
+          # Fresh-install on a busy cluster (Kasten K10 + KubeVirt 共存) hits
+          # client-go default QPS=5/Burst=10, large 1st-install CRD+RBAC+Deploy
+          # 调用排队等不到 5m timeout → "client rate limiter Wait ... context
+          # deadline exceeded". 实测见 CD #6 deploy-test. 修法: 给 helm 大 burst
+          # (3.13+ supports --burst-limit) + 长 timeout. Upgrade 后 CD 再跑同
+          # cluster 是真 upgrade 不再大量 install, 但保留宽 timeout 防 chart
+          # 加新 CRD 时再撞.
           helm upgrade --install supkube "$CHART_DIR" \
             -n supkube --create-namespace \
             --set eula.accept=true \
@@ -145,7 +153,8 @@ jobs:
             --set backend.image.tag=${{ needs.build-push.outputs.version }} \
             --set frontend.image.repository=$ACR_LOGIN_SERVER/frontend \
             --set frontend.image.tag=${{ needs.build-push.outputs.version }} \
-            --wait --timeout 5m
+            --wait --timeout 15m \
+            --burst-limit 300
       - name: Verify-before-ship（Rule D · aks-dev）
         run: |
           chmod +x hack/ci-verify.sh
@@ -173,6 +182,14 @@ jobs:
         run: |
           helm repo add vmware-tanzu https://vmware-tanzu.github.io/helm-charts
           helm dependency build "$CHART_DIR"
+          # 2026-06-02 fix: --timeout 5m → 15m + --burst-limit 300
+          # CD #6 实测撞 "client rate limiter Wait ... context deadline exceeded"
+          # 根因: test cluster 跟 Kasten K10 + KubeVirt + CDI + demo-vm* 共存,
+          # API server 负载高; fresh install (release "supkube" does not exist)
+          # 大量 CRD+RBAC+Deploy 一次性 create, 默认 client-go QPS=5/Burst=10
+          # 排队等不到 5m timeout. 修法: helm 3.13+ 支持 --burst-limit 调大,
+          # timeout 也给 15m fresh-install. Upgrade 走时 install→upgrade 资源
+          # 已 ready, 不会再大量 install API 调用, 但保留宽配置防 chart 加新 CRD.
           helm upgrade --install supkube "$CHART_DIR" \
             -n supkube --create-namespace \
             --set eula.accept=true \
@@ -180,11 +197,80 @@ jobs:
             --set backend.image.tag=${{ needs.build-push.outputs.version }} \
             --set frontend.image.repository=$ACR_LOGIN_SERVER/frontend \
             --set frontend.image.tag=${{ needs.build-push.outputs.version }} \
-            --wait --timeout 5m
+            --wait --timeout 15m \
+            --burst-limit 300
       - name: Verify-before-ship（Rule D · aks-test）
         run: |
           chmod +x hack/ci-verify.sh
           ./hack/ci-verify.sh supkube ${{ needs.build-push.outputs.version }}
+
+  # ─────────────── 2c) 持续冒烟测试（test 部署后自动）→ 结果发布到 test-results 分支 ───────────────
+  # 一旦新版本 CD 到 aks-jumborca-test，立即对实时集群跑 测试用例.md §1 P0 冒烟可自动化子集，
+  # 产出结构化结果并发布到 test-results 分支（Dashboard 从该分支拉取渲染）。
+  smoke-test:
+    name: Smoke Test → publish to Dashboard
+    needs: [build-push, deploy-test]
+    runs-on: ubuntu-latest
+    environment: test                         # 同 deploy-test：OIDC subject=environment:test
+    if: github.ref_type == 'tag' || github.event.inputs.environment == 'test'
+    permissions:
+      id-token: write                         # OIDC 登录 Azure
+      contents: write                         # 推 test-results 分支（非受保护分支）
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - uses: azure/setup-kubectl@v4
+      - name: 取 aks-jumborca-test 凭据
+        run: az aks get-credentials -n "$AKS_NAME_TEST" -g "$AKS_RG" --overwrite-existing
+
+      - name: 跑 P0 冒烟套件（产出 smoke-results/）
+        id: smoke
+        continue-on-error: true               # 测试失败不立即中断 → 先把结果发布上去，再让 job 反映红
+        env:
+          CLUSTER: aks-jumborca-test
+          # 若 test 集群开了认证（AUTH_ENABLED=true），在此注入 token：
+          # SUPKUBE_TOKEN: ${{ secrets.SUPKUBE_TEST_TOKEN }}
+        run: |
+          chmod +x hack/smoke-test.sh hack/ci-verify.sh
+          ./hack/smoke-test.sh "${{ needs.build-push.outputs.version }}"
+
+      - name: 发布结果到 test-results 分支（Dashboard 数据源）
+        if: always()
+        run: |
+          set -e
+          git config --global user.name  "supkube-ci[bot]"
+          git config --global user.email "ci@supkube.local"
+          PUB=$(mktemp -d); cd "$PUB"
+          git init -q
+          git remote add origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
+          if git fetch -q --depth=1 origin test-results 2>/dev/null; then
+            git checkout -q -b test-results origin/test-results
+          else
+            git checkout -q --orphan test-results
+            git rm -rq . 2>/dev/null || true     # 孤儿分支起步，清空索引
+          fi
+          cp "$GITHUB_WORKSPACE"/smoke-results/test-results.json ./test-results.json
+          cp "$GITHUB_WORKSPACE"/smoke-results/test-results.md   ./test-results.md
+          # 维护近 50 次 run 的趋势索引，供 Dashboard 画 sparkline
+          [ -f history.json ] || echo '[]' > history.json
+          NEW=$(jq -c '{runId,timestamp,version,cluster,summary}' ./test-results.json)
+          jq --argjson n "$NEW" '. + [$n] | .[-50:]' history.json > history.json.tmp && mv history.json.tmp history.json
+          git add -A
+          git commit -q -m "test-results: ${{ needs.build-push.outputs.version }} @ $(date -u +%FT%TZ)" || { echo "无变化，跳过推送"; exit 0; }
+          git push -q origin test-results
+
+      - name: 让 job 反映测试结果（有 failed 用例则 job 红）
+        if: always()
+        run: |
+          if [ "${{ steps.smoke.outcome }}" != "success" ]; then
+            echo "::error::冒烟测试存在失败用例，详见上方日志与 test-results 分支报告"
+            exit 1
+          fi
+          echo "✅ 冒烟测试全绿"
 
   # ─────────────── 3) 部署 prod 集群（人工卡点 · ADR-042 §5 集群待创建） ───────────────
   deploy-prod:
@@ -215,6 +301,10 @@ jobs:
         run: |
           helm repo add vmware-tanzu https://vmware-tanzu.github.io/helm-charts
           helm dependency build "$CHART_DIR"
+          # 2026-06-02 fix: --timeout 5m → 15m + --burst-limit 300
+          # 跟 dev/test 同源根因: fresh install 大量 CRD+RBAC+Deploy 容易撞
+          # client-go rate limiter timeout. prod 走 --atomic 自动回滚,
+          # 短 timeout 误判失败 → 触发不必要的 rollback. 给充足时间.
           helm upgrade --install supkube "$CHART_DIR" \
             -n supkube --create-namespace \
             --set eula.accept=true \
@@ -222,7 +312,8 @@ jobs:
             --set backend.image.tag=${{ needs.build-push.outputs.version }} \
             --set frontend.image.repository=$ACR_LOGIN_SERVER/frontend \
             --set frontend.image.tag=${{ needs.build-push.outputs.version }} \
-            --wait --timeout 5m \
+            --wait --timeout 15m \
+            --burst-limit 300 \
             --atomic                          # 升级失败自动回滚到上一个 release
       - name: Verify-before-ship（生产）
         run: |
