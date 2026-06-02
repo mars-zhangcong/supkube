@@ -145,7 +145,7 @@ jobs:
             --set backend.image.tag=${{ needs.build-push.outputs.version }} \
             --set frontend.image.repository=$ACR_LOGIN_SERVER/frontend \
             --set frontend.image.tag=${{ needs.build-push.outputs.version }} \
-            --wait --timeout 5m
+            --wait --timeout 15m --burst-limit 300
       - name: Verify-before-ship（Rule D · aks-dev）
         run: |
           chmod +x hack/ci-verify.sh
@@ -182,7 +182,7 @@ jobs:
             --set backend.image.tag=${{ needs.build-push.outputs.version }} \
             --set frontend.image.repository=$ACR_LOGIN_SERVER/frontend \
             --set frontend.image.tag=${{ needs.build-push.outputs.version }} \
-            --wait --timeout 5m
+            --wait --timeout 15m --burst-limit 300
       - name: Verify-before-ship（Rule D · aks-test）
         run: |
           chmod +x hack/ci-verify.sh
@@ -292,7 +292,7 @@ jobs:
             --set backend.image.tag=${{ needs.build-push.outputs.version }} \
             --set frontend.image.repository=$ACR_LOGIN_SERVER/frontend \
             --set frontend.image.tag=${{ needs.build-push.outputs.version }} \
-            --wait --timeout 5m \
+            --wait --timeout 15m --burst-limit 300 \
             --atomic                          # 升级失败自动回滚到上一个 release
       - name: Verify-before-ship（生产）
         run: |
