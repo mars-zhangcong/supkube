@@ -23,6 +23,7 @@
 | **TC-MC** | TC-MC-004 | **TC-MC-005** | Multi-Cluster 测试用例 | §四 |
 | **D**（战略/产品决策） | D-35 | **D-36** | dashboard `DECISIONS` 数组里的当日决策 | §五 |
 | **C**（客户痛点） | C-012 | **C-013** | dashboard `CUSTOMER_PAIN` 数组 | §六 |
+| **D-WAIT**（决策待办） | D-WAIT-012 | **D-WAIT-013** | 等待 Mars 拍板才能继续的事项（Auto 模式阻塞项；一事一文件，并行 agent 永不撞） | [等待决策.md](./等待决策.md) (INDEX) + `等待决策/` |
 
 > **如果你的 series 不在上面**：在 §七"新 series 注册"加一行（e.g. 新增 TC-SEC 安全扫描 series），然后回到本表加一行下个空号。
 
@@ -234,6 +235,22 @@
 2. **不改速查表的"下个空号"**（避免后人撞号；让号是 forward-only）
 3. 这意味着 LEDGER 历史会出现"跳号"——这是正常的，号是 immutable 标识
 ```
+
+### E. D-WAIT 系列特别说明（2026-06-04 单源根治立）
+
+`D-WAIT-NNN` = Auto 模式期间**等 Mars 拍板才能继续**的阻塞项，是 LEDGER 正式取号系列（§一速查表）。它的取号、并发、让号纪律与 PRD/ADR 完全一致，外加 3 条专属约束（教训来源：2026-06-04 跨分支碎裂 + 撞两个 004/005 + FDE fork）：
+
+```
+1. 一事一文件：详情写 等待决策/D-WAIT-NNN-<slug>.md，禁往单一大文件 append（append = 并行写必撞）
+2. 取号经 LEDGER：新建 D-WAIT 先来 §一速查表取下个空号；并行场景由 main agent 集中预分配，
+   把号写进各 agent prompt（"你的号 = D-WAIT-013，不要自己取号"）——见 ENGINEERING Rule G / Rule I
+3. 让号 forward-only：撞号让到下个空号、旧号不抢、不改已闭环条目既有号；
+   ORIG / 历史提问保留作 audit（不删历史，但各有唯一身份行）
+```
+
+- **INDEX**：`等待决策.md` 是瘦 INDEX（一张表：号/标题/状态 open|closed|audit/owner/日期/链接），不放详情。
+- **不进 dashboard**：D-WAIT **不**进 `dashboard/data.js`（与战略决策 D-XX 区分）——`gen-data.mjs` 不校验 D-WAIT，故 D-WAIT 变更不引漂移；但每次提交仍跑 gen-data 守 PRD/ADR。
+- **历史**：已撞号的 D-WAIT-004/005 ORIG（同一逻辑决策的提问+结论）合并入各自文件作 audit 段；FDE 自占的 D-WAIT-004~007 + K3S A 路线已 forward-only 重编为 008~012（映射见 INDEX）。
 
 ---
 
