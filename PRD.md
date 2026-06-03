@@ -52,7 +52,7 @@
 
 | 编号 | Feature | 状态 | 关联任务 |
 |---|---|---|---|
-| [PRD-001](#prd-001) | 跨集群还原前置检查闭环（Restore Preflight Checklist） | **改正中（2026-05-31）** | #104 |
+| [PRD-001](#prd-001) | 跨集群还原前置检查闭环（Restore Preflight Checklist） | **研发中（2026-06-03 Mars D-WAIT-003 拍板进研发；4 finding + T3 拓扑校验已修订完成）** | #104 |
 | [PRD-002](#prd-002) | Transform 一等公民（两层模型：Transform 库 + TransformSet 引用容器） | **已评审 v1.3（2026-05-31）** | #114 |
 | [PRD-003](#prd-003) | AI Advisor inside SupKube（内嵌灾备顾问 · 推荐型 · 非自治） | **已评审（2026-05-31）** | #115 |
 | [PRD-004](#prd-004) | MCP Server "Supkube Skills"（对接客户侧 AI Agent 如 OpenClaw, Streamable HTTP + 5 核心 Skills + 开源） | **已评审（2026-05-31）** | #116 |

@@ -48,19 +48,25 @@
 
 所有 AI / Call Home 能力**只给建议，不自动执行**。"应用建议"只预填 Wizard，由客户确认后自己保存。软件**绝不**自动修改客户集群资源（ADR-033 §6）。
 
-### Rule H — 应尽则尽（研发执行纪律, 2026-06-02 新立）
+### Rule H — 应尽则尽（DoR 守门 + 研发执行纪律 三条铁律, 2026-06-02 Mars D-WAIT-005 拍板）
 
-对每一个**已过 DoR**（详见 §7）的就绪项，**尽最大努力把能完成的部分做完**——含单元测试、可独立交付的子模块、骨架代码、接口契约——不留半成品 WIP。
+> **完整语义** (Mars 2026-06-02 D-WAIT-005 纠错): "应尽则尽" 是**一条原则三条铁律**, 不是两个独立原则。覆盖 DoR 前后全周期。
 
-**子规则**：
+**三条铁律 (全过才算合规)**:
 
-1. **隔离卡点**：确实卡依赖 / 卡外部输入做不完的子项，**明确隔离标注**（代码里 `// BLOCKED: waiting for ADR-XXX` 或 PRD §9 任务表标 ⏸），让测试能就"已完成部分"立刻接力，不被半成品阻塞。
-2. **不强行 ship**："尽力做完" **≠** "验证通过"。做完仍要过 Rule D（buildStamp + journey + 双集群）才算 ship。
-3. **DoD 子项可独立判定**：每条 DoD 标"已完成"必须独立可验证；不可把"主体 + 卡点"合写一条造成不可分的 WIP。
-4. **测试可接力线**：每个就绪项明确"做到什么程度测试就能接手"（绑对应 DoD / TC 号）。让测试不必等"全功能完成"才能开工。
-5. **守 Rule A**：仍守"无 PRD 不编码"。**应尽则尽 ≠ 扩功能范围**——只在 PRD 写明的范围内尽。
+1. **过 DoR 立即排期开工** — 不人为搁置 (守 §6 DoR 6 条门槛 + Rule A)
+2. **未过 DoR 绝不强行开工** — 缺项 / 模糊 / 依赖未就绪 → 禁止编码, 归入暂缓并写清"卡哪条 DoR + 缺什么 + 谁来补"
+3. **已过 DoR 尽最大努力把能完成的部分做完** — 含单测、可独立交付的子模块、骨架代码、接口契约, 不留半成品 WIP; 确实卡依赖的子项**明确隔离标注**让测试能立刻接力, 不阻塞已完成部分
 
-> **教训来源**：2026-06-02 DoR 审计发现 PRD-008/010/011 部分子项卡 ADR 草稿（占号待写）。如果"全部就绪才开工"会导致已闭环的主体也被卡。"应尽则尽"是平衡 DoR 守门 + 实践推进的工程纪律。
+**子规则** (铁律 3 的细化):
+
+- **隔离卡点**: 代码里 `// BLOCKED: waiting for ADR-XXX` 或 PRD §9 任务表标 ⏸, 让测试就"已完成部分"接力, 不被半成品阻塞
+- **不强行 ship**: "尽力做完" **≠** "验证通过"。做完仍要过 Rule D (buildStamp + journey + 双集群) 才算 ship
+- **DoD 子项可独立判定**: 每条 DoD 标"已完成"必须独立可验证; 不可把"主体 + 卡点"合写一条造成不可分的 WIP
+- **测试可接力线**: 每个就绪项明确"做到什么程度测试就能接手" (绑对应 DoD / TC 号), 测试不必等"全功能完成"才能开工
+- **守 Rule A**: 仍守"无 PRD 不编码"。应尽则尽 **≠** 扩功能范围, 只在 PRD 写明的范围内尽
+
+> **教训来源**: 2026-06-02 DoR 审计发现 PRD-008/010/011 部分子项卡 ADR 草稿 (占号待写)。如果"全部就绪才开工"会导致已闭环的主体也被卡。Mars D-WAIT-005 拍板: 这种情况走 **铁律 3** 主体推 + 卡点隔离, 不是 **铁律 2** 全暂缓。守门 (1+2) 跟执行纪律 (3) 是同一原则的两面。
 
 ### Rule G — 取号必先来 LEDGER（2026-06-01 新立）
 
@@ -189,11 +195,17 @@
 
 > **判断锚点**: ADR 是否能让一个**新来的研发**只读它就知道"该这么做"而不是"等谁拍"。
 
-### 6.3 应进则进 + 应尽则尽 (执行纪律)
+### 6.3 应尽则尽 (DoR 守门 + 执行纪律 三条铁律)
 
-- **应进则进**: 过 DoR 立即排期开工、不人为搁置 (守 Rule A / Rule D)。
-- **应尽则尽**: 对每个就绪项, 尽最大努力把能完成的部分做完, 卡点隔离不阻塞 (Rule H)。
-- **缺项 / 模糊 / 依赖未就绪 → 禁止编码**, 归入暂缓并写清: 卡哪条 DoR + 缺什么 + 谁来补。
+> 完整定义见 §1 Rule H。**"应尽则尽"是同一原则的三条铁律** (Mars 2026-06-02 D-WAIT-005 纠错), 不是两个原则:
+
+| 铁律 | 适用阶段 | 内容 |
+|---|---|---|
+| **铁律 1** | DoR 前 | 过 DoR **立即排期开工**, 不人为搁置 (守 Rule A / Rule D) |
+| **铁律 2** | DoR 检 | 未过 DoR **绝不强行开工** — 缺项 / 模糊 / 依赖未就绪 → 禁止编码, 归入暂缓并写清 "卡哪条 DoR + 缺什么 + 谁来补" |
+| **铁律 3** | DoR 后 | 已过 DoR **尽最大努力把能完成的部分做完** — 含单测 / 子模块 / 骨架 / 接口契约; 卡依赖子项隔离标注让测试接力 |
+
+**口径锚点**: "应尽则尽 ≠ 应进则进"。三条铁律是一个整体, 缺任一条 = 半 DoR (易导致"该推不推"或"不该开干硬开干")。
 
 ### 6.4 DoR 判定 SOP
 
@@ -208,84 +220,106 @@
 
 ---
 
-## 7. 工程周期闭环 (Coding → Testing → 完成报告 → CICD, 2026-06-02 立)
+## 7. 工程周期闭环 (9 阶段, 2026-06-02 Mars D-WAIT-004 拍板)
 
-> **用途**: 解决"开工后到底什么算 done"的口径不一致。每个就绪 PRD 必须走完 5 个阶段才能从 backlog 移除, 任一阶段缺失 = 未真完成。
-> **关联**: Rule A (PRD 先于代码) → Rule H (应尽则尽) → Rule D (Verify-before-ship) → 本节 (闭环到完成报告)。
+> **用途**: 解决"开工后到底什么算 done"的口径不一致。每个就绪 PRD 必须走完 9 个阶段才能从 backlog 移除, 任一阶段缺失 = 未真完成。
+> **关联**: Rule A (PRD 先于代码) → Rule H (应尽则尽) → Rule D (Verify-before-ship) → 本节 (闭环到 CD 上线)。
+> **历史**: 初版 5 阶段 (Coding→Testing→Verify→Report→CICD), Mars 2026-06-02 D-WAIT-004 Q1 重拆为 9 阶段, 前加 Requirement/PRD/ADR, 在 Coding 后加 CI/CD 测环境/多轮测试/UAT, 拆 CD 双层 (测环境 vs 上线)。
 
-### 7.1 5 阶段闭环
+### 7.1 9 阶段闭环
 
 ```
-   ┌─────────┐    ┌─────────┐    ┌──────────┐    ┌─────────┐    ┌──────────┐
-   │ Coding  │ →  │ Testing │ →  │ Verify   │ →  │ Report  │ →  │ CICD     │
-   │ (Rule H)│    │ (Rule E)│    │ (Rule D) │    │ 完成报告 │    │ 自动化   │
-   └─────────┘    └─────────┘    └──────────┘    └─────────┘    └──────────┘
+┌─────────────┐  ┌──────────┐  ┌──────────┐  ┌────────────┐  ┌─────────────────┐
+│ 1.Requirement│→│ 2.PRD    │→│ 3.方案ADR│→ │ 4.Coding+CI │→│ 5.CD 部署测环境  │
+│  原始需求    │  │  (DoR)   │  │ 架构决策 │  │ 编码+CI 单测│  │ Dev + Test 双集群│
+│  客户/Mars   │  │ §6 DoR   │  │ §1 Rule G│  │ §1 Rule E   │  │ §1 Rule D 验证   │
+└─────────────┘  └──────────┘  └──────────┘  └────────────┘  └─────────────────┘
+                                                                       ↓
+┌─────────────┐  ┌──────────────┐  ┌───────────┐  ┌──────────────┐
+│ 9.CD 上线   │←│ 8.UAT (DoD)  │←│ 7.Test    │←│ 6.多轮测试   │
+│  生产 prod  │  │  Mars 验收   │  │  Report   │  │  Iteration   │
+│  §3 发布    │  │  §1 Rule D   │  │ 测试用例.md│  │ §1 Rule E    │
+└─────────────┘  └──────────────┘  └───────────┘  └──────────────┘
 ```
 
-| 阶段 | 输入 | 产出 | 通过线 |
-|---|---|---|---|
-| **1. Coding** | PRD §4 + §9 任务拆分 | 代码实现 (功能 + 单测) | 主体 PR + 单测覆盖 (业务核心 ≥70%, 入口路径 ≥90%) |
-| **2. Testing** | 测试用例.md TC-XXX 用例 (按 Rule E 准入) + PRD §8 DoD | 测试报告 (用例×结果矩阵) | 所有 P0/P1 用例 pass + 回归用例 (TC-REG-*) pass |
-| **3. Verify (Rule D)** | 部署到 dev cluster | curl /status buildStamp 是今天 + 完整 user journey 通 + 双集群 (dev+test) 一致 | Rule D 3 子规则全过 |
-| **4. 完成报告** | 上 3 阶段产出 | `PRD-Review/PRD-XXX-COMPLETION-REPORT-YYYY-MM-DD.md` 完成报告 | 见 §7.2 报告模板 |
-| **5. CICD 闭环** | 完成报告 | (a) CHANGELOG 加条目 + (b) dashboard PRD 状态 → Shipped + (c) PRD.md 状态 → 待验收 → Shipped (Mars 拍) + (d) PROJECT-STATUS.md 当前发布版本 bump | dashboard `gen-data.mjs` ✅ 无漂移 + Mars 在 PROJECT-STATUS 签收 |
+| # | 阶段 | 输入 | 产出 | 通过线 | 责任人 |
+|---|---|---|---|---|---|
+| **1** | **Requirement 原始需求** | 客户痛点 / Mars 决策 / 市场反馈 | 需求记录 (LEDGER C-XXX 客户痛点 或 D-XXX 战略决策) | LEDGER 取号 + 一句话主题 | Mars / PM |
+| **2** | **PRD (DoR)** | Requirement | PRD.md §1-§12 完整正文 + 关联评审 finding 全闭环 | §6 DoR 6 条全过 (Rule H 铁律 2 守门) | Claude / PM 起草 + Mars 拍 |
+| **3** | **方案 ADR** | PRD §4 关键架构决策点 | 架构设计.md §9 ADR-XXX 正文 6 段 (Context/Decision/Consequences/Alternatives/Verification/References) | ADR 正文写完 (不再"占号待写"), 跟 PRD §头表关联 ADR 列对齐 | Claude / 架构师 |
+| **4** | **Coding + CI** | PRD §4 + §9 任务拆分 + ADR | 代码 + 单测 + lint pass | (a) `go build ./...` 通过; (b) `go test` 单测覆盖业务核心 ≥70% / 入口 ≥90%; (c) CI workflow `.github/workflows/ci.yaml` 绿 (lint + build + test + `gen-data.mjs` 无漂移); (d) PR review approved | 研发 |
+| **5** | **CD 部署测环境** | CI 绿的 image | image 推 ACR + helm upgrade 到 **dev + test 双集群** (Mars D-WAIT-004 Q3 闭环要求) | `kubectl --context=aks-jumborca-{dev,test} get pods` 全 Running + `curl /status` 双集群 buildStamp 一致 + Rule D 双集群验证通过 | CD `.github/workflows/cd.yaml` 自动 |
+| **6** | **多轮测试 Iteration** | 部署到双测环境的 image | 测试用例.md TC-XXX-* 跑通 + 发现的 bug 修复 → 回阶段 4 重跑 | 所有 P0/P1 用例 pass + 回归用例 (TC-REG-*) pass + 没有 open bug | QA / 测试 |
+| **7** | **Test Report** | 多轮测试结果 | **测试用例.md §<sprint> "Test Report" 段** (位置 §7.2; 不在 PRD-Review) | 报告含: PRD-XXX → Task #YYY → TC-XXX-NNN 三级映射 + DoD 逐条对账 + Verify 证据 | QA / 测试 |
+| **8** | **UAT (DoD)** | Test Report + 部署到 test cluster 的 image | Mars 跑完整 user journey + 拍 DoD 全通 | Rule D 3 子规则全过 + Mars 在 PROJECT-STATUS 签字 (跟 PRD §8 DoD 逐条对账) | Mars |
+| **9** | **CD 上线** | UAT 通过 + git tag v* | image 推 aks-jumborca-prod (cluster-exists guard) + Helm chart 推 charts.supkube.com + CHANGELOG bump | `kubectl --context=aks-jumborca-prod` 生产 buildStamp 实测一致 + dashboard `gen-data.mjs` 无漂移 | CD `cd.yaml` 自动 (manual approval) |
 
-### 7.2 完成报告模板 (§7 4 阶段产出)
+### 7.2 Test Report 模板 (§7 阶段 7 产出, 放测试用例.md, **不放 PRD-Review**)
 
-`PRD-Review/PRD-XXX-COMPLETION-REPORT-YYYY-MM-DD.md` 必含 6 段:
+> **位置纠错** (Mars 2026-06-02 D-WAIT-004 Q4): 完成报告 = **Testing Report**, 应放在**测试用例.md**侧, 因为它体现 **PRD → Task → 测试用例**层级闭环 ("一个 PRD Feature 由多个测试用例组成")。初版 5 阶段错放 `PRD-Review/COMPLETION-REPORT-*.md`, 现纠正。
+
+在 测试用例.md 新建 §<sprint> "Test Report" 段:
 
 ```markdown
-# PRD-XXX 完成报告 (YYYY-MM-DD)
+## §<sprint number>. <sprint name> Test Report (YYYY-MM-DD)
 
-## 1. PRD 范围回顾
-- PRD-XXX `<标题>`
-- 关联任务: #YYY / #ZZZ
+> **PRD-Task-TC 三级映射闭环**:
+> PRD-XXX `<标题>` → Tasks #YYY/#ZZZ → TC-XXX-001~NNN
+> 一个 PRD Feature 由多个测试用例组成, 本段是这些用例的执行报告。
+
+### 1. PRD 范围回顾
+- PRD-XXX 链接: PRD.md `#prd-xxx`
+- 关联任务: #YYY (Coding) / #ZZZ (CI)
 - 关联 ADR: ADR-NNN (状态)
 - 关联 PRD: PRD-AAA / PRD-BBB
 
-## 2. DoD 逐条对账 (PRD §8)
+### 2. DoD 逐条对账 (PRD §8)
 | # | DoD 条目 | 实现位置 | 测试用例 | 状态 |
 |---|---|---|---|---|
-| 1 | <DoD 描述> | file.go:func L42 | TC-XXX-001 | ✅ pass |
+| 1 | <DoD 描述> | file.go:func L42 | [TC-XXX-001](#tc-xxx-001) | ✅ pass |
 | ... |
 
-## 3. 测试报告 (Rule E)
-- TC-XXX-001 ~ NNN: <pass count> / <total>
-- TC-REG-XXX (回归): <pass count> / <total>
-- E2E 用例 (journey): <pass count> / <total>
+### 3. 测试结果矩阵
+| 测试用例 | 类型 | 优先级 | 状态 | 备注 |
+|---|---|---|---|---|
+| TC-XXX-001 | Unit | P0 | ✅ pass | — |
+| TC-XXX-002 | Integration | P0 | ✅ pass | — |
+| TC-REG-NNN | Regression | P0 | ✅ pass | 防 #<bug task> |
+| TC-XXX-NNN | E2E | P1 | ⏸ skipped | 卡 <子项>, 已隔离 (Rule H 铁律 3) |
 
-## 4. Verify-before-ship 证据 (Rule D)
+总计: P0 N/N pass · P1 N/N pass · 回归 N/N pass
+
+### 4. Verify-before-ship 证据 (Rule D)
 - buildStamp: `<full hash>` (deploy 时间 YYYY-MM-DD HH:MM:SS)
 - /status 输出: `<curl 结果摘要>`
 - user journey 跑通: <journey 名> ✅
-- 双集群一致: aks-jumborca-dev / aks-jumborca-test 镜像 tag 一致
+- 双集群一致: aks-jumborca-dev (`<image tag>`) / aks-jumborca-test (`<image tag>`) 一致
 
-## 5. 卡点 / 留尾 (Rule H 应尽则尽的隔离子项)
-- ⏸ <子项>: 卡 <ADR-XXX 草稿 / 客户 API 等>, 已隔离不阻塞
+### 5. 卡点 / 留尾 (Rule H 铁律 3 的隔离子项)
+- ⏸ <子项>: 卡 <ADR-XXX 草稿 / 客户 API 等>, 已隔离不阻塞主体测试
 - 留尾任务: #NNN
 
-## 6. CICD 闭环
+### 6. CICD 闭环 checklist
 - [ ] CHANGELOG.md 加 v0.X.Y.Z 条目
 - [ ] dashboard/data.js PRDS 状态 → 待验收
 - [ ] PRD.md 顶部 index + 头表 状态 → 待验收
-- [ ] PROJECT-STATUS.md 当前发布版本 bump (Mars 签收)
-- [ ] PRD.md 头表 状态 → Shipped (Mars 拍)
+- [ ] UAT 完成, Mars 签字 (PROJECT-STATUS.md 当前发布版本 bump)
+- [ ] PRD.md 头表 状态 → Shipped
+- [ ] CD 推 prod cluster ship (生产 buildStamp 实测)
 ```
 
-### 7.3 状态机映射 (§1 Rule A 状态机 + 本节闭环)
+### 7.3 状态机映射 (§1 Rule A 状态机 ↔ 本节 9 阶段)
 
 ```
-草稿 → 排队评审 → 评审中 → 改正中 → 已评审 → 研发中 → 待验收 → Shipped → 归档
-                                       ↑          ↑         ↑          ↑
-                                       │          │         │          └─ §7.5 CICD
-                                       │          │         └─ §7.4 完成报告 ship
-                                       │          └─ §7.1-3 Coding/Testing/Verify
-                                       └─ §6 DoR 门禁 (本节)
+PRD 状态机:    草稿 → 排队评审 → 评审中 → 改正中 → 已评审 → 研发中 → 待验收 → Shipped → 归档
+                                                ↑          ↑          ↑          ↑          ↑
+9 阶段映射:                              §6 DoR     §7.1     §7.6-7    §7.8 UAT  §7.9 prod
+                                         (阶段 2)   (阶段 4)  (Test)    (DoD 签字) (CD 上线)
 ```
 
-### 7.4 测试可接力线 (Rule H 协同)
+### 7.4 测试可接力线 (Rule H 铁律 3 协同)
 
-每个就绪 PRD 在 §9 任务拆分末尾加"测试可接力线"段, 说明:
+每个就绪 PRD 在 §9 任务拆分末尾加"测试可接力线"段:
 
 ```markdown
 ### 9.X 测试可接力线 (Rule H)
@@ -295,6 +329,21 @@
 ```
 
 测试不必等"PRD 全功能完成"才开工, 主体每过一阶段就接力测一阶段。
+
+### 7.5 CICD 闭环具体落地 (Mars D-WAIT-004 Q3)
+
+**当前 cd.yaml 行为** (ADR-042):
+- push to main → 推 aks-jumborca-dev (单集群自动 CD)
+- tag v* → 推 aks-jumborca-test
+- manual approval → 推 aks-jumborca-prod
+
+**Mars D-WAIT-004 Q3 要求**: "CI 后, 会 CD 到 Dev 与 Test, 才能使我们的流程闭环"
+
+→ **当前 cd.yaml 单集群 dev CD 不满足闭环** (test 仍需手动 tag), 需调整为 **push to main → dev + test 双集群 CD** 一并自动。
+
+落地任务: **#170 v0.9.1.16-CD-DUAL-TEST: cd.yaml 改 push to main → dev+test 双集群 CD** (待 Mars 批后建)。
+
+**理由**: 测环境 = dev + test 双集群同步, 才能验证 (a) 跨集群 Import Policy / fingerprint / DR (PRD-009 v2); (b) Kasten K10 + KubeVirt 共存的兼容性 (test 集群独有); (c) Rule D 双集群 buildStamp 一致 checklist 真正闭环。当前流程在 dev 通了 test 还得手动 tag, 等于"半闭环"。
 
 ---
 
@@ -315,3 +364,4 @@
 |---|---|---|
 | 2026-06-01 | Claude | 初版。把 Rule A/B/C/D（PRD 先于代码 / 并行 Agent / 共享契约单源 / verify-before-ship）+ Rule E/F 从 memory 落成仓库文档；补单一来源清单、版本/发布流程、文档地图、工程债清单。 |
 | 2026-06-02 | Claude (Mars 3h 委托) | **重大升级**: ① 新 Rule H **应尽则尽**（研发执行纪律 + 卡点隔离 + 测试可接力线）；② 新 §6 **DoR 投产就绪门槛** 6 条 + ADR 决策状态解读口径 + 判定 SOP（解决 PRD 状态 = 已评审 但仍有 finding/正文/契约 不一致的盲区）；③ 新 §7 **工程周期闭环**（Coding→Testing→Verify→Report→CICD 5 阶段 + 完成报告模板 6 段 + 状态机映射 + 测试可接力线）。落地依据见 PRD-Review/DOR-DECISION-2026-06-02.md。 |
+| 2026-06-02 | Claude (Mars D-WAIT-003/004/005 决策回复落地) | **§1 Rule H 重构**: 应尽则尽改为**一条原则三铁律** (DoR 前立即推 / DoR 检不强行 / DoR 后尽最大努力), Mars D-WAIT-005 纠错"应进则进 ≠ 应尽则尽", 三铁律是同一原则的整体。**§6.3 同步对齐**铁律 1-3。**§7 5 阶段 → 9 阶段** (Mars D-WAIT-004 Q1): Requirement → PRD(DoR) → 方案ADR → Coding+CI → CD 部署测环境 → 多轮测试 → Test Report → UAT(DoD) → CD 上线; **Test Report 位置纠错** (Q4) PRD-Review → 测试用例.md (PRD-Task-TC 三级映射闭环); **§7.5 CICD 双集群闭环** (Q3) push to main → dev+test 双 CD 任务 #170。|

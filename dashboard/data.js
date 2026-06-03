@@ -42,7 +42,7 @@ const DECISIONS = [
 
 /* ---- PRD 状态（应与 PRD.md 索引表一致）---- */
 const PRDS = [
-  { id: "PRD-001", title: "跨集群还原前置检查闭环（Restore Preflight Checklist）", task: "#104", state: "改正中", updated: "2026-05-31", note: "落 T3 拓扑校验 + #1#2#4 finding" },
+  { id: "PRD-001", title: "跨集群还原前置检查闭环（Restore Preflight Checklist）", task: "#104", state: "研发中", updated: "2026-06-03", note: "Mars D-WAIT-003 拍板进研发; 4 finding + T3 拓扑校验已修订完成 (§4 + §8 DoD #6/#7/#10)" },
   { id: "PRD-002", title: "Transform 一等公民（两层模型）", task: "#114", state: "已评审", updated: "2026-05-31", note: "v1.3 闭环：T1 编译契约 + CAS storm DoD" },
   { id: "PRD-003", title: "AI Advisor inside SupKube（推荐型 · 非自治）", task: "#115", state: "已评审", updated: "2026-05-31", note: "可进研发" },
   { id: "PRD-004", title: "MCP Server 'Supkube Skills'（Streamable HTTP + 5 Skills + 开源）", task: "#116", state: "已评审", updated: "2026-05-31", note: "可进研发" },
@@ -85,7 +85,7 @@ const WEEKLY = [
   { p: "P0", text: "PRD-011 评审：拍板 Q1 评分维度配比（30/20/30/15/5）+ Q4 两条硬阈值（无备份封顶 30 / 高分校准 30）", due: "本周" },
   { p: "P0", text: "PRD-012 解 Blocker：提供公司售后系统 Case API 规格（认证 / 字段 / 回执）", due: "本周" },
   { p: "P1", text: "PRD-009 Phase 2：ImportPolicy CRD + controller（ADR-038）收尾", due: "本周" },
-  { p: "P1", text: "PRD-001 改正中 → 完成 T3 拓扑校验后转研发中", due: "本周" },
+  { p: "P1", text: "PRD-001 研发中 — Mars 2026-06-03 D-WAIT-003 拍板进研发 (T3 拓扑校验 + 4 finding 已落 §4 + §8 DoD)", due: "已闭环" },
   { p: "P1", text: "重启 #104 CSI 一键适配 sprint", due: "下周" },
   { p: "P1", text: "PRD-008 / PRD-010 finding 仍 open，排期改正", due: "本月" },
   { p: "P2", text: "最小化 GitHub Actions CI（build + lint），把 verify-before-ship 自动化", due: "月底" },

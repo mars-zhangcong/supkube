@@ -29,7 +29,7 @@
 
 | PRD | 名称 | 放行结论 | 关键前置条件 / 复审 | 出处 |
 |---|---|---|---|---|
-| PRD-001 | 跨集群还原前置检查 | 有条件通过 | blocker 不可忽略 · severity 后端固化 · 删 v1 残留 · 标注 SC→Immediate 多 AZ 风险 | 报告①·三 |
+| PRD-001 | 跨集群还原前置检查 | **研发中**（2026-06-03 Mars D-WAIT-003 拍板进研发） | 4 finding + T3 拓扑校验 Claude 已修订完成 (§4 + §8 DoD #6/#7/#10): blocker 不可忽略 + severity 后端固化 + 删 v1 残留 + 标注 SC→Immediate 多 AZ 风险 | 报告①·三 |
 | PRD-002 | Transform 一等公民（两层） | ✅ 已评审 v1.3（06-01 复审：闭环） | T1 编译契约（ADR-003 修订段）+ 统计 CAS storm DoD #18 + CAS fallback 已补；新增 redirect-external-endpoints builtin（配合 007 P4） | 报告①·三 |
 | PRD-003 | AI Advisor（推荐型） | 方向通过 | 合规默认本地 LLM、最小外发；Resilience Score 规则化（可复现）；SECURITY.md AI 专章 + ADR | 报告①·三 |
 | PRD-004 | MCP Server（Skills） | 建议暂缓 | SSE→Streamable HTTP；HitL 基于服务端快照；多副本确认状态共享 | 报告①·三 |

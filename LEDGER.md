@@ -32,7 +32,7 @@
 
 | 号 | 主题 | 占号人 / 时间 | 状态 | 详情位置 |
 |---|---|---|---|---|
-| PRD-001 | 跨集群还原前置检查闭环 (Restore Preflight Checklist) | Mars / 2026-05-30 | 改正中 | PRD.md `#prd-001` |
+| PRD-001 | 跨集群还原前置检查闭环 (Restore Preflight Checklist) | Mars / 2026-05-30 | **研发中（2026-06-03 Mars D-WAIT-003 拍板; 4 finding + T3 拓扑校验已修订完成 §4 + §8 DoD #6/#7/#10）** | PRD.md `#prd-001` |
 | PRD-002 | Transform 一等公民（两层模型） | Mars / 2026-05-30 | 已评审 v1.3 | PRD.md `#prd-002` |
 | PRD-003 | AI Advisor inside SupKube（推荐型 · 非自治） | Mars / 2026-05-30 | 已评审 | PRD.md `#prd-003` |
 | PRD-004 | MCP Server "Supkube Skills"（Streamable HTTP） | Mars / 2026-05-30 | 已评审 | PRD.md `#prd-004` |
