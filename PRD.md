@@ -4133,23 +4133,78 @@ ADR-031"全职灾备运维专家" Epic 的**评分内核**。PRD-003 定义了�
 
 #### 4.2 规则评分引擎（确定性 · Go · 可单测）—— **本 PRD 技术核心**
 
-**位置**: `supkube-backend/internal/advisor/score/`（从现有 `applications.go` 的 `scoreNamespaceForAdvisor` 升级而来, 保留向后兼容）。
+##### 4.2.0 两套评分器业务定位（2026-06-03 Mars 拍板）
 
-**评分矩阵（100 分制 · 4 维 · 标准对标）** — ✅ **Mars 2026-06-03 拍板（D-WAIT-002，权威源；喂 ADR-043 评分细则 v1.0.0）**。每个子项**分档给分（确定性，可单测）**，对标 ISO 27002 / NIST CSF / NIST SP 1800-26 / NIST SP 800-53：
+SupKube 后端实际并行运行**两套评分体系**, 评估对象、客户阶段、业务目标完全不同, **代码独立, UI 标签区分**:
+
+| 维度 | **Legacy "备份策略"** | **New "策略调优"** (本 §4.2 / ADR-043) |
+|---|---|---|
+| **评估问题** | "**该不该备份**" + "**怎么备份**" | "**备份做得多好**" + "**哪里短板**" |
+| **评估对象** | 应用本身 (workload / PVC / labels) | 应用 + 绑定的 Policy + **Policy 实际执行结果** |
+| **客户阶段** | 初次部署 SupKube, 尚未建任何 Policy | 已建 Policy 且**已实际跑过备份**, 想优化 |
+| **保险类比** | **投保前**: 该不该买 / 买啥险种 / 保额建议 | **已投保**: 现有保单短板 / 升级建议 / 加保推荐 |
+| **输出类型** | Recommendation (推荐): schedule / TTL / tier | Evaluation (评分): 0-100 + 4 档 + 4 维细节 |
+| **代码位置** | `internal/api/v1/applications.go scoreNamespaceForAdvisor()` | `internal/advisor/evaluator/v1_0_0.go Score()` |
+| **API 端点** | `GET /applications/advisor` (现役) | `POST /ai/score` (PRD-011 MVP 待接) |
+| **UI 标签** | "**Backup Recommendation**" / "备份策略" | "**Resilience Score**" / "策略调优" |
+| **依赖标准** | 无 (启发式 +40/+30/-30 等) | ISO 27002 §8.13 / NIST CSF / NIST SP 1800-26 / 800-53 CP-9 |
+
+> **两套不冲突 / 互补**: 一个 ns 旧评分 70 (High, "建议你备份") 跟同 ns 新评分 35 (Critical, "数据韧性差") 是**评不同问题**, 不应统一也不应让客户看到时混淆。UI 必须明确标签区分。
+>
+> **收敛计划**: v0.10.x Phase A (task #115) 写 K8s→AppContext 适配器, 底层共用一份采集; 两个 UI 标签 + 端点不变。本 PRD MVP **v0.9.x 不收敛**, 让两套先共存收集真实使用数据。
+
+##### 4.2.1 评分前置硬性条件 (Mars 拍板 2026-06-03)
+
+新评分器 `evaluator.Score()` 评分前**必须满足全部前置条件**, 否则**不参评**, 输出特殊状态:
+
+| 前置条件 | 不满足时输出 | 前端展示 |
+|---|---|---|
+| 应用绑定的 Policy **已完成部署** | `Status = not_eligible_no_policy` | "未配置备份 Policy, 请先在 Policies 页创建" |
+| Policy **已实际执行运行 ≥ 1 次** (`LastBackupAt != nil`) | `Status = not_eligible_no_runs` | "Policy 未执行, 请先跑首次备份" |
+
+**不参评的行为**:
+- evaluator 返回 `ScoreResult { Status: not_eligible_*, NotEligibleReason: "..." }`, **不输出 TotalScore / Level / Dimensions** (留空或 nil)
+- 前端**不显示 30 分 + Critical 红框**, 而显示**提示卡**: "建议客户先定义 + 执行 Policy"
+- 这跟初版"无备份封顶 30 硬阈值"**语义不同**: 封顶 30 = 评了但低分; not_eligible = **没评 (前置不满足)**
+
+##### 4.2.2 评分矩阵（100 分制 · 4 维 · 标准对标）
+
+✅ **Mars 2026-06-03 拍板（D-WAIT-002，权威源；喂 ADR-043 评分细则 v1.0.0）**。每个子项**分档给分（确定性，可单测）**，对标 ISO 27002 / NIST CSF / NIST SP 1800-26 / NIST SP 800-53：
 
 | 维度 | 权重 | 子项（分档） | 对标 |
 |---|---|---|---|
-| **1. Backup Coverage & Compliance**（备份覆盖与合规） | **25** | 应用分类覆盖度 10（Tier 分级差异化策略+100%核心纳管=10 / 统一策略未分级或<5%僵尸=5 / 未分级有漏备=0）· RPO 达标率 10（满足或优于=10 / 基本满足但窗口过大=5 / 不满足=0）· 元数据与配置备份 5（含 Manifest/拓扑/配置=5 / 仅纯数据=0）| ISO 27002 §8.13.1.a |
-| **2. Resilience & Redundancy**（3-2-1-1-0 韧性） | **35** | 介质与存储多样性 10【3-2】（≥2 种介质=10 / 单介质=5）· 异地与跨云 10【1·异地】（跨厂商或>100km=10 / 同厂商跨 region=6 / 同 AZ 同源=0）· 空气隔离与网络离线 15【1·隔离/不可变】（真 Air-Gap 或专网备完即断=15 / 有隔离但同网络域/同 AD=8 / 无隔离生产可直挂=0）| NIST CSF (Protect/Respond) |
-| **3. Immutability & Security**（防勒索与安全） | **20** | 不可变存储 10（WORM/Object Lock **COMPLIANCE 模式**=10 / Governance 模式或仅 IAM=6 / 可覆盖删除=0）· 加密与凭证 5（静态 AES-256+传输 TLS1.3+KMS 独立轮换=5 / 有加密但密钥同管=2）· 访问控制 5（MFA+RBAC+删除走二次审批+审计异地不可篡改=5 / 单密码无 MFA 无审计=0）| NIST SP 1800-26 · ISO 27002 §8.13.1.c |
+| **1. Backup Coverage & Compliance**（备份覆盖与合规） | **25** | 应用分类覆盖度 10（Tier 分级差异化策略+100%核心纳管=10 / 统一策略未分级或<5%僵尸=5 / 未分级有漏备=0）· **RPO 达标率 10**（满足或优于=10 / **基本满足但窗口过大 (actual ≤ 1.5×target)** =5 / 不满足=0）· 元数据与配置备份 5（含 Manifest/拓扑/配置=5 / 仅纯数据=0）| ISO 27002 §8.13.1.a |
+| **2. Resilience & Redundancy**（3-2-1-1-0 韧性） | **35** | **介质与存储多样性 10【3-2】**（≥2 种介质=10 / 单介质=5 / **0 介质=0**（无备份策略, 或策略未生成 RP））· 异地与跨云 10【1·异地】（跨厂商或>100km=10 / 同厂商跨 region=6 / 同 AZ 同源=0）· 空气隔离与网络离线 15【1·隔离/不可变】（真 Air-Gap 或专网备完即断=15 / 有隔离但同网络域/同 AD=8 / 无隔离生产可直挂=0）| NIST CSF (Protect/Respond) |
+| **3. Immutability & Security**（防勒索与安全） | **20** | 不可变存储 10（WORM/Object Lock **COMPLIANCE 模式**=10 / Governance 模式或仅 IAM=6 / 可覆盖删除=0）· 加密与凭证 5（静态 AES-256+传输 TLS1.3+KMS 独立轮换=5 / 有加密但密钥同管=2）· **访问控制 5 (graduated 5 档)**（4 项全满足=5 / 3 项=3 / 2 项=1 / ≤1 项=0；4 项=MFA+RBAC+删除二次审批+审计异地不可篡改）| NIST SP 1800-26 · ISO 27002 §8.13.1.c |
 | **4. Reliability & Verification**（成功率与可恢复性） | **20** | 备份执行成功率 5（滑动窗口公式，见下）· 自动化恢复演练通过率 15【0·验证】（全自动沙箱恢复+近3月100%=15 / 定期人工演练有报告=10 / 仅局部文件恢复测试=5 / 只备不练=0）| NIST SP 800-53 CP-9 · ISO 27002 §8.13.1.b |
 
 > **3-2-1-1-0 映射**：3-2=维度2 介质多样性；1=维度2 异地；1=维度2 隔离/不可变；0=维度4 恢复演练验证。
 
-**三个落地公式（半自动采集，确定性）**：
+##### 4.2.3 3 处边界明确化 (Mars 2026-06-03 拍板)
+
+PRD 初版 §4.2 矩阵在 3 处子项有模糊边界, Mars 已拍数值, 此处焊死:
+
+1. **维度 1 子项 2 RPO "窗口过大"边界 = 1.5× target** (`if actual ≤ target → 10; if actual×2 ≤ target×3 → 5; else → 0`, 整数比较防浮点)
+   - 业界 SLO 设计共识 (Google SRE / AWS Well-Architected): 50% 容差是"接近 SLO 但未违反"普遍阈值
+   - 1× 太严 (jitter 都不容忍); 2× 太宽 (鼓励虚高)
+
+2. **维度 2 子项 1 介质多样性 0 介质 → 0 分** (从 PRD 初版二档 10/5 升三档 10/5/0)
+   - **业务理由 (Mars 原话)**: "因为它也没有建备份策略, 或是备份策略没有生成 RP 那就是 0"
+   - 跟"无备份封顶"硬阈值同精神; 0 BSL ≠ 1 BSL, 不能同分
+
+3. **维度 3 子项 3 访问控制 graduated 5/3/1/0** (Option A, 从 PRD 初版二档 5/0 升 4 档)
+   - 4 项满足 → **5** (全套合规)
+   - 3 项满足 → **3** (大部分到位)
+   - 2 项满足 → **1** (一半, 仍有重大单点)
+   - ≤1 项满足 → **0** (单点安全控制 = false sense of security)
+   - **业务理由 (Mars 原话)**: "让客户知道, 自己要进行配置" — 渐进激励改进
+
+##### 4.2.4 三个落地公式（半自动采集，确定性）
+
 1. **备份成功率滑动窗口**：取最近 14 天 / 最近 30 次快照计 `success/total × 5`；**惩罚**：Tier 1 核心资产**连续失败 > 3 次 → 该项直接计 0**（局部数据断流风险）。
-2. **不可变 (WORM) 自动校验断言**：调存储 API（如 S3 `GetObjectLockConfiguration`），断言 `ObjectLockEnabled==Enabled` 且 `Mode==COMPLIANCE` 且 `RetainUntilDate > now + 业务安全周期(如30d)`，才给 10 分。
-3. **最终安全级别分档**：
+   - **防 panic** (Mars Gate 1 铁律 ①): `attempts == 0` → `unable_to_confirm` (不除零)
+2. **不可变 (WORM) 自动校验断言**：调存储 API（如 S3 `GetObjectLockConfiguration`），断言 `ObjectLockEnabled==Enabled` 且 `Mode==COMPLIANCE` 且 `RetainUntilDate > SnapshotAt + 业务安全周期(默认30d)`，三者全真才给 10 分。
+3. **最终安全级别分档**（90/75/60 inclusive 上界）：
 
 | 分数 | 安全级别 |
 |---|---|
@@ -4158,11 +4213,30 @@ ADR-031"全职灾备运维专家" Epic 的**评分内核**。PRD-003 定义了�
 | 60–74 | **脆弱级**（无不可变防护，易被勒索连同生产加密）|
 | < 60 | **高危级**（伪备份，随时面临永久丢失）|
 
-**校准硬阈值（Q4，防分数虚高骗客户，Mars confirm 生效）**：
-- **无备份封顶 30**：`app.last_backup_at == nil`（从未备份）→ 即使算分 ≥30 也强制下调到 30 + 落"高危级"。
-- **高分校准 30**：算分 ≥90 但 `app.last_backup_succeeded == false`（最近一次失败）→ 强制下调到 30 + 落"高危级"（配置看似完善但无实际备份落地）。
+##### 4.2.5 校准硬阈值
 
-> **可复现保证**: 引擎是纯函数 `Score(ctx AppContext) ScoreResult`, 无随机、无时间依赖（"新鲜度"/滑动窗口用采集快照里的时间戳而非 `time.Now()`）, 同一份 `AppContext` 输入永远得到同一 `ScoreResult`。**单测覆盖每个子项的每一档 + 两条校准硬阈值**（见 TC-AI-MVP）。每次评分输出带 `scoreRulesVersion`（§12 H1），`internal/advisor/evaluator/v1_0_0.go` 每条规则注释含权重/分档/依据/对标标准/校准来源（Mars 2026-06-03 D-WAIT-002）。
+> **Mars 2026-06-03 修正**: 初版的"**无备份封顶 30**" 改为 §4.2.1 的**not_eligible 路径**(不参评), 不再走"封顶 30 + 评分"。配置看似完善但 Policy 从未执行 → evaluator 输出 `Status: not_eligible_no_runs`, UI 提示客户先跑首次备份。
+
+仅保留**高分校准 30**:
+- **高分校准 30**：算分 ≥90 但 `app.last_backup_succeeded == false`（最近一次失败）→ 强制下调到 30 + 落"高危级"（配置看似完善但实际备份没落地）。
+
+##### 4.2.6 可复现保证
+
+引擎是纯函数 `Score(ctx AppContext) ScoreResult`, 无随机、无时间依赖（"新鲜度"/滑动窗口用采集快照里的时间戳而非 `time.Now()`）, 同一份 `AppContext` 输入永远得到同一 `ScoreResult`。**单测覆盖每个子项的每一档 + 两条校准硬阈值 + not_eligible 路径**（见 TC-AI-MVP）。每次评分输出带 `scoreRulesVersion`（§12 H1），`internal/advisor/evaluator/v1_0_0.go` 每条规则注释含权重/分档/依据/对标标准/校准来源（Mars 2026-06-03 D-WAIT-002）。
+
+`ScoreResult` schema:
+```go
+type ScoreResult struct {
+    Status            EvaluationStatus  // "scored" / "not_eligible_no_policy" / "not_eligible_no_runs"
+    NotEligibleReason string            // 仅 Status != scored 时填
+    ScoreRulesVersion string            // 永远 "v1.0.0"
+    TotalScore        int               // 仅 Status == scored 时有意义
+    Level             SecurityLevel     // 仅 Status == scored 时有意义
+    Dimensions        Dimensions        // 仅 Status == scored 时有意义
+    CalibrationApplied []string         // 仅 Status == scored 时可能填 (含 "high_score_calibration_30")
+    EvaluatedAt       time.Time         // = ctx.SnapshotAt
+}
+```
 
 #### 4.3 LLM 解释层（inferred · 默认 Ollama · 只解释不打分）
 
