@@ -1,0 +1,27 @@
+# Transform ① (REVERSE): PVC storageClassName  managed-csi -> longhorn.
+#
+# Direction: target (test/AKS managed-csi) -> source (dev / Longhorn).
+# Applied on the REVERSE restore (failback: test backup restored into dev).
+#
+# Same schema rationale as sc-remap-fwd.yaml: Velero has no ${VAR}, so we
+# ship two concrete one-way Transforms instead of one parameterized one.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sc-remap-rev
+  namespace: supkube
+  labels:
+    supkube.io/kind: transform
+    supkube.io/managed-by: supkube
+  annotations:
+    supkube.io/description: "REVERSE PVC storageClassName remap managed-csi -> longhorn (test/AKS -> dev/Longhorn failback)."
+data:
+  rules.yaml: |
+    version: v1
+    resourceModifierRules:
+      - conditions:
+          groupResource: persistentvolumeclaims
+        patches:
+          - operation: replace
+            path: /spec/storageClassName
+            value: longhorn

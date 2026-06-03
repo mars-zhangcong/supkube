@@ -1,0 +1,53 @@
+# Transform ② : container image registry rewrite (per-image EXACT replace).
+#
+# ── Velero limitation (DOCUMENTED) ───────────────────────────────────────
+# Velero's resource modifier `replace` operation does an EXACT value swap on
+# a JSON-Pointer path. It does NOT support prefix substitution, regex, or
+# templated value rewrites (no "s/docker.io/myacr.azurecr.io/" semantics).
+# So we CANNOT say "rewrite the registry portion of any image". We must
+# enumerate each concrete image string and replace it with the concrete
+# target-registry string, at a concrete container index path.
+#
+# Our test-app has exactly two images:
+#   - StatefulSet postgres : containers[0].image = postgres:15
+#   - Deployment  adminer  : containers[0].image = adminer:4
+#
+# Below rewrites both to supkube.azurecr.io (the env's ACR). If a workload
+# has >1 container, add one patch per container index.
+#
+# SCOPE NOTE: route B (AKS dev ↔ AKS test) does NOT need this transform —
+# both clusters pull postgres:15 / adminer:4 from docker.io directly. This
+# transform is only required for route A's K3S air-gap leg (local registry).
+# Included here for completeness of the bidirectional runbook.
+#
+# `replace` requires the path to pre-exist; containers[0].image always does.
+# resourceNameRegex scopes each rule to the right workload so we don't try
+# to write adminer's image onto postgres.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: image-rewrite
+  namespace: supkube
+  labels:
+    supkube.io/kind: transform
+    supkube.io/managed-by: supkube
+  annotations:
+    supkube.io/description: "Per-image EXACT registry rewrite for test-app (Velero replace has no prefix/regex; one patch per container index). Edit value: to your ACR."
+data:
+  rules.yaml: |
+    version: v1
+    resourceModifierRules:
+      - conditions:
+          groupResource: statefulsets.apps
+          resourceNameRegex: "^postgres$"
+        patches:
+          - operation: replace
+            path: /spec/template/spec/containers/0/image
+            value: supkube.azurecr.io/postgres:15
+      - conditions:
+          groupResource: deployments.apps
+          resourceNameRegex: "^adminer$"
+        patches:
+          - operation: replace
+            path: /spec/template/spec/containers/0/image
+            value: supkube.azurecr.io/adminer:4

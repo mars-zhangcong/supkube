@@ -1,0 +1,39 @@
+# Transform ③ : Service type LoadBalancer -> ClusterIP  (MANDATORY).
+#
+# Without this, restoring the adminer Service (type LoadBalancer) into a
+# cluster lacking a cloud LB controller (e.g. K3S) leaves the Service
+# pending forever and can wedge the namespace in `Terminating` at cleanup.
+#
+# We patch /spec/type to ClusterIP and strip LB-only fields so they don't
+# fight the new type:
+#   - /spec/loadBalancerIP        (requested static LB IP)
+#   - /spec/loadBalancerClass     (LB implementation selector)
+#   - /spec/allocateLoadBalancerNodePorts
+#   - /spec/externalTrafficPolicy (only meaningful for LB/NodePort)
+#   - /spec/healthCheckNodePort   (LB health check port)
+#   - /spec/clusterIP & clusterIPs (let the target cluster assign fresh)
+#
+# Implementation: ONE mergePatch (RFC 7396) sets type + nulls the LB-only
+# fields in a single document. Merge patch (vs JSON-Patch remove) is the
+# v0.8.4 lesson — `remove` errors on absent paths, merge `null` no-ops.
+# patchData MUST be a JSON string (Velero/SupKube validateRulesList parses
+# it with json.Unmarshal).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lb-to-clusterip
+  namespace: supkube
+  labels:
+    supkube.io/kind: transform
+    supkube.io/managed-by: supkube
+  annotations:
+    supkube.io/description: "Service type LoadBalancer -> ClusterIP and strip LB-only fields; prevents namespace stuck Terminating on no-LB clusters (K3S)."
+data:
+  rules.yaml: |
+    version: v1
+    resourceModifierRules:
+      - conditions:
+          groupResource: services
+        mergePatches:
+          - patchData: |
+              {"spec":{"type":"ClusterIP","loadBalancerIP":null,"loadBalancerClass":null,"allocateLoadBalancerNodePorts":null,"externalTrafficPolicy":null,"healthCheckNodePort":null,"clusterIP":null,"clusterIPs":null}}

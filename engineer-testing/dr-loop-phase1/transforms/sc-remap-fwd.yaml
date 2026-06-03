@@ -1,0 +1,35 @@
+# Transform ① (FORWARD): PVC storageClassName  longhorn -> managed-csi.
+#
+# Direction: source (dev / on-prem Longhorn) -> target (AKS managed-csi).
+# Applied on the FORWARD restore (dev backup restored into test/AKS).
+#
+# Schema note: Velero resource modifiers do NOT support ${VAR} parameter
+# substitution at the Velero layer. SupKube's compile.go DOES support
+# ${VAR} placeholders, but those are resolved at TransformSet-compile time,
+# not here. To keep this file directly apply-able as a standalone Transform
+# (and dry-run/round-trippable), we encode the concrete FROM/TO values and
+# ship a separate sc-remap-rev.yaml for the reverse direction.
+#
+# We use a JSON-Patch `replace` on /spec/storageClassName (exact path on a
+# PVC). `replace` requires the path to already exist — it does on every PVC
+# that set a storageClassName, which our postgres volumeClaimTemplate does.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sc-remap-fwd
+  namespace: supkube
+  labels:
+    supkube.io/kind: transform
+    supkube.io/managed-by: supkube
+  annotations:
+    supkube.io/description: "FORWARD PVC storageClassName remap longhorn -> managed-csi (dev/Longhorn -> test/AKS managed-csi)."
+data:
+  rules.yaml: |
+    version: v1
+    resourceModifierRules:
+      - conditions:
+          groupResource: persistentvolumeclaims
+        patches:
+          - operation: replace
+            path: /spec/storageClassName
+            value: managed-csi
