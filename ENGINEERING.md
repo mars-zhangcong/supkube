@@ -96,7 +96,7 @@ Rule B（并行开多 Agent）+ Rule C（共享契约单源）+ Rule G（取号�
 
 1. **一事一文件，禁共享 append**：会被多 agent 并发改的清单类文档（决策待办、评审 finding 等），**一事一文件**（`等待决策/D-WAIT-NNN-*.md` 一条一文件），用瘦 INDEX 串。**绝不**让多 agent 往同一个大文件末尾 append——append 到同一文件 = 并行写必撞 = git 冲突标记。
 2. **共享序号经 LEDGER + main 集中预分配**：D-WAIT / PRD / ADR / TC 等序号经 [`LEDGER.md`](./LEDGER.md) 取号；并行场景**由 main agent 启动子 agent 前一次性预分配**，把号写进各子 agent 的 prompt（"你的号 = D-WAIT-013，不要自己取号"）。禁止 N 个子 agent 各自跑去取号 / 自占号。
-3. **并行 Agent 用 git worktree 隔离**：多个并行 agent **各自一个 `git worktree`**（独立工作目录 + 独立 HEAD/index，仅共享 .git 对象库），**禁止多个 agent 在同一 checkout / 同一分支上写**——共享工作树并发写 = 文件互踩 + 谁 commit 落在谁的 HEAD 不可控。`git worktree add <path> <branch>`。
+3. **并行 Agent 用 git worktree 隔离（显式默认）**：**默认每支并行部队一棵 worktree**——多个并行 agent **各自一个 `git worktree`**（独立工作目录 + 独立 HEAD/index，仅共享 .git 对象库），**禁止多个 agent 在同一 checkout / 同一分支上写**（共享工作树并发写 = 文件互踩 + 谁 commit 落在谁的 HEAD 不可控）。`git worktree add <path> <branch>`。**协调者不依赖"清场确认"**：派活/开工前自己做**物理校验**（共享文件 `mtime` 是否在动 / `.git/index.lock` / `lsof` 看活进程 cwd），用证据判定战场是否真静默——"指令说清场" ≠ "现场真清场"（2026-06-04 实测：收到"清场已确认"后，开工瞬间仍逮到 live writer 在写共享树）。
 4. **冲突先解不 fork**：发现共享文件带冲突标记 / 仓库状态异常 → **先解冲突 + 收口单源**，**不**绕开它 fork 出一份新文件（fork = 把单源碎裂问题往后拖）。无法独立解时，停下来报告（live-contended 仓库上做结构改动会再撞）。
 
 ---
@@ -375,3 +375,4 @@ PRD 状态机:    草稿 → 排队评审 → 评审中 → 改正中 → 已评
 | 2026-06-02 | Claude (Mars 3h 委托) | **重大升级**: ① 新 Rule H **应尽则尽**（研发执行纪律 + 卡点隔离 + 测试可接力线）；② 新 §6 **DoR 投产就绪门槛** 6 条 + ADR 决策状态解读口径 + 判定 SOP（解决 PRD 状态 = 已评审 但仍有 finding/正文/契约 不一致的盲区）；③ 新 §7 **工程周期闭环**（Coding→Testing→Verify→Report→CICD 5 阶段 + 完成报告模板 6 段 + 状态机映射 + 测试可接力线）。落地依据见 PRD-Review/DOR-DECISION-2026-06-02.md。 |
 | 2026-06-02 | Claude (Mars D-WAIT-003/004/005 决策回复落地) | **§1 Rule H 重构**: 应尽则尽改为**一条原则三铁律** (DoR 前立即推 / DoR 检不强行 / DoR 后尽最大努力), Mars D-WAIT-005 纠错"应进则进 ≠ 应尽则尽", 三铁律是同一原则的整体。**§6.3 同步对齐**铁律 1-3。**§7 5 阶段 → 9 阶段** (Mars D-WAIT-004 Q1): Requirement → PRD(DoR) → 方案ADR → Coding+CI → CD 部署测环境 → 多轮测试 → Test Report → UAT(DoD) → CD 上线; **Test Report 位置纠错** (Q4) PRD-Review → 测试用例.md (PRD-Task-TC 三级映射闭环); **§7.5 CICD 双集群闭环** (Q3) push to main → dev+test 双 CD 任务 #170。|
 | 2026-06-04 | SCM (D-WAIT 单源根治) | 新增 **§1 Rule I 并行 Agent 写共享文档纪律**（一事一文件禁 append / 共享序号经 LEDGER 由 main 集中预分配 / 并行 agent 用 git worktree 隔离禁同分支写 / 冲突先解不 fork）。教训来源：FDE+3 R&D 各分支各写一份 等待决策.md 跨分支碎裂 + 单文件 append 撞 git 冲突标记 + D-WAIT 撞两个 004/005。配套 LEDGER §一 D-WAIT 取号系列 + §八 Rule E。|
+| 2026-06-04 | SCM (D-WAIT 收尾) | **Rule I 子条 3 升级为显式默认**：「默认每支并行部队一棵 worktree」+「协调者不依赖'清场确认'，开工前物理校验 mtime/lock/进程cwd」（实测教训：收到"清场已确认"后开工瞬间仍逮到 live writer）。新建根目录 **MERGE-PLAYBOOK.md**（5 分支并入 main 的顺序+冲突解法，plan-only 不执行）。等待决策.md INDEX 头加「如何新增一条 D-WAIT」3 步 SOP。|
