@@ -42,19 +42,21 @@ const DECISIONS = [
 
 /* ---- PRD 状态（应与 PRD.md 索引表一致）---- */
 const PRDS = [
-  { id: "PRD-001", title: "跨集群还原前置检查闭环（Restore Preflight Checklist）", task: "#104", state: "改正中", updated: "2026-05-31", note: "落 T3 拓扑校验 + #1#2#4 finding" },
+  { id: "PRD-001", title: "跨集群还原前置检查闭环（Restore Preflight Checklist）", task: "#104", state: "研发中", updated: "2026-06-03", note: "Mars D-WAIT-003 拍板进研发; 4 finding + T3 拓扑校验已修订完成 (§4 + §8 DoD #6/#7/#10)" },
   { id: "PRD-002", title: "Transform 一等公民（两层模型）", task: "#114", state: "已评审", updated: "2026-05-31", note: "v1.3 闭环：T1 编译契约 + CAS storm DoD" },
   { id: "PRD-003", title: "AI Advisor inside SupKube（推荐型 · 非自治）", task: "#115", state: "已评审", updated: "2026-05-31", note: "可进研发" },
   { id: "PRD-004", title: "MCP Server 'Supkube Skills'（Streamable HTTP + 5 Skills + 开源）", task: "#116", state: "已评审", updated: "2026-05-31", note: "可进研发" },
   { id: "PRD-005", title: "Log Viewer v2（运维级日志观察平台）", task: "#118", state: "已评审", updated: "2026-05-31", note: "可进研发" },
   { id: "PRD-006", title: "Activity Task Detail Timeline", task: "#117", state: "已评审", updated: "2026-05-31", note: "可进研发" },
   { id: "PRD-007", title: "完整 3-2-1-1-0 数据韧性（5 层 + Layer 4 Copy + DR Drill）", task: "#126", state: "已评审", updated: "2026-05-31", note: "P1-P5 全闭环（真 fixture 双重证实）" },
-  { id: "PRD-008", title: "RP 删除生命周期 + Activity 持久化 + Force Delete 治理", task: "#148", state: "改正中", updated: "2026-06-02", note: "D1-D5 finding 全闭环 (§13 修订段 + §8 DoD #19-#23), 可转研发中" },
-  { id: "PRD-009", title: "Policy 模型对齐 Kasten（Snapshot + Import Policy 双 Action）", task: "#149", state: "改正中", updated: "2026-06-02", note: "Phase 1 ship + Phase 2 任务拆；PRD-Review 第六份 G1-G5 全闭环 (G5 §8.2 Phase 2 DoD + §9 任务/§9.3 风险 / G1 卖点诚实化 / G2 backupSyncPeriod 默认 60s / G3 warn 半成品标注 / G4 Action Type pill save 不可改 alert), 等 Mars 重审" },
-  { id: "PRD-010", title: "DR Topology v2（可视化重构 + Local Snapshot/Backup Copy 节点）", task: "#150", state: "改正中", updated: "2026-06-02", note: "F1-F4 finding 全闭环 (§13 修订段 + §8 DoD #13-#16), 可转研发中" },
-  { id: "PRD-011", title: "AI Backup Advisor MVP（规则算分 + LLM 解释 · Canonical DSL · 本地小闭环）", task: "#164", state: "改正中", updated: "2026-06-02", note: "H1/H2/H5 已修订 (§12 + §8 DoD #14-#17); H1 数值待 Mars 拍 (D-WAIT-002)" },
+  { id: "PRD-008", title: "RP 删除生命周期 + Activity 持久化 + Force Delete 治理", task: "#148", state: "研发中", updated: "2026-06-03", note: "D1-D5 finding 全闭环 (§13 修订段 + §8 DoD #19-#23), 可转研发中" },
+  { id: "PRD-009", title: "Policy 模型对齐 Kasten（Snapshot + Import Policy 双 Action）", task: "#149", state: "研发中", updated: "2026-06-03", note: "Phase 1 ship + Phase 2 任务拆；PRD-Review 第六份 G1-G5 全闭环 (G5 §8.2 Phase 2 DoD + §9 任务/§9.3 风险 / G1 卖点诚实化 / G2 backupSyncPeriod 默认 60s / G3 warn 半成品标注 / G4 Action Type pill save 不可改 alert), 等 Mars 重审" },
+  { id: "PRD-010", title: "DR Topology v2（可视化重构 + Local Snapshot/Backup Copy 节点）", task: "#150", state: "研发中", updated: "2026-06-03", note: "F1-F4 finding 全闭环 (§13 修订段 + §8 DoD #13-#16), 可转研发中" },
+  { id: "PRD-011", title: "AI Backup Advisor MVP（规则算分 + LLM 解释 · Canonical DSL · 本地小闭环）", task: "#164", state: "研发中", updated: "2026-06-03", note: "H1/H2/H5 已修订 (§12 + §8 DoD #14-#17); H1 数值待 Mars 拍 (D-WAIT-002)" },
   { id: "PRD-012", title: "Call Home / Auto-Support（三档连接 · 自动开 Case · opt-in）", task: "#165", state: "改正中", updated: "2026-06-02", note: "I1 已闭环 (默认逐次确认+SECURITY §6 白名单); I2 仍 Blocked 等 Case API" },
   { id: "PRD-013", title: "SupKube Four-Eyes Authorization（备份安全二次审批 + MFA · 4 大类 15 受保护操作 · ApprovalPolicy/ApprovalRequest CRD · Veeam VBR 13 对标 + Kasten 没有 = 真差异化）", task: "TBD（取号待 Mars 批后建 task）", state: "草稿", updated: "2026-06-02", note: "Mars D-WAIT-002 frame shift 派生立项: PRD-011 §6 维度 3 / MFA+二次审批 10 分平台落地 dependency. 不卡 Demo 核心闭环 (Mars 决策延后)." },
+  { id: "PRD-014", title: "前端 UI 暴露模型（运维方 Day-0 可配 · 4 模式 LoadBalancer/NodePort/ClusterIP+port-forward/Ingress · 镜像 Dex publicURL 范本 · 装后 NOTES.txt 按模式打印访问方式）", task: "TBD（取号待建 task）", state: "草稿", updated: "2026-06-02", note: "" },
+  { id: "PRD-015", title: "AI 容灾决策顾问（AI DR Decision Advisor · Premium 独占）：标准基本盘 A + 客户决策面 B 两层体系（ADR-046）+ 决策历史库 + 盲区检测 + DRP/CRP 编排 + 风险框架工具箱 · 从 PRD-011 MVP 拆出的 Premium 上层", task: "TBD", state: "草稿", updated: "2026-06-03", note: "" },
 ];
 
 /* ---- ADR 台账（应与 架构设计.md ADR-LEDGER 一致）---- */
@@ -72,6 +74,10 @@ const ADRS = [
   { id: "ADR-040", title: "DR Topology SVG 视觉规范（让号自 038）", date: "2026-06-01", status: "草稿", note: "🔄 PRD-010 让号 · PRD-Review 第六份 §二（占号待 PRD-010 实施落地）" },
   { id: "ADR-041", title: "项目编号统一台账 (LEDGER.md) + Rule G 取号 SOP", date: "2026-06-01", status: "草稿", note: "🆕 Rule G 首次演练取的号 · 跨 PRD/ADR/TC/D/C 全 series 防撞号 · 并发由 main agent 集中预分配" },
   { id: "ADR-042", title: "开发主体环境上云 (Azure AKS) + CI/CD 三集群推送策略", date: "2026-06-01", status: "草稿", note: "🆕 关 docker-desktop · push to main → aks-dev / tag → aks-test / manual → aks-prod · dev-deploy.sh 退役 · arm64 保留 · GitHub 暂 public" },
+  { id: "ADR-043", title: "AI Backup Advisor 评分细则 v1.0.0（100 分制 · 4 维 · 标准对标：备份覆盖与合规 25 / 3-2-1-1-0 韧性 35 / 防勒索与安全 20 / 成功率与可恢复性 20；对标 ISO 27002 §8.13 / NIST CSF / NIST SP 1800-26 / NIST SP 800-53 CP-9；确定性纯函数 `Score(ctx)→ScoreResult` 带 `scoreRulesVersion`，实现于 `internal/advisor/evaluator/v1_0_0.go`；3 落地公式 + 安全级别 4 档 + Q4 两条校准硬阈值；分数由 Go 规则引擎算，LLM 绝不参与打分只解释）", date: "", status: "草稿", note: "PRD-011 §4.2 / Mars D-WAIT-002 2026-06-03" },
+  { id: "ADR-046", title: "AI 容灾决策两层正交体系（标准基本盘 A + 客户决策面 B）：A=评分+盲区检测权威（永不被覆盖，跨客户可横比）；B=DRP/CRP 执行权威（AI 枚举待决策→暴露差异→客户终审签字→决策历史库→唯一执行准则）。\\\"从权 B>A\\\" 仅指执行层、非评分层（两层正交，故无跨客户不可横比问题）。闭环=标准兜底/AI 引导/客户终审/系统落地/全程可追溯；非自治 Rule F 不变。完整能力（决策库+盲区检测+DRP/CRP 编排+风险框架工具箱）= Premium 独占，超 PRD-011 MVP → 建议立 PRD-015", date: "", status: "草稿", note: "PRD-011 §4.4 / Mars 决策 2026-06-03" },
+  { id: "ADR-044", title: "快速调试模式 (Fast Debug Mode)：本地秒级内循环 `hack/dev-local.sh`（Vite HMR + go run/port-forward 二模式，绕过 docker build/ACR/AKS）+ feature 分支推送节奏（每 2h/改动大 1h push，仅触发 CI 不触发部署）；与 ADR-042 云端通道互补", date: "", status: "草稿", note: "全项目 / Rule G 取号 / Mars 2026-06-02（补登台账元数据 2026-06-03：号源 LEDGER.md 已有，此前漏镜像进本表）" },
+  { id: "ADR-045", title: "ApprovalPolicy/ApprovalRequest CRD 设计 + Dex MFA 集成模式 ← 让号自 ADR-044（PRD-013 原非正式预占 ADR-044，与快速调试模式撞号，按 Rule G §C forward-only 让号至下个空号）", date: "", status: "已评审", note: "PRD-013 让号 / 2026-06-02（补登台账元数据 2026-06-03）" },
 ];
 
 /* ---- 本周行动 ---- */
@@ -79,7 +85,7 @@ const WEEKLY = [
   { p: "P0", text: "PRD-011 评审：拍板 Q1 评分维度配比（30/20/30/15/5）+ Q4 两条硬阈值（无备份封顶 30 / 高分校准 30）", due: "本周" },
   { p: "P0", text: "PRD-012 解 Blocker：提供公司售后系统 Case API 规格（认证 / 字段 / 回执）", due: "本周" },
   { p: "P1", text: "PRD-009 Phase 2：ImportPolicy CRD + controller（ADR-038）收尾", due: "本周" },
-  { p: "P1", text: "PRD-001 改正中 → 完成 T3 拓扑校验后转研发中", due: "本周" },
+  { p: "P1", text: "PRD-001 研发中 — Mars 2026-06-03 D-WAIT-003 拍板进研发 (T3 拓扑校验 + 4 finding 已落 §4 + §8 DoD)", due: "已闭环" },
   { p: "P1", text: "重启 #104 CSI 一键适配 sprint", due: "下周" },
   { p: "P1", text: "PRD-008 / PRD-010 finding 仍 open，排期改正", due: "本月" },
   { p: "P2", text: "最小化 GitHub Actions CI（build + lint），把 verify-before-ship 自动化", due: "月底" },

@@ -1,8 +1,44 @@
 SupKube {{ .Chart.AppVersion }} installed in namespace {{ .Release.Namespace }}.
 
-Open the UI:
-  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "supkube.fullname" . }} 8080:80
-  open http://localhost:8080
+{{- $fe := printf "%s-frontend" (include "supkube.fullname" .) }}
+======================================================
+Open the UI  (frontend exposure mode: {{ if .Values.ingress.enabled }}Ingress{{ else }}{{ .Values.service.frontend.type }}{{ end }})
+======================================================
+{{- if .Values.ingress.enabled }}
+Ingress is enabled — reach SupKube at:
+{{- range .Values.ingress.hosts }}
+    http(s)://{{ .host }}/
+{{- end }}
+  DNS for the host(s) above must point at your ingress controller's address,
+  and TLS is whatever your ingress annotations configure.
+
+{{- else if eq .Values.service.frontend.type "LoadBalancer" }}
+Service type = LoadBalancer — your cloud is provisioning a public IP (~1-2 min).
+  1. Watch for the external IP:
+       kubectl -n {{ .Release.Namespace }} get svc {{ $fe }} -w
+  2. When EXTERNAL-IP is no longer <pending>, open:
+       http://<EXTERNAL-IP>/
+  NOTE: this IP is DYNAMIC — deleting/recreating the Service gets a new IP.
+  To keep a stable address, pin a pre-created static IP via your cloud's
+  annotation (e.g. Azure: service.beta.kubernetes.io/azure-pip-name=<name>).
+
+{{- else if eq .Values.service.frontend.type "NodePort" }}
+Service type = NodePort — reach SupKube on any node's address at port {{ .Values.service.frontend.nodePort }}:
+       kubectl get nodes -o wide          # find a node IP
+       http://<node-ip>:{{ .Values.service.frontend.nodePort }}/
+  NOTE: on managed clouds (AKS/GKE/EKS) nodes usually have NO public IP, so
+  NodePort is NOT reachable from the internet there. For public access use
+  LoadBalancer or Ingress; for private access use the port-forward below.
+
+{{- else }}
+Service type = {{ .Values.service.frontend.type }} — the UI is NOT exposed outside the
+cluster (by design). Access it on demand with a port-forward:
+       kubectl -n {{ .Release.Namespace }} port-forward svc/{{ $fe }} 8080:80
+       open http://localhost:8080
+{{- end }}
+
+To change how the UI is exposed later, set service.frontend.type (or
+ingress.enabled) and re-run `helm upgrade`. See USER_MANUAL §5.5.
 
 ======================================================
 Cross-cluster DR (Import Policy + fingerprint)
