@@ -51,6 +51,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/supkube/supkube-backend/internal/velerons"
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	corev1 "k8s.io/api/core/v1"
 	eventsv1 "k8s.io/api/events/v1"
@@ -108,7 +109,12 @@ const (
 	// stores all SupKube background-runner toggles.
 	settingsConfigMap = "supkube-settings"
 	settingsNamespace = "supkube"
-	veleroNamespace   = "velero"
+)
+
+// veleroNamespace is the Velero install namespace, resolved from VELERO_NAMESPACE.
+var veleroNamespace = velerons.Namespace()
+
+const (
 
 	// pollInterval: how often we scan for newly-completed snapshot-half
 	// Backups. 10s is a sweet spot — faster than Velero's own controller

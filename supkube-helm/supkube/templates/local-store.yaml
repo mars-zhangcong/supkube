@@ -87,7 +87,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: supkube-local-store-credentials
-  namespace: {{ .Values.config.veleroNamespace }}
+  namespace: {{ include "supkube.veleroNamespace" . }}
   labels:
     {{- include "supkube.labels" . | nindent 4 }}
     app.kubernetes.io/component: local-store
@@ -385,7 +385,7 @@ apiVersion: velero.io/v1
 kind: BackupStorageLocation
 metadata:
   name: supkube-local-store
-  namespace: {{ .Values.config.veleroNamespace }}
+  namespace: {{ include "supkube.veleroNamespace" . }}
   labels:
     {{- include "supkube.labels" . | nindent 4 }}
     app.kubernetes.io/component: local-store
