@@ -25,6 +25,20 @@
 - **ADR-037**（统一数据采集架构：CollectionContract + Collector/Server 分离 + Canonical DSL + 三档连接形态）。
 - 测试用例新增 **§19 TC-AI-MVP**（15 例，覆盖 PRD-011 13 条 DoD）。
 - 修正 PRD-010 中"PRD-011"占位歧义 → 指向 PRD-013（MCM Dashboard，待立）。
+- **正文回填（消除 §4.x 与 §12/§13 闭环段自相矛盾，2026-06-02）**：PRD-008 §4.1.2 存储选型（预倾向 CRD → 嵌入式 store on PV，否决 etcd 反模式，§13 D1）、§4.4.2 孤儿清理（无差别 mc rm → mode 参数区分 metadata-only / 带数据走 kopia maintenance，§13 D5）；PRD-010 §4.6/§4.7 Posture（"已启用层数 × 20" → PRD-007 §4.7 单一加权 score，§13 F1）；PRD-011 §4.6 API（`/ai/analyze` 同步 60s → 拆 `/ai/score` 同步<5s + `/ai/explain` SSE 异步，§12 H5）。均加"以 §12/§13 为准"指针，避免研发只读旧正文拿到被取代的指引。
+- **PRD-review/INDEX.md 新增「三态放行跟踪表」**：把 PRD 放行从两态（finding 闭环 / 重审）拆成三态（finding 闭环 → **正文回填** → 可重审），铁律"②正文回填未完成不得进③重审"，根治"闭环段改了正文没跟"的复发。
+- **二级残留回填（2026-06-03，AI 辅助深审 M-1~M-7）**：PRD-008 §11 Q1/§9 Phase0/DoD#12（存储选型 + mode 术语）；PRD-009 DoD 字段名对齐 CRD spec（continuous.pollInterval/lastPollAt/sourceClusterFilter.clusterId）+ 错误码统一（ERR_FINGERPRINT_INVALID）+ 失败阈值统一 N=5；PRD-010 §4.1/§5 Layer 5 节点→验证徽章、§4.2/DoD#5 箭头分类 sync→import 对齐 §13 F2。（深审另提出的 ERR_FINGERPRINT_TAMPERED/INTERVAL_TOO_SHORT 经核实不存在，未改 → verify-don't-trust。）
+
+### Changed
+- **PRD-008 / 009 / 010 / 011 评审通过 → 研发中**（Mars 2026-06-03）。状态同步 PRD.md 索引+正文、dashboard（gen-data 派生）、PRD-review/INDEX.md 三态表、等待决策.md。
+- **PRD-011 评分细则定版（D-WAIT-002 resolved）**：Mars 否决简版 5 维（30/20/30/15/5），改用自定 **100 分制 4 维标准对标矩阵**——备份覆盖与合规 25（ISO 27002 §8.13.1.a）/ 3-2-1-1-0 韧性 35（NIST CSF）/ 防勒索与安全 20（NIST SP 1800-26）/ 成功率与可恢复性 20（NIST SP 800-53 CP-9）；含滑动窗口成功率公式 + WORM COMPLIANCE 自动校验断言 + 4 档安全级别（90/75/60）+ Q4 两硬阈值（无备份封顶 30 / 高分校准 30）。§4.2 重写，喂 ADR-043。
+
+### Added
+- **ADR-046 立项（Rule G 取号）**：AI 容灾决策**两层正交体系**——标准基本盘 A（评分+盲区检测权威，永不被覆盖，跨客户可比）+ 客户决策面 B（DRP/CRP 执行权威，经 AI 枚举→暴露差异→客户终审签字→决策历史库→唯一执行准则）。"从权 B>A" 仅指执行层非评分层（Mars 2026-06-03 澄清，纠正早前"B 覆盖评分规则"误述）；闭环=标准兜底/AI引导/客户终审/系统落地/全程可追溯。完整能力 = Premium 独占 + 超 PRD-011 MVP → **建议立 PRD-015（AI 容灾决策顾问）**。
+- **PRD-015 立项（Rule G 取号）**：AI 容灾决策顾问（Premium 独占，从 PRD-011 MVP 向上拆出的决策治理层）——盲区检测报告 + 决策历史库 + DRP/CRP 编排 + 风险框架工具箱（RICE/RPN/AHP/TOPSIS/FAIR/OCTAVE…）；架构根 = ADR-046。charter 级草稿，**post-MVP 不阻塞当前研发**。
+- **ADR-044/045 补登 架构设计.md ADR 台账**：二者早在 LEDGER.md（号源 SSOT）已登记（044=Fast Debug Mode 有正文；045=ApprovalPolicy 占号），但漏镜像进 架构设计.md 元数据表（gen-data 读这张表 → dashboard 此前缺这两号）。RCA = 双台账漂移（详见对话）。
+- **PRD-011 §12 H1 / §11 Q1 过时文案回填**：D-WAIT-002 已 resolved（4 维矩阵）后，旧"30/20/30/15/5 + 待 Mars 拍 + 不能进研发"残留 → 标记已解决（与 M-1~M-7 同类）。
+- **评分细则 + 两层体系 4 文档传播完成（并行 agent）**：架构设计.md §9 写入 **ADR-043**（评分矩阵正文）+ **ADR-046**（两层体系正文）并登记 ADR 台账；USER_MANUAL.md 新增 **§25 数据韧性评分解读**（客户向 4 维矩阵 + 4 档级别 + 提分建议）；测试用例.md §19 **TC-AI-MVP 升级**到新矩阵 + 新增 TC-AI-016~019（两硬阈值 / 滑动窗口 / WORM 断言 / 缺失字段，11 条 P0）；术语表.md 收口**风险等级 4 档（权威）↔ 旧 5 枚举（内部）映射**，并对齐 PRD-012 Call Home 触发条件。dashboard 经 gen-data 自动收录 ADR-043/046。
 
 ---
 

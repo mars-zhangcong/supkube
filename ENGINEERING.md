@@ -48,6 +48,20 @@
 
 所有 AI / Call Home 能力**只给建议，不自动执行**。"应用建议"只预填 Wizard，由客户确认后自己保存。软件**绝不**自动修改客户集群资源（ADR-033 §6）。
 
+### Rule H — 应尽则尽（研发执行纪律, 2026-06-02 新立）
+
+对每一个**已过 DoR**（详见 §7）的就绪项，**尽最大努力把能完成的部分做完**——含单元测试、可独立交付的子模块、骨架代码、接口契约——不留半成品 WIP。
+
+**子规则**：
+
+1. **隔离卡点**：确实卡依赖 / 卡外部输入做不完的子项，**明确隔离标注**（代码里 `// BLOCKED: waiting for ADR-XXX` 或 PRD §9 任务表标 ⏸），让测试能就"已完成部分"立刻接力，不被半成品阻塞。
+2. **不强行 ship**："尽力做完" **≠** "验证通过"。做完仍要过 Rule D（buildStamp + journey + 双集群）才算 ship。
+3. **DoD 子项可独立判定**：每条 DoD 标"已完成"必须独立可验证；不可把"主体 + 卡点"合写一条造成不可分的 WIP。
+4. **测试可接力线**：每个就绪项明确"做到什么程度测试就能接手"（绑对应 DoD / TC 号）。让测试不必等"全功能完成"才能开工。
+5. **守 Rule A**：仍守"无 PRD 不编码"。**应尽则尽 ≠ 扩功能范围**——只在 PRD 写明的范围内尽。
+
+> **教训来源**：2026-06-02 DoR 审计发现 PRD-008/010/011 部分子项卡 ADR 草稿（占号待写）。如果"全部就绪才开工"会导致已闭环的主体也被卡。"应尽则尽"是平衡 DoR 守门 + 实践推进的工程纪律。
+
 ### Rule G — 取号必先来 LEDGER（2026-06-01 新立）
 
 任何编号文档（PRD / ADR / TC / D / C 等）**新建前必须先去 [`LEDGER.md`](./LEDGER.md) 取号**——不能直接在 PRD.md / 架构设计.md / 测试用例.md 末尾看一眼最大号自己 +1，那样并行 Agent 必撞。
@@ -143,7 +157,148 @@
 
 ---
 
-## 6. 已知工程债（Engineering Debt）
+## 6. 投产就绪门槛（DoR · Definition of Ready, 2026-06-02 立）
+
+> **用途**: PRD 从"已评审 → 研发中" 之前的 **门禁判定**。不是拍脑袋"看着差不多就开干", 6 条 **全过** 才算就绪、可立即排期编码; 任一条不过 → **暂缓整改**, 写清缺什么、谁来补。
+> **配套**: Rule H 应尽则尽 (§1) — 对就绪项尽最大努力把能完成的做完, 卡点隔离不阻塞。
+> **教训来源**: 2026-06-02 DoR 审计第一次系统化 13 PRD, 发现"闭环段写了 ≠ 正文回填"、"ADR 草稿 vs 占号待写"、"DoD 字段名/错误码/阈值不自洽" 三类盲区, 用单一靠 PRD 状态 = 已评审 判断会漏。
+
+### 6.1 6 条 DoR 门槛 (全过才算就绪)
+
+| # | 条目 | 不过的典型表现 |
+|---|---|---|
+| **DoR-1** | 状态 ∈ {研发中, 已评审} | 草稿 / 改正中 / 驳回 / Blocked |
+| **DoR-2** | 关联评审 finding 全闭环, 且正文回填干净 (§4.x 与 §13/§12 闭环段无矛盾; 三态表②正文回填=✅) | 闭环段写了拟方案但原 §4.x 没更新, 研发只读正文会拿到被取代的旧指引 |
+| **DoR-3** | DoD 可验证 + 字段名/错误码/契约/阈值自洽 | M-3~M-5 类"DoD 写 HMAC_INVALID 但代码错误码用 FINGERPRINT_INVALID" |
+| **DoR-4** | 依赖就绪 (上游 PRD / ADR 已决策、所需数据 / fixture / 上游功能已 ship) | "待 Phase 0 实测"或"待其它 PRD"硬卡 |
+| **DoR-5** | 关联 ADR **已决策** (非"占号待写") | ADR 状态显示"占号待 PRD-XXX 实施落地" = 决策事实尚未沉淀 |
+| **DoR-6** | 无外部 Blocker | 依赖 Mars / 客户 / 第三方未交付的输入 (e.g. Case API 规格) |
+
+### 6.2 ADR 决策状态解读 (DoR-5 配套口径)
+
+> **解决"ADR 状态 = '草稿' 但内容已写完"的歧义**: 不是 status 字段 = "Decided" 才算决策。
+
+| ADR 状态描述 | DoR-5 算决策？ |
+|---|---|
+| `✅ Decided` / `✅ Accepted` / `Accepted with conditions` | ✅ 算 |
+| `草稿` + 正文 7 段已写完 + 已被引用实施 (e.g. ADR-041/042/044) | ✅ 算 (决策事实成立) |
+| `草稿` + 正文已写 + 待相关 PRD 实施落地 (无歧义版本) | ✅ 算 (e.g. ADR-033/034/036/037/038) |
+| `草稿 (占号待 PRD-XXX Phase 0 落地)` | ❌ 不算 (决策事实尚未沉淀) |
+| `草稿 (占号 + 待写正文)` | ❌ 不算 |
+| `占号` / `占号待写` | ❌ 不算 |
+
+> **判断锚点**: ADR 是否能让一个**新来的研发**只读它就知道"该这么做"而不是"等谁拍"。
+
+### 6.3 应进则进 + 应尽则尽 (执行纪律)
+
+- **应进则进**: 过 DoR 立即排期开工、不人为搁置 (守 Rule A / Rule D)。
+- **应尽则尽**: 对每个就绪项, 尽最大努力把能完成的部分做完, 卡点隔离不阻塞 (Rule H)。
+- **缺项 / 模糊 / 依赖未就绪 → 禁止编码**, 归入暂缓并写清: 卡哪条 DoR + 缺什么 + 谁来补。
+
+### 6.4 DoR 判定 SOP
+
+1. 列对应 PRD 头表状态 → 判 DoR-1
+2. 查 PRD-review/INDEX.md §二之补 三态放行表 → 判 DoR-2 (finding 闭环 + 正文回填)
+3. 通读 §4.x + §8 DoD + 关联代码 → 判 DoR-3 (契约自洽)
+4. 看头表"关联 PRD / ADR / 文档"段 → 判 DoR-4 (上游就绪)
+5. 看 LEDGER §三 关联 ADR 状态 + §6.2 口径 → 判 DoR-5
+6. 看 §11 开放问题 + 等待决策.md → 判 DoR-6 (外部输入)
+
+每个 PRD 判定结果留痕到 PRD-review/INDEX.md (建议加 §二之三 "DoR 判定快照"段)。
+
+---
+
+## 7. 工程周期闭环 (Coding → Testing → 完成报告 → CICD, 2026-06-02 立)
+
+> **用途**: 解决"开工后到底什么算 done"的口径不一致。每个就绪 PRD 必须走完 5 个阶段才能从 backlog 移除, 任一阶段缺失 = 未真完成。
+> **关联**: Rule A (PRD 先于代码) → Rule H (应尽则尽) → Rule D (Verify-before-ship) → 本节 (闭环到完成报告)。
+
+### 7.1 5 阶段闭环
+
+```
+   ┌─────────┐    ┌─────────┐    ┌──────────┐    ┌─────────┐    ┌──────────┐
+   │ Coding  │ →  │ Testing │ →  │ Verify   │ →  │ Report  │ →  │ CICD     │
+   │ (Rule H)│    │ (Rule E)│    │ (Rule D) │    │ 完成报告 │    │ 自动化   │
+   └─────────┘    └─────────┘    └──────────┘    └─────────┘    └──────────┘
+```
+
+| 阶段 | 输入 | 产出 | 通过线 |
+|---|---|---|---|
+| **1. Coding** | PRD §4 + §9 任务拆分 | 代码实现 (功能 + 单测) | 主体 PR + 单测覆盖 (业务核心 ≥70%, 入口路径 ≥90%) |
+| **2. Testing** | 测试用例.md TC-XXX 用例 (按 Rule E 准入) + PRD §8 DoD | 测试报告 (用例×结果矩阵) | 所有 P0/P1 用例 pass + 回归用例 (TC-REG-*) pass |
+| **3. Verify (Rule D)** | 部署到 dev cluster | curl /status buildStamp 是今天 + 完整 user journey 通 + 双集群 (dev+test) 一致 | Rule D 3 子规则全过 |
+| **4. 完成报告** | 上 3 阶段产出 | `PRD-Review/PRD-XXX-COMPLETION-REPORT-YYYY-MM-DD.md` 完成报告 | 见 §7.2 报告模板 |
+| **5. CICD 闭环** | 完成报告 | (a) CHANGELOG 加条目 + (b) dashboard PRD 状态 → Shipped + (c) PRD.md 状态 → 待验收 → Shipped (Mars 拍) + (d) PROJECT-STATUS.md 当前发布版本 bump | dashboard `gen-data.mjs` ✅ 无漂移 + Mars 在 PROJECT-STATUS 签收 |
+
+### 7.2 完成报告模板 (§7 4 阶段产出)
+
+`PRD-Review/PRD-XXX-COMPLETION-REPORT-YYYY-MM-DD.md` 必含 6 段:
+
+```markdown
+# PRD-XXX 完成报告 (YYYY-MM-DD)
+
+## 1. PRD 范围回顾
+- PRD-XXX `<标题>`
+- 关联任务: #YYY / #ZZZ
+- 关联 ADR: ADR-NNN (状态)
+- 关联 PRD: PRD-AAA / PRD-BBB
+
+## 2. DoD 逐条对账 (PRD §8)
+| # | DoD 条目 | 实现位置 | 测试用例 | 状态 |
+|---|---|---|---|---|
+| 1 | <DoD 描述> | file.go:func L42 | TC-XXX-001 | ✅ pass |
+| ... |
+
+## 3. 测试报告 (Rule E)
+- TC-XXX-001 ~ NNN: <pass count> / <total>
+- TC-REG-XXX (回归): <pass count> / <total>
+- E2E 用例 (journey): <pass count> / <total>
+
+## 4. Verify-before-ship 证据 (Rule D)
+- buildStamp: `<full hash>` (deploy 时间 YYYY-MM-DD HH:MM:SS)
+- /status 输出: `<curl 结果摘要>`
+- user journey 跑通: <journey 名> ✅
+- 双集群一致: aks-jumborca-dev / aks-jumborca-test 镜像 tag 一致
+
+## 5. 卡点 / 留尾 (Rule H 应尽则尽的隔离子项)
+- ⏸ <子项>: 卡 <ADR-XXX 草稿 / 客户 API 等>, 已隔离不阻塞
+- 留尾任务: #NNN
+
+## 6. CICD 闭环
+- [ ] CHANGELOG.md 加 v0.X.Y.Z 条目
+- [ ] dashboard/data.js PRDS 状态 → 待验收
+- [ ] PRD.md 顶部 index + 头表 状态 → 待验收
+- [ ] PROJECT-STATUS.md 当前发布版本 bump (Mars 签收)
+- [ ] PRD.md 头表 状态 → Shipped (Mars 拍)
+```
+
+### 7.3 状态机映射 (§1 Rule A 状态机 + 本节闭环)
+
+```
+草稿 → 排队评审 → 评审中 → 改正中 → 已评审 → 研发中 → 待验收 → Shipped → 归档
+                                       ↑          ↑         ↑          ↑
+                                       │          │         │          └─ §7.5 CICD
+                                       │          │         └─ §7.4 完成报告 ship
+                                       │          └─ §7.1-3 Coding/Testing/Verify
+                                       └─ §6 DoR 门禁 (本节)
+```
+
+### 7.4 测试可接力线 (Rule H 协同)
+
+每个就绪 PRD 在 §9 任务拆分末尾加"测试可接力线"段, 说明:
+
+```markdown
+### 9.X 测试可接力线 (Rule H)
+- 当 P0 (Coding 主体) 完成 → 测试可跑 TC-XXX-001 (DoD #1) / 002 (DoD #2)
+- 当 P1 (Sub-module Y) 完成 → 测试加跑 TC-XXX-003 (DoD #3)
+- ⏸ 卡 ADR-NNN 草稿的 子项 Z 不阻塞 P0/P1 测试 (隔离)
+```
+
+测试不必等"PRD 全功能完成"才开工, 主体每过一阶段就接力测一阶段。
+
+---
+
+## 8. 已知工程债（Engineering Debt）
 
 | 债 | 现状 | 整改方向 |
 |---|---|---|
@@ -159,3 +314,4 @@
 | 日期 | 操作人 | 变更 |
 |---|---|---|
 | 2026-06-01 | Claude | 初版。把 Rule A/B/C/D（PRD 先于代码 / 并行 Agent / 共享契约单源 / verify-before-ship）+ Rule E/F 从 memory 落成仓库文档；补单一来源清单、版本/发布流程、文档地图、工程债清单。 |
+| 2026-06-02 | Claude (Mars 3h 委托) | **重大升级**: ① 新 Rule H **应尽则尽**（研发执行纪律 + 卡点隔离 + 测试可接力线）；② 新 §6 **DoR 投产就绪门槛** 6 条 + ADR 决策状态解读口径 + 判定 SOP（解决 PRD 状态 = 已评审 但仍有 finding/正文/契约 不一致的盲区）；③ 新 §7 **工程周期闭环**（Coding→Testing→Verify→Report→CICD 5 阶段 + 完成报告模板 6 段 + 状态机映射 + 测试可接力线）。落地依据见 PRD-Review/DOR-DECISION-2026-06-02.md。 |

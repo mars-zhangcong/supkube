@@ -11,8 +11,8 @@
 
 | Series | 已占最高号 | **下个空号** | 用途 | 详表 |
 |---|---|---|---|---|
-| **PRD** | PRD-014 | **PRD-015** | Product Requirements Document（影响 UX/数据模型的功能） | §二 |
-| **ADR** | ADR-045 | **ADR-046** | Architecture Decision Record（架构级决策，含让号占位） | §三 |
+| **PRD** | PRD-015 | **PRD-016** | Product Requirements Document（影响 UX/数据模型的功能） | §二 |
+| **ADR** | ADR-046 | **ADR-047** | Architecture Decision Record（架构级决策，含让号占位） | §三 |
 | **TC-REG** | TC-REG-011 | **TC-REG-012** | Regression test case（bug fix 强制回归） | §四 |
 | **TC-POL** | TC-POL-008 | **TC-POL-009** | Policy 测试用例 | §四 |
 | **TC-APP** | TC-APP-003 | **TC-APP-004** | Applications 测试用例 | §四 |
@@ -21,7 +21,7 @@
 | **TC-LBS** | TC-LBS-003 | **TC-LBS-004** | Local Backup Store 测试用例 | §四 |
 | **TC-RP** | TC-RP-006 | **TC-RP-007** | Restore Point 测试用例 | §四 |
 | **TC-MC** | TC-MC-004 | **TC-MC-005** | Multi-Cluster 测试用例 | §四 |
-| **D**（战略/产品决策） | D-34 | **D-35** | dashboard `DECISIONS` 数组里的当日决策 | §五 |
+| **D**（战略/产品决策） | D-35 | **D-36** | dashboard `DECISIONS` 数组里的当日决策 | §五 |
 | **C**（客户痛点） | C-012 | **C-013** | dashboard `CUSTOMER_PAIN` 数组 | §六 |
 
 > **如果你的 series 不在上面**：在 §七"新 series 注册"加一行（e.g. 新增 TC-SEC 安全扫描 series），然后回到本表加一行下个空号。
@@ -39,13 +39,14 @@
 | PRD-005 | Log Viewer v2（运维级日志观察平台） | Claude / 2026-05-31 | 已评审 | PRD.md `#prd-005` |
 | PRD-006 | Activity Task Detail Timeline | Claude / 2026-05-31 | 已评审 | PRD.md `#prd-006` |
 | PRD-007 | 完整 3-2-1-1-0 数据韧性（5 层 + Layer 4 Copy + DR Drill） | Claude / 2026-05-31 | 已评审 v1.1 | PRD.md `#prd-007` |
-| PRD-008 | RP 删除生命周期 + Activity 持久化 + Force Delete 治理 | Claude / 2026-05-31 | 改正中（D1-D5 finding 闭环 2026-06-02, §13 修订段 + §8 DoD #19-#23, 等 Mars 重审） | PRD.md `#prd-008` |
-| PRD-009 | Policy 模型对齐 Kasten（Snapshot + Import Policy 双 Action） | Claude / 2026-05-31 | v2 改正中（PRD-Review 第六份 G1-G5 全闭环 2026-06-02, §8.2 Phase 2 DoD/§9 任务/§9.3 风险/§4.5.3 卖点诚实化/§4.5.4 warn 半成品标注/§4 pill save 不可改 alert, 等 Mars 重审） | PRD.md `#prd-009` |
-| PRD-010 | DR Topology v2（可视化重构 + Local Snapshot/Backup Copy 节点） | Claude / 2026-05-31 | 改正中（F1-F4 finding 闭环 2026-06-02, §13 修订段 + §8 DoD #13-#16, 等 Mars 重审） | PRD.md `#prd-010` |
-| PRD-011 | AI Backup Advisor MVP（规则算分 + LLM 解释 · Canonical DSL · 本地小闭环） | Claude / 2026-06-01 | 改正中（H1/H2/H5 finding 闭环 2026-06-02, §12 修订段 + §8 DoD #14-#17; H1 Q1 权重 + Q4 阈值 deferred 等 Mars 拍 → D-WAIT-002） | PRD.md `#prd-011` |
+| PRD-008 | RP 删除生命周期 + Activity 持久化 + Force Delete 治理 | Claude / 2026-05-31 | **研发中（2026-06-03 Mars 评审通过 → 进研发；D1-D5 finding 闭环 + M-1/M-2 正文回填；⏸ ADR-039 存储选型占号待 Phase 0 实测 — Rule H 隔离, 主体可推进）** | PRD.md `#prd-008` |
+| PRD-009 | Policy 模型对齐 Kasten（Snapshot + Import Policy 双 Action） | Claude / 2026-05-31 | **研发中（2026-06-03 Mars 评审通过 → 进研发；v2 G1-G5 全闭环 + M-3/M-4/M-5 正文回填 CRD 字段+错误码+N=5 阈值；ADR-038 已写）** | PRD.md `#prd-009` |
+| PRD-010 | DR Topology v2（可视化重构 + Local Snapshot/Backup Copy 节点） | Claude / 2026-05-31 | **研发中（2026-06-03 Mars 评审通过 → 进研发；F1-F4 finding 闭环 + M-6/M-7 正文回填 验证徽章+箭头类型；⏸ ADR-040 SVG 视觉规范占号待写 — Rule H 隔离, 主体可推进 + 先落 ADR-040 正文）** | PRD.md `#prd-010` |
+| PRD-011 | AI Backup Advisor MVP（规则算分 + LLM 解释 · Canonical DSL · 本地小闭环） | Claude / 2026-06-01 | **研发中（2026-06-03 D-WAIT-002 已拍 Mars 4 维 25/35/20/20 标准对标 → 进研发；H1/H2/H5 闭环 + §4.6 API 正文回填；⏸ ADR-043 评分细则 v1.0.0 + ADR-046 AI 决策两层体系占号待写 — Rule H 隔离, evaluator.go skeleton 可推进）** | PRD.md `#prd-011` |
 | PRD-012 | Call Home / Auto-Support（三档连接 · 自动开 Case · opt-in） | Claude / 2026-06-01 | 改正中（I1 finding 闭环 2026-06-02 默认逐次确认 + SECURITY §6.C 并入, §10 修订段 + §8 DoD #13-#15; I2 customer-id 仍 Blocked 等 Case API spec） | PRD.md `#prd-012` |
 | PRD-013 | SupKube Four-Eyes Authorization（备份安全二次审批 + MFA · 4 大类 15 受保护操作 · Veeam VBR 13 对标 + Kasten 没有差异化） | Claude / 2026-06-02（Mars D-WAIT-002 frame shift 派生） | 草稿（占号 + 头表 + 立项缘由 + Goal/Stories/Functions/UI/DoD/Tasks/History 待 ship；不卡 PRD-011 Demo 闭环，PRD-011 §6 维度 3 / MFA+二次审批 10 分标 N/A → 等本 PRD ship 激活） | PRD.md `#prd-013` |
 | PRD-014 | **前端 UI 暴露模型（运维方 Day-0 可配 · 4 模式：LoadBalancer/NodePort/ClusterIP+port-forward/Ingress · 镜像 Dex publicURL 范本 · 装后 NOTES.txt 按所选模式打印访问方式）** | Mars 决策 / Claude 起草 / 2026-06-02 | **草稿** ✅（chart 机制已具备 service.frontend.type；本 PRD 补 ClusterIP 一等模式 + 修 NOTES.txt 服务名 bug + 模式感知 NOTES + values 4 模式菜单 + USER_MANUAL §5.5；正文 11 段已写） | PRD.md `#prd-014` |
+| PRD-015 | **AI 容灾决策顾问（AI DR Decision Advisor · Premium 独占）**：标准基本盘 A + 客户决策面 B 两层体系（ADR-046）+ 决策历史库 + 盲区检测报告 + DRP/CRP 编排 + 风险决策框架工具箱（RICE/RPN/AHP/TOPSIS/FAIR/OCTAVE…）；依赖 CMDB/依赖图引擎/RAG/向量记忆。从 PRD-011 MVP（A 面评分+解释）拆出的 Premium 上层能力 | Mars 决策 / Claude 起草 / 2026-06-03 | **草稿**（charter 级，post-MVP **不阻塞当前研发**；正文见 PRD.md `#prd-015`）| PRD.md `#prd-015` / ADR-046 |
 
 ---
 
@@ -71,6 +72,7 @@
 | ADR-043 | **AI Backup Advisor 评分细则 v1.0.0**（Mars 100 分制 4 维 + 行业对标 ISO 27002 §8.13 / NIST CSF / NIST SP 1800-26 / NIST SP 800-53 Rev.5 CP-9 + Mars frame shift "采客户→采平台" 5 个采集 SOP: Tier label / Air-Gapped Vault (WORM+Glacier+Archive Tier) / Vault 间接检测 / MFA 等 PRD-013 / DR Drill 等 PRD-007 §4.6） | Mars D-WAIT-002 / Claude 起草 / 2026-06-02 | **草稿**（占号 + 待写入 架构设计.md §9 正文 7 段: Context/Decision/Consequences/Alternatives/Verification/References + 评分公式细则表 + 维度采集分档表） | 架构设计.md §9 ADR-043 |
 | ADR-044 | **快速调试模式 (Fast Debug Mode)：本地秒级内循环 `hack/dev-local.sh` + feature 分支推送节奏**（与 ADR-042 云端部署通道互补；触发词"进入快速调试模式"→ Vite HMR + go run / port-forward 二模式，绕过 docker build/ACR/AKS；调试期每 2h(改动大 1h) push 到 feature 分支，仅触发 CI 校验不触发部署） | Mars 决策 / Claude 起草 / 2026-06-02 | **草稿** ✅（架构设计.md §9 正文 7 段已写: Context/Decision/Consequences/Alternatives/Coverage/Verification/References；hack/dev-local.sh + FAST-DEBUG-MODE.md + README 指引已落） | 架构设计.md §9 ADR-044 / hack/dev-local.sh / FAST-DEBUG-MODE.md |
 | ADR-045 | **ApprovalPolicy/ApprovalRequest CRD 设计 + Dex MFA 集成模式** ← 让号自 ADR-044（PRD-013 原非正式预占 ADR-044，与快速调试模式 ADR-044 撞号，按 Rule G §C 让号至下个空号） | PRD-013 让号 / 2026-06-02 | **占号**（待 PRD-013 ship 时写 架构设计.md §9 正文） | 架构设计.md §9（待写）/ PRD.md `#prd-013` |
+| ADR-046 | **AI 容灾决策两层体系（标准基本盘 A + 客户决策面 B）**：A=评分+盲区检测权威（永不被覆盖，跨客户可比）；B=DRP/CRP 执行权威（AI 枚举待决策→暴露差异→客户终审签字→决策历史库→唯一执行准则）。"从权 B>A" **仅指执行层、非评分层**（两层正交，故无跨客户不可横比问题）。闭环=标准兜底/AI引导/客户终审/系统落地/全程可追溯；非自治 Rule F 不变。完整能力（决策库+盲区检测+DRP/CRP编排+风险框架工具箱）= Premium 独占，超 PRD-011 MVP → 建议立 PRD-015 | Mars 决策 / Claude 起草 / 2026-06-03 | **草稿**（机制已写 PRD-011 §4.4；架构设计.md §9 正文待写）| PRD.md `#prd-011` §4.4 / 架构设计.md §9（待写）|
 
 ---
 
@@ -135,6 +137,7 @@
 | D-32 | 2026-06-01 | **草稿** ✅ Rule G + LEDGER.md 立 + ADR-041（4 步 SOP 首次演练成功；正文已写入 dashboard `DECISIONS`） |
 | D-33 | 2026-06-01 | **草稿** ✅ 开发主体上云（ADR-042 + cd.yaml 三阶段 + dev-deploy.sh DEPRECATED；Rule G 第二次演练; 正文已写入 dashboard `DECISIONS`） |
 | D-34 | 2026-06-02 | **草稿** ✅ PRD-Review 第六份 finding 全 ship (Auto 5h 自主工作): PRD-009 v2 §8.2 G5 / PRD-008 D1-D5 / PRD-010 F1-F4 / PRD-011 H1/H2/H5 / PRD-012 I1 全部 finding 闭环。4 PRD 状态 草稿→改正中。PRD-011 H1 数值待 Mars 拍 (D-WAIT-002), PRD-012 I2 仍 Blocked 等 Case API。CD #2 deploy-dev OIDC 凭据缺失 D-WAIT-001 写进 等待决策.md 等 Mars 拍 A/B。 |
+| D-35 | 2026-06-03 | **草稿** ✅ Mars 三连决策：① PRD-008/009/010 评审通过→研发中 + 二级残留 M-1~M-7 正文回填（AI 辅助深审，verify-don't-trust 纠了 1 处夸大）；② PRD-011 评分细则 D-WAIT-002 落地——Mars 自定 **4 维标准对标矩阵**（备份覆盖25/韧性35/防勒索20/可恢复性20，对标 ISO 27002+NIST CSF/1800-26/800-53）替代简版 5 维，§4.2 重写 + Q4 两硬阈值生效，PRD-011→研发中；③ **ADR-046 立**：AI 容灾决策**两层体系**（标准基本盘 A=评分+盲区检测权威永不被覆盖跨客户可比；客户决策面 B=DRP/CRP 执行权威经 AI 引导+客户终审+决策历史库）——"从权 B>A"仅指执行层非评分层（Mars 2026-06-03 澄清，纠正早前"B 覆盖评分规则"误述）。完整能力 = Premium 独占 + 超 PRD-011 MVP → **建议立 PRD-015（AI 容灾决策顾问）**。Rule G 第 3 次演练取号 ADR-046 + D-35。**待 propagate（并行 agent）**: ADR-043/046 §9 正文 + USER_MANUAL + TC-AI-MVP + 术语表风险等级收口。 |
 
 （D-23/24/25 跳过号或归并到 D-26；如发现实际占用请补回此表）
 
