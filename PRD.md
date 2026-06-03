@@ -4523,7 +4523,7 @@ PRD-012 出境字段**跟 PRD-011 SaaS / PRD-003 共用同一管线**——SECUR
 | **状态** | **草稿（2026-06-02 立项, Mars D-WAIT-002 frame shift 派生）** |
 | **作者** | Claude / Mars |
 | **目标版本** | v0.11.x（晚于 PRD-011 MVP, 不卡 Demo 核心闭环） |
-| **关联 ADR** | 拟 **ADR-044**（ApprovalPolicy/ApprovalRequest CRD 设计 + Dex MFA 集成模式） |
+| **关联 ADR** | 拟 **ADR-045**（ApprovalPolicy/ApprovalRequest CRD 设计 + Dex MFA 集成模式）← 让号自 ADR-044（与快速调试模式 ADR-044 撞号，2026-06-02 Rule G §C 让号） |
 | **关联 PRD** | **PRD-011 §6 维度 3 / MFA+二次审批 10 分**（本 PRD ship 前此项标 N/A 不计入分母）/ **PRD-008 §RP 删除**（Delete RP 进入 Four-Eyes 受保护清单）/ **PRD-009 §Import Policy**（跨集群 Restore-to-PROD 受保护）/ PRD-003 §AI Advisor（AI 推荐执行也走 Four-Eyes）|
 | **关联文档** | `SECURITY.md` §X 新章 "Four-Eyes Authorization & Privileged Operations Audit" / `USER_MANUAL.md` §X 新章 "MFA 启用与二次审批工作流" / 测试用例.md TC-SEC-001~005 新建（取号待 LEDGER 新 series TC-SEC）|
 | **反向兼容** | 向后兼容: ApprovalPolicy 默认**全 disabled**, 客户必须显式 enable 才生效, 0 默认行为变更; MFA toggle 默认 off, 启用后立即对所有 user 生效（强制 TOTP enrollment grace period 7 天）|
@@ -4862,7 +4862,7 @@ Pending ──(approvals ≥ minApprovers)──> Approved ──(controller 执
 
 | Phase | 内容 | 估时 |
 |---|---|---|
-| **P0 ADR-044 + skeleton** (1d) | ApprovalPolicy/ApprovalRequest CRD types + 头表 ADR + 状态机图 | 1d |
+| **P0 ADR-045 + skeleton** (1d) | ApprovalPolicy/ApprovalRequest CRD types + 头表 ADR + 状态机图 | 1d |
 | **P1 MFA 后端** (3d) | Dex TOTP connector 集成 + secret 存储 + enrollment flow + recovery code | 3d |
 | **P2 MFA UI** (2d) | Enrollment 页 + 登录 TOTP 输入 + Recovery code 展示 + Settings → Authentication | 2d |
 | **P3 ApprovalPolicy controller** (2d) | reconciler + ApprovalRequest 状态机 + TTL controller + self-approve 拒绝 | 2d |
@@ -4875,7 +4875,7 @@ Pending ──(approvals ≥ minApprovers)──> Approved ──(controller 执
 
 ### 10. 关联文档与任务
 
-- **ADR-044**（拟）: ApprovalPolicy/ApprovalRequest CRD 设计 + Dex MFA 集成模式
+- **ADR-045**（拟，让号自 ADR-044）: ApprovalPolicy/ApprovalRequest CRD 设计 + Dex MFA 集成模式
 - **PRD-011 §6 维度 3 / MFA + 二次审批 10 分**: 本 PRD ship 前标 N/A 不计入分母; ship 后此 10 分激活
 - **PRD-008 §audit event**: 本 PRD 6 条 event 复用 PRD-008 hash-chain + WORM 三层防御
 - **PRD-005 Log Viewer §audit category filter**: 审计员通过 `category=approval` 查询 ApprovalRequest 全生命周期
