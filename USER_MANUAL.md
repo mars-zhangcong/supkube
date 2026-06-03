@@ -463,6 +463,44 @@ helm uninstall supkube -n supkube
 # 不会删除 velero 资源，BSL 数据也不会动
 ```
 
+### 5.5 如何对外暴露 UI（4 种模式）
+
+> 前端 UI 怎么对外访问，是**运维方在安装时（Day-0）的选择**，不是产品替你定死的（PRD-014）。Chart 只给一个到处能跑的安全默认值（NodePort），你按自己的集群环境选其一即可。**装完 `helm install` 后终端会按你选的模式打印对应的访问步骤**（见 NOTES）。改模式 = 改参数 + `helm upgrade`，不用碰镜像。
+
+| 模式 | 适用场景 | 怎么访问 |
+|---|---|---|
+| **NodePort**（默认） | docker-desktop / on-prem，节点在内网可达 | `http://<node-ip>:30888/` |
+| **LoadBalancer** | 公有云 AKS/GKE/EKS，自动拿公网 IP | `http://<EXTERNAL-IP>/` |
+| **ClusterIP** | 安全敏感 / 气隙 / 平时不暴露、用时才连 | `kubectl port-forward` 后 `http://localhost:8080` |
+| **Ingress** | 生产：域名 + TLS | `https://<your-host>/` |
+
+```bash
+# 公有云：开 LoadBalancer，等公网 IP
+helm upgrade supkube ./supkube-helm/supkube -n supkube --reset-values \
+  --set service.frontend.type=LoadBalancer
+kubectl -n supkube get svc supkube-frontend -w   # 等 EXTERNAL-IP 不再是 <pending>
+
+# 本地/内网：默认 NodePort
+kubectl get nodes -o wide                          # 找一个 node IP
+# 浏览器打开 http://<node-ip>:30888/
+
+# 安全敏感 / 平时不暴露：ClusterIP + 用时 port-forward
+helm upgrade supkube ./supkube-helm/supkube -n supkube --reset-values \
+  --set service.frontend.type=ClusterIP
+kubectl -n supkube port-forward svc/supkube-frontend 8080:80
+# 浏览器打开 http://localhost:8080
+
+# 生产：Ingress（域名 + TLS，需自备 ingress controller）
+helm upgrade supkube ./supkube-helm/supkube -n supkube --reset-values \
+  --set ingress.enabled=true --set ingress.hosts[0].host=supkube.example.com
+```
+
+**几个要点：**
+- **公有云的节点没有公网 IP** → 在 AKS/GKE/EKS 上 NodePort 从外网访问不到，必须用 LoadBalancer 或 Ingress（这是 `172.188.195.36` UI 失联事件的根因，详见 PRD-014）。
+- **LoadBalancer 的公网 IP 是动态的** → 删/重建 Service 会换 IP。要固定地址，用云厂商注解绑预建静态 IP（Azure：`service.beta.kubernetes.io/azure-pip-name=<name>`）。
+- **如果启用了内置 Dex 登录**，`auth.dex.publicURL` 必须填成浏览器实际访问 SupKube 的外部地址（和你这里选的暴露方式一致），否则登录后会跳回错误地址（见 §11 认证配置 / `dex-check.yaml` 安装时会 fail-fast 提示）。
+- 开发期想要"秒级看 UI"，直接用 `./hack/dev-local.sh --mode ui`（本质就是 ClusterIP + port-forward 模式，见 FAST-DEBUG-MODE.md）。
+
 ### 5.X 平台支持矩阵（Support Matrix）
 
 > SupKube 的备份/还原能力依赖底层 K8s 的 **CSI 驱动**实现 `VolumeSnapshot`。不同云厂商 / 发行版在快照对象生命周期、`DeletionPolicy`、`VolumeBindingMode` 上有差异 → **每个目标平台必须走查后才能放进"已支持"列表**。

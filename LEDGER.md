@@ -11,7 +11,7 @@
 
 | Series | 已占最高号 | **下个空号** | 用途 | 详表 |
 |---|---|---|---|---|
-| **PRD** | PRD-013 | **PRD-014** | Product Requirements Document（影响 UX/数据模型的功能） | §二 |
+| **PRD** | PRD-014 | **PRD-015** | Product Requirements Document（影响 UX/数据模型的功能） | §二 |
 | **ADR** | ADR-044 | **ADR-045** | Architecture Decision Record（架构级决策，含让号占位） | §三 |
 | **TC-REG** | TC-REG-011 | **TC-REG-012** | Regression test case（bug fix 强制回归） | §四 |
 | **TC-POL** | TC-POL-008 | **TC-POL-009** | Policy 测试用例 | §四 |
@@ -28,7 +28,7 @@
 
 ---
 
-## 二、PRD 已占号 (PRD-001 ~ PRD-013)
+## 二、PRD 已占号 (PRD-001 ~ PRD-014)
 
 | 号 | 主题 | 占号人 / 时间 | 状态 | 详情位置 |
 |---|---|---|---|---|
@@ -45,6 +45,7 @@
 | PRD-011 | AI Backup Advisor MVP（规则算分 + LLM 解释 · Canonical DSL · 本地小闭环） | Claude / 2026-06-01 | 改正中（H1/H2/H5 finding 闭环 2026-06-02, §12 修订段 + §8 DoD #14-#17; H1 Q1 权重 + Q4 阈值 deferred 等 Mars 拍 → D-WAIT-002） | PRD.md `#prd-011` |
 | PRD-012 | Call Home / Auto-Support（三档连接 · 自动开 Case · opt-in） | Claude / 2026-06-01 | 改正中（I1 finding 闭环 2026-06-02 默认逐次确认 + SECURITY §6.C 并入, §10 修订段 + §8 DoD #13-#15; I2 customer-id 仍 Blocked 等 Case API spec） | PRD.md `#prd-012` |
 | PRD-013 | SupKube Four-Eyes Authorization（备份安全二次审批 + MFA · 4 大类 15 受保护操作 · Veeam VBR 13 对标 + Kasten 没有差异化） | Claude / 2026-06-02（Mars D-WAIT-002 frame shift 派生） | 草稿（占号 + 头表 + 立项缘由 + Goal/Stories/Functions/UI/DoD/Tasks/History 待 ship；不卡 PRD-011 Demo 闭环，PRD-011 §6 维度 3 / MFA+二次审批 10 分标 N/A → 等本 PRD ship 激活） | PRD.md `#prd-013` |
+| PRD-014 | **前端 UI 暴露模型（运维方 Day-0 可配 · 4 模式：LoadBalancer/NodePort/ClusterIP+port-forward/Ingress · 镜像 Dex publicURL 范本 · 装后 NOTES.txt 按所选模式打印访问方式）** | Mars 决策 / Claude 起草 / 2026-06-02 | **草稿** ✅（chart 机制已具备 service.frontend.type；本 PRD 补 ClusterIP 一等模式 + 修 NOTES.txt 服务名 bug + 模式感知 NOTES + values 4 模式菜单 + USER_MANUAL §5.5；正文 11 段已写） | PRD.md `#prd-014` |
 
 ---
 

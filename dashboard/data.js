@@ -55,6 +55,7 @@ const PRDS = [
   { id: "PRD-011", title: "AI Backup Advisor MVP（规则算分 + LLM 解释 · Canonical DSL · 本地小闭环）", task: "#164", state: "改正中", updated: "2026-06-02", note: "H1/H2/H5 已修订 (§12 + §8 DoD #14-#17); H1 数值待 Mars 拍 (D-WAIT-002)" },
   { id: "PRD-012", title: "Call Home / Auto-Support（三档连接 · 自动开 Case · opt-in）", task: "#165", state: "改正中", updated: "2026-06-02", note: "I1 已闭环 (默认逐次确认+SECURITY §6 白名单); I2 仍 Blocked 等 Case API" },
   { id: "PRD-013", title: "SupKube Four-Eyes Authorization（备份安全二次审批 + MFA · 4 大类 15 受保护操作 · ApprovalPolicy/ApprovalRequest CRD · Veeam VBR 13 对标 + Kasten 没有 = 真差异化）", task: "TBD（取号待 Mars 批后建 task）", state: "草稿", updated: "2026-06-02", note: "Mars D-WAIT-002 frame shift 派生立项: PRD-011 §6 维度 3 / MFA+二次审批 10 分平台落地 dependency. 不卡 Demo 核心闭环 (Mars 决策延后)." },
+  { id: "PRD-014", title: "前端 UI 暴露模型（运维方 Day-0 可配 · 4 模式 LoadBalancer/NodePort/ClusterIP+port-forward/Ingress · 镜像 Dex publicURL 范本 · 装后 NOTES.txt 按模式打印访问方式）", task: "TBD（取号待建 task）", state: "草稿", updated: "2026-06-02", note: "" },
 ];
 
 /* ---- ADR 台账（应与 架构设计.md ADR-LEDGER 一致）---- */

@@ -65,6 +65,7 @@
 | [PRD-011](#prd-011) | AI Backup Advisor MVP（智能业务梳理 + 数据安全综合评分 + 备份建议 · 规则算分 + LLM 解释 · Canonical DSL · 本地分析小闭环） | **改正中（2026-06-02）** | #164 |
 | [PRD-012](#prd-012) | Call Home / Auto-Support（三档连接 · 采集器上送 + 自动开 Case · opt-in · 复用 ADR-033 脱敏） | **改正中（2026-06-02, I2 仍 Blocked）** | #165 |
 | [PRD-013](#prd-013) | SupKube Four-Eyes Authorization（备份安全二次审批 + MFA · 4 大类 15 受保护操作 · ApprovalPolicy/ApprovalRequest CRD · Veeam VBR 13 对标 + Kasten 没有 = 真差异化） | **草稿（2026-06-02 立项，Mars D-WAIT-002 frame shift 派生）** | TBD（取号待 Mars 批后建 task） |
+| [PRD-014](#prd-014) | 前端 UI 暴露模型（运维方 Day-0 可配 · 4 模式 LoadBalancer/NodePort/ClusterIP+port-forward/Ingress · 镜像 Dex publicURL 范本 · 装后 NOTES.txt 按模式打印访问方式） | **草稿（2026-06-02 立项，Mars 决策）** | TBD（取号待建 task） |
 
 ---
 
@@ -4896,6 +4897,90 @@ Pending ──(approvals ≥ minApprovers)──> Approved ──(controller 执
 | 日期 | 操作人 | 状态变化 | 反馈 |
 |---|---|---|---|
 | 2026-06-02 | Claude (Auto 5h, Mars D-WAIT-002 frame shift 派生) | — → **草稿** | PRD-013 v1 完成。**核心决策**: (1) 4 大类受保护操作 = Veeam VBR 13 对标 12 条 + SupKube K8s 多集群 + DR 视角特有 3 条 = 合计 15 条; (2) ApprovalPolicy / ApprovalRequest 两层 CRD 设计（前者策略, 后者每请求实例）, 状态机 7 状态; (3) MFA 走 Dex OIDC TOTP connector + WebAuthn passkey, 强制二次确认防 session hijack; (4) recursive 保护 — Disable ApprovalPolicy 操作本身也走 Four-Eyes; (5) self-approve forbidden + minApprovers 可调 1/2/3 = 双眼/三眼/四眼; (6) 6 条 audit event 走 PRD-008 hash-chain + WORM 三层防御兼用; (7) 默认全 disabled, 向后兼容 0 风险。**Q1-Q5 待 Mars 拍**: 紧急 bypass / policy 优先级 / MFA grace period / Recovery code 用尽 / AI Advisor identity。**关键依赖**: 本 PRD ship 后 PRD-011 §6 维度 3 / 10 分激活; 不卡 Demo 核心闭环 (Mars 决策延后, 进流水线)。 |
+
+---
+
+<a id="prd-014"></a>
+## PRD-014 — 前端 UI 暴露模型（运维方 Day-0 可配 · 4 模式 · 装后访问引导）
+
+> 立项缘由（Mars 2026-06-02）：ADR-042 上云后前端默认 NodePort，AKS 节点无公网 IP → UI 没有任何入口；早前手动开的 LoadBalancer 公网 IP（`172.188.195.36`）被 helm 默认值覆盖、被 Azure 回收（活动日志实证 2026-06-01 23:50 删除）。**根因不是 bug，是"前端怎么对外暴露"从来没有被当作一个一等的、运维方在安装时选择的决策来对待，而且装完之后产品没有告诉运维方该怎么访问。** Mars 拍板：不要把任何环境特定的暴露方式（LoadBalancer / 静态 IP）烧进我们的交付；产品只给安全默认值 + 让客户自己选 + 装后明确引导。镜像我们已有的 Dex `publicURL` 那套范本（install 时填值、改值 `helm upgrade`、缺关键值 fail-fast、装后 NOTES 指路）。
+
+### 1. Goal（目标）
+
+前端 UI 的对外暴露方式是**运维方在 Day-0（`helm install`）的安装决策**，不是产品替客户定死的东西。产品职责：(a) 提供一个到处都能跑的**安全默认值**；(b) 把暴露方式做成**清晰的、值驱动的菜单**（4 模式）；(c) 安装完成后**按所选模式打印准确的访问方式**，让运维方零猜测就能打开 UI；(d) 改暴露方式 = 改 values + `helm upgrade`，无需碰镜像 / 代码。
+
+### 2. Epic（史诗故事）
+
+作为一名**部署 SupKube 的运维方（客户或我们自己）**，我希望在安装时就能按我的集群环境（公有云 / 本地 / 离线 / 安全敏感）选择 UI 的暴露方式，并在装完后立刻得到"怎么打开 UI"的准确指引，这样我不必读源码、不必猜端口、也不会出现"装好了却打不开"的尴尬。
+
+### 3. User Stories（用户故事）
+
+- **US-1（公有云）**：作为 AKS/GKE/EKS 客户，我 `--set service.frontend.type=LoadBalancer`，装完 NOTES 告诉我"等 EXTERNAL-IP 出现，然后 http://<IP>/"。
+- **US-2（本地/离线）**：作为 docker-desktop / on-prem 客户，我用默认 NodePort，装完 NOTES 告诉我 `http://<node-ip>:30888`。
+- **US-3（安全敏感 / 平时不开）**：作为合规/气隙环境运维，我 `--set service.frontend.type=ClusterIP`（UI 不对外），装完 NOTES 直接给我一条 `kubectl port-forward` 命令，用时才连。
+- **US-4（生产域名 + TLS）**：作为生产运维，我 `--set ingress.enabled=true` 配域名，装完 NOTES 告诉我 `https://<host>`。
+- **US-5（改主意）**：我随时能 `helm upgrade` 切换模式，无需重建镜像。
+
+### 4. Functions（业务逻辑 / 功能拆解）
+
+| # | 功能 | 说明 |
+|---|---|---|
+| F1 | `service.frontend.type` = 4 模式 | `LoadBalancer` / `NodePort`（默认）/ `ClusterIP`（+port-forward）/ 配合 `ingress.enabled`。前三者是标准 K8s service type，chart 模板已支持渲染；本 PRD 把 **ClusterIP「不暴露/按需 port-forward」正式确立为一等文档化模式**。 |
+| F2 | 模式感知的 NOTES.txt | `helm install` 后按 `.Values.service.frontend.type` / `.Values.ingress.enabled` **分支打印对应访问方式**（LB→等 EXTERNAL-IP；NodePort→`<node>:30888`；ClusterIP→给出 `kubectl port-forward` 命令；ingress→域名）。 |
+| F3 | **修 NOTES.txt 服务名 bug** | 现有 NOTES 第 4 行 `port-forward svc/{{ supkube.fullname }}`（渲染成 `svc/supkube`）连不上 —— 真实服务名是 `<fullname>-frontend`。本 PRD 修正。 |
+| F4 | values.yaml 4 模式菜单 | 把 `service.frontend` 注释从"3 路径"扩成清晰的 4 模式菜单，含 ClusterIP/port-forward 用途与各自适用场景。 |
+| F5 | USER_MANUAL §5.5 | 新增「如何对外暴露 UI」一节，覆盖 4 模式 + 各自访问命令 + 改模式流程。 |
+
+### 5. UI / UX
+
+无前端页面改动。UX 载体 = **`helm install` 的终端输出（NOTES.txt）** + 文档。验收标准：运维方装完**不需要任何额外知识**就能照 NOTES 打开 UI。
+
+### 6. Out of Scope（明确不做）
+
+- **不绑静态公网 IP**：要固定 IP 的运维方自行用 `service.beta.kubernetes.io/azure-pip-name` 等注解（文档提示即可），产品不替客户管 IP 生命周期。
+- **不在我们的 CD 里烧死某种模式**：各环境（dev/test/prod）选哪种暴露 = 各环境的 values 选择。把"按环境自动选 values"做成 CD 标准（per-env values overlay：`values-dev/test/prod.yaml`）是**关联但独立**的架构议题 → 见 §10，建议单独 ADR。
+- 不附带安装 ingress controller / cert-manager（运维方自备）。
+
+### 7. 非功能性要求
+
+- **向后兼容**：默认仍 `NodePort`（任何集群可装），现有安装 `helm upgrade` 行为不变。
+- NOTES 输出**不得泄露 secret**（只打印访问地址 / 命令）。
+- 多云通用：LB 模式不写死任一云厂商注解。
+
+### 8. 验收标准（Definition of Done）
+
+1. `helm template` 在 `service.frontend.type` = LoadBalancer / NodePort / ClusterIP 三种取值、及 `ingress.enabled=true` 下，**各渲染出正确且互不串台的 NOTES 访问指引**。
+2. NOTES.txt 服务名 bug 修复：port-forward 指向 `<fullname>-frontend`，实测可连。
+3. `values.yaml` 的 `service.frontend` 注释呈现清晰 4 模式菜单。
+4. USER_MANUAL 有「§5.5 如何对外暴露 UI」一节。
+5. `node dashboard/gen-data.mjs` 漂移检查 ✅。
+6. `helm lint` / `helm template` 无错误。
+
+### 9. 任务拆分
+
+- T1：重写 `templates/NOTES.txt`（模式感知 + 修服务名 bug）
+- T2：`values.yaml` `service.frontend` 4 模式菜单注释
+- T3：USER_MANUAL §5.5
+- T4（可选）：LoadBalancer/ingress 模式下若缺 `auth.dex.publicURL` 的 fail-fast 提示对齐（与 dex-check.yaml 协同）
+
+### 10. 关联文档与任务
+
+- **ADR-042**（架构设计.md §9）：上云 + CD 默认 values → 本 PRD 修正其遗漏的"前端对外访问"。
+- **ADR-044**（架构设计.md §9）：快速调试模式 `dev-local.sh --mode ui` 本质就是 **ClusterIP + port-forward** 模式的"吃自己狗粮"，与 F1 的 US-3 同源。
+- **范本**：`templates/dex-check.yaml` + `auth.dex.publicURL`（install 时填值 / fail-fast / NOTES 指路的标准范式）。
+- **关联架构议题（建议单独 ADR，取号见 LEDGER §一）**：CD per-environment values overlay（`values-{env}.yaml` 分层 + `helm -f values-{env}.yaml`），把"按环境改参数"从 cd.yaml 内联 `--set` 升级为声明式自动化。homelab 已有 `hack/homelab/values-homelab.yaml` 雏形。
+
+### 11. 开放问题（评审时讨论）
+
+- **Q1**：默认值是否从 `NodePort` 改为 `ClusterIP`（更安全 / 默认不暴露）？代价是 docker-desktop 本地体验多一步 port-forward。（倾向：保持 NodePort 默认，向后兼容优先；Mars 拍）
+- **Q2**：LoadBalancer 模式是否要像 Dex 那样对"缺 publicURL"fail-fast？（倾向：是，登录链路一致性；Mars 拍）
+- **Q3**：是否本 PRD 一并落地 per-env values overlay（§10 的独立 ADR 候选），还是拆为独立架构任务？（Mars 拍方向，对应你 #1 的 CD 自动化问题）
+
+### 12. 评审历史
+
+| 日期 | 操作人 | 状态变化 | 反馈 |
+|---|---|---|---|
+| 2026-06-02 | Mars 决策 / Claude 起草 | — → **草稿** | 由 `172.188.195.36` UI 失联事件根因取证派生。核心立场：暴露方式 = 运维方 Day-0 可配，产品只给安全默认 + 装后引导，不烧死任何环境特定方式。发现并修复 NOTES.txt 服务名 bug。Part1（CD per-env 参数自动化）识别为关联独立 ADR 候选（取号见 LEDGER §一）。Q1-Q3 待 Mars 拍。 |
 
 ---
 

@@ -160,17 +160,36 @@ frontend:
 #   ELB) with a public IP. Provisioning takes 1-2 min, then the SVC's
 #   EXTERNAL-IP becomes reachable.
 #
-#   Other paths:
-#     · type: LoadBalancer (recommended for public cloud, get a public IP)
-#     · type: NodePort     (default; works on docker-desktop / on-prem)
-#     · ingress.enabled=true (production: hostname-based routing + TLS)
+#   How you expose the UI is a Day-0 operator decision (PRD-014). Pick ONE of
+#   these 4 modes — every install environment differs, so the chart only ships
+#   a safe default and prints the matching access steps after `helm install`
+#   (see templates/NOTES.txt). Change mode anytime via `helm upgrade`.
+#
+#   ┌ MODE ───────────┬ WHEN ─────────────────────────┬ HOW TO ACCESS ────────────┐
+#   │ NodePort        │ docker-desktop / on-prem      │ http://<node-ip>:30888/    │
+#   │ (default)       │ (nodes reachable on LAN)       │                            │
+#   │ LoadBalancer    │ public cloud (AKS/GKE/EKS)     │ http://<EXTERNAL-IP>/      │
+#   │                 │ — gets a cloud public IP       │ (IP is dynamic; pin static │
+#   │                 │                                │  IP via cloud annotation)  │
+#   │ ClusterIP       │ security-restricted / air-gap  │ kubectl port-forward, then │
+#   │                 │ / "don't expose, use on demand"│ http://localhost:8080      │
+#   │ ingress.enabled │ production (hostname + TLS)     │ https://<your-host>/       │
+#   └─────────────────┴────────────────────────────────┴────────────────────────────┘
+#
+#   Override examples:
+#     --set service.frontend.type=LoadBalancer      # public cloud
+#     --set service.frontend.type=ClusterIP         # port-forward only
+#     --set ingress.enabled=true                    # + configure ingress.* below
+#   Full guide: USER_MANUAL §5.5.
 service:
   backend:
     type: ClusterIP
     port: 8080
   frontend:
-    type: NodePort # ← Override to LoadBalancer on AKS/GKE/EKS (see above)
+    # One of: NodePort (default) | LoadBalancer | ClusterIP  (see 4-mode menu above)
+    type: NodePort
     port: 80
+    # Only used when type=NodePort. Ignored for LoadBalancer/ClusterIP.
     nodePort: 30888
 ingress:
   enabled: false
