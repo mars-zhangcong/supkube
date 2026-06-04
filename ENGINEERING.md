@@ -10,6 +10,15 @@
 
 > 这些规则是从踩坑里长出来的，**不是建议，是纪律**。例外都写明了。
 
+> ## 🪧 座右铭（Mars, 2026-06-04）
+> ## **治理办法是没用的，有用的是永远不给错误发生的条件。**
+>
+> 有治理（规则、评审、Runbook、口头确认）只是在错误发生*之后*补救；真正有用的是
+> 在源头**消除错误发生的条件**——把规则变成一道**断了就报错的机制**（CI 红板 /
+> 启动 fail-fast / 单一真源 / 物理隔离），让人**绕不过去**。每条铁律优先用机械手段
+> 落地；纯靠人记性的条款，本身就是下一个事故的条件。本节多数 Rule 都配了机械执行
+> 点（CI job / 守卫脚本），Rule J 是这条座右铭的范本。
+
 ### Rule A — PRD 先于代码
 
 任何**影响 UX 的 Feature** 必须先过 PRD（走状态机：草稿→排队评审→评审中→{改正中｜驳回｜已评审}→研发中→待验收→Shipped→归档），**再写代码**。
@@ -90,6 +99,32 @@
 - ❌ 不更新台账，靠下次 grep 全文找最大号 → 多文件分散后必漂
 - ❌ 跨 session 续工作，不查 LEDGER 直接照记忆里的号写 → 撞旧号
 
+### Rule I — 并行 Agent 写共享文档纪律（2026-06-04 D-WAIT 单源根治立）
+
+Rule B（并行开多 Agent）+ Rule C（共享契约单源）+ Rule G（取号经 LEDGER）的并发落地纪律。**教训来源**：2026-06-04 —— FDE + 3 个 R&D agent 各在自己 git 分支各写一份 `等待决策.md` → 单一来源跨分支碎裂；单一大文件并行 append → 撞出已提交的 git 冲突标记 → FDE 被迫 fork 到独立文件；D-WAIT 当时不是 LEDGER 系列 → 无权威取号 → 撞两个 D-WAIT-004 / 两个 D-WAIT-005。四条铁律：
+
+1. **一事一文件，禁共享 append**：会被多 agent 并发改的清单类文档（决策待办、评审 finding 等），**一事一文件**（`等待决策/D-WAIT-NNN-*.md` 一条一文件），用瘦 INDEX 串。**绝不**让多 agent 往同一个大文件末尾 append——append 到同一文件 = 并行写必撞 = git 冲突标记。
+2. **共享序号经 LEDGER + main 集中预分配**：D-WAIT / PRD / ADR / TC 等序号经 [`LEDGER.md`](./LEDGER.md) 取号；并行场景**由 main agent 启动子 agent 前一次性预分配**，把号写进各子 agent 的 prompt（"你的号 = D-WAIT-013，不要自己取号"）。禁止 N 个子 agent 各自跑去取号 / 自占号。
+3. **并行 Agent 用 git worktree 隔离（显式默认）**：**默认每支并行部队一棵 worktree**——多个并行 agent **各自一个 `git worktree`**（独立工作目录 + 独立 HEAD/index，仅共享 .git 对象库），**禁止多个 agent 在同一 checkout / 同一分支上写**（共享工作树并发写 = 文件互踩 + 谁 commit 落在谁的 HEAD 不可控）。`git worktree add <path> <branch>`。**协调者不依赖"清场确认"**：派活/开工前自己做**物理校验**（共享文件 `mtime` 是否在动 / `.git/index.lock` / `lsof` 看活进程 cwd），用证据判定战场是否真静默——"指令说清场" ≠ "现场真清场"（2026-06-04 实测：收到"清场已确认"后，开工瞬间仍逮到 live writer 在写共享树）。
+4. **冲突先解不 fork**：发现共享文件带冲突标记 / 仓库状态异常 → **先解冲突 + 收口单源**，**不**绕开它 fork 出一份新文件（fork = 把单源碎裂问题往后拖）。无法独立解时，停下来报告（live-contended 仓库上做结构改动会再撞）。
+
+### Rule J — 禁止幽灵配置（No Phantom Config，2026-06-04 立 / ADR-047）
+
+**幽灵配置 = 一个看起来权威、但没有任何东西真正消费它的配置项。**配置与它的消费者之间只靠"约定/惯例"连着，而不是靠"断了就报错"的机制连着。这是座右铭的直接产物。
+
+**铁律**：任何配置值都必须有一条**断了会大声失败**的消费链路。具体三条：
+
+1. **跨层绑定必须有端到端测试**：凡是 helm → env → code 一路传的值（如 `VELERO_NAMESPACE`），必须有一个测试断言"配置端 == 消费端"。光把 env 注进 Pod、代码却不读它 = 幽灵。
+2. **传给子系统的值必须对照对方真实 schema 验证**：传给子 chart / 第三方的 key（如 velero 子 chart 的 `namespaceOverride`），必须确认对方真的读这个 key；对方不读 = 死值，删掉。
+3. **每个 config key 必须能指出消费者那一行**：code-review 与自检时，指不出读它的代码行 = 幽灵 = 删。同类信息只能有一个**单一真源**（Rule C 的延伸；如 ns 收口到 `internal/velerons`）。
+
+**执行机制（不靠记性，靠墙）**：
+- CI job **`Phantom Config Guard`**（`hack/check-phantom-config.sh`）：后端绕过单一真源重新硬编码 ns、或 values 重现死值 `namespaceOverride`，**构建直接红**。
+- CI job **`Helm Lint` 内的接缝测试**（`hack/test-velero-ns-seam.sh`）：渲染后断言 后端读的 ns == Velero 运行 ns == BSL 所在 ns，劈叉即红。
+- 现场：`hack/test-velero-ns-seam.sh --live` 对真集群做同样断言（FED 体检）。
+
+**教训来源**：2026-06-04 Velero ns 事故——`velero.namespaceOverride`（子 chart 不读的死值）+ 后端 80+ 处硬编码 `"velero"`（让注入的 `VELERO_NAMESPACE` 形同虚设）两个幽灵配置叠加，导致 Velero 装进 supkube ns、后端却读 velero ns，存储桶全 Unknown。历史同类：`image.registry`（"documentation lie，chart 从不读它"）。**这类是接缝 bug，不是粗心 bug——正确反应不是"下次仔细点"，是在接缝上架一道断了会响的机制。**
+
 ---
 
 ## 2. 单一来源清单（Single Source of Truth）
@@ -113,6 +148,7 @@
 | **API 契约** | **openapi.yaml + API-REFERENCE.md**（端点×角色矩阵派生自 `supkube-backend/internal/auth/rbac.go`） |
 | **运维排障** | **RUNBOOK.md** |
 | **RTO/RPO/SLO 目标值** | **SLO-RTO-RPO.md**（同时是 PRD-011 Resilience Score 评分阈值的单源） |
+| **Velero 命名空间** | 后端 **`internal/velerons`**（运行时单源，读 `VELERO_NAMESPACE`）+ Helm **`supkube.veleroNamespace`** helper（渲染时单源）。禁止任何地方硬编码 `"velero"` ns（Rule J，CI 守卫） |
 
 > ⚠ **已知违规**：`dashboard/index.html` 把 PRD/ADR/任务数据硬编码复制，已与源漂移。整改方向见 §6。
 
@@ -214,7 +250,7 @@
 3. 通读 §4.x + §8 DoD + 关联代码 → 判 DoR-3 (契约自洽)
 4. 看头表"关联 PRD / ADR / 文档"段 → 判 DoR-4 (上游就绪)
 5. 看 LEDGER §三 关联 ADR 状态 + §6.2 口径 → 判 DoR-5
-6. 看 §11 开放问题 + 等待决策.md → 判 DoR-6 (外部输入)
+6. 看 §11 开放问题 + 等待决策.md（INDEX → `等待决策/D-WAIT-NNN-*.md`）→ 判 DoR-6 (外部输入)
 
 每个 PRD 判定结果留痕到 PRD-review/INDEX.md (建议加 §二之三 "DoR 判定快照"段)。
 
@@ -365,3 +401,5 @@ PRD 状态机:    草稿 → 排队评审 → 评审中 → 改正中 → 已评
 | 2026-06-01 | Claude | 初版。把 Rule A/B/C/D（PRD 先于代码 / 并行 Agent / 共享契约单源 / verify-before-ship）+ Rule E/F 从 memory 落成仓库文档；补单一来源清单、版本/发布流程、文档地图、工程债清单。 |
 | 2026-06-02 | Claude (Mars 3h 委托) | **重大升级**: ① 新 Rule H **应尽则尽**（研发执行纪律 + 卡点隔离 + 测试可接力线）；② 新 §6 **DoR 投产就绪门槛** 6 条 + ADR 决策状态解读口径 + 判定 SOP（解决 PRD 状态 = 已评审 但仍有 finding/正文/契约 不一致的盲区）；③ 新 §7 **工程周期闭环**（Coding→Testing→Verify→Report→CICD 5 阶段 + 完成报告模板 6 段 + 状态机映射 + 测试可接力线）。落地依据见 PRD-Review/DOR-DECISION-2026-06-02.md。 |
 | 2026-06-02 | Claude (Mars D-WAIT-003/004/005 决策回复落地) | **§1 Rule H 重构**: 应尽则尽改为**一条原则三铁律** (DoR 前立即推 / DoR 检不强行 / DoR 后尽最大努力), Mars D-WAIT-005 纠错"应进则进 ≠ 应尽则尽", 三铁律是同一原则的整体。**§6.3 同步对齐**铁律 1-3。**§7 5 阶段 → 9 阶段** (Mars D-WAIT-004 Q1): Requirement → PRD(DoR) → 方案ADR → Coding+CI → CD 部署测环境 → 多轮测试 → Test Report → UAT(DoD) → CD 上线; **Test Report 位置纠错** (Q4) PRD-Review → 测试用例.md (PRD-Task-TC 三级映射闭环); **§7.5 CICD 双集群闭环** (Q3) push to main → dev+test 双 CD 任务 #170。|
+| 2026-06-04 | SCM (D-WAIT 单源根治) | 新增 **§1 Rule I 并行 Agent 写共享文档纪律**（一事一文件禁 append / 共享序号经 LEDGER 由 main 集中预分配 / 并行 agent 用 git worktree 隔离禁同分支写 / 冲突先解不 fork）。教训来源：FDE+3 R&D 各分支各写一份 等待决策.md 跨分支碎裂 + 单文件 append 撞 git 冲突标记 + D-WAIT 撞两个 004/005。配套 LEDGER §一 D-WAIT 取号系列 + §八 Rule E。|
+| 2026-06-04 | SCM (D-WAIT 收尾) | **Rule I 子条 3 升级为显式默认**：「默认每支并行部队一棵 worktree」+「协调者不依赖'清场确认'，开工前物理校验 mtime/lock/进程cwd」（实测教训：收到"清场已确认"后开工瞬间仍逮到 live writer）。新建根目录 **MERGE-PLAYBOOK.md**（5 分支并入 main 的顺序+冲突解法，plan-only 不执行）。等待决策.md INDEX 头加「如何新增一条 D-WAIT」3 步 SOP。|

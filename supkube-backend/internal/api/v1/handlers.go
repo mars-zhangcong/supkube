@@ -18,6 +18,7 @@ import (
 	"github.com/supkube/supkube-backend/internal/auth"
 	"github.com/supkube/supkube-backend/internal/gc"
 	"github.com/supkube/supkube-backend/internal/k8s"
+	"github.com/supkube/supkube-backend/internal/velerons"
 	"github.com/supkube/supkube-backend/internal/version"
 )
 
@@ -126,7 +127,7 @@ func ListBackups(c *gin.Context) {
 		return
 	}
 	backupList := &velerov1.BackupList{}
-	namespace := c.DefaultQuery("namespace", "velero")
+	namespace := c.DefaultQuery("namespace", velerons.Namespace())
 	if err := cl.List(context.Background(), backupList, client.InNamespace(namespace)); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -272,7 +273,7 @@ func CreateBackup(c *gin.Context) {
 	backup := &velerov1.Backup{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      req.Name,
-			Namespace: "velero",
+			Namespace: velerons.Namespace(),
 		},
 		Spec: velerov1.BackupSpec{
 			IncludedNamespaces:       req.IncludedNamespaces,
@@ -337,7 +338,7 @@ func CreateBackup(c *gin.Context) {
 //  4. otherwise error — multiple BSLs, none default; the caller must choose.
 func resolveBackupStorageLocation(ctx context.Context, cl client.Client) (string, error) {
 	bslList := &velerov1.BackupStorageLocationList{}
-	if err := cl.List(ctx, bslList, client.InNamespace("velero")); err != nil {
+	if err := cl.List(ctx, bslList, client.InNamespace(velerons.Namespace())); err != nil {
 		return "", fmt.Errorf("listing BackupStorageLocations: %w", err)
 	}
 	return pickPreferredBSL(bslList.Items, "BackupStorageLocation")
@@ -350,7 +351,7 @@ func resolveBackupStorageLocation(ctx context.Context, cl client.Client) (string
 // preserving the 3-2-1-1-0 "≥1 copy off-site" property. (#101 finding 1.)
 func resolveExportStorageLocation(ctx context.Context, cl client.Client) (string, error) {
 	bslList := &velerov1.BackupStorageLocationList{}
-	if err := cl.List(ctx, bslList, client.InNamespace("velero")); err != nil {
+	if err := cl.List(ctx, bslList, client.InNamespace(velerons.Namespace())); err != nil {
 		return "", fmt.Errorf("listing BackupStorageLocations: %w", err)
 	}
 	cloud := make([]velerov1.BackupStorageLocation, 0, len(bslList.Items))
@@ -396,7 +397,7 @@ func pickPreferredBSL(items []velerov1.BackupStorageLocation, what string) (stri
 // later. Lists once and matches by name. (#107.)
 func assertBSLExists(ctx context.Context, cl client.Client, name string) error {
 	bslList := &velerov1.BackupStorageLocationList{}
-	if err := cl.List(ctx, bslList, client.InNamespace("velero")); err != nil {
+	if err := cl.List(ctx, bslList, client.InNamespace(velerons.Namespace())); err != nil {
 		return fmt.Errorf("listing BackupStorageLocations: %w", err)
 	}
 	names := make([]string, 0, len(bslList.Items))
@@ -424,7 +425,7 @@ func GetBackup(c *gin.Context) {
 		return
 	}
 	backup := &velerov1.Backup{}
-	if err := cl.Get(context.Background(), client.ObjectKey{Name: name, Namespace: "velero"}, backup); err != nil {
+	if err := cl.Get(context.Background(), client.ObjectKey{Name: name, Namespace: velerons.Namespace()}, backup); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
@@ -470,7 +471,7 @@ func DeleteBackup(c *gin.Context) {
 	// Confirm the Backup exists first so the API returns 404 (not 500)
 	// when the user references something gone.
 	backup := &velerov1.Backup{}
-	if err := cl.Get(context.Background(), client.ObjectKey{Name: name, Namespace: "velero"}, backup); err != nil {
+	if err := cl.Get(context.Background(), client.ObjectKey{Name: name, Namespace: velerons.Namespace()}, backup); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
@@ -494,7 +495,7 @@ func DeleteBackup(c *gin.Context) {
 	dbr := &velerov1.DeleteBackupRequest{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      dbrName,
-			Namespace: "velero",
+			Namespace: velerons.Namespace(),
 			Labels: map[string]string{
 				"velero.io/backup-name": name,
 				"supkube.io/managed-by": "supkube",
@@ -550,7 +551,7 @@ func ForceDeleteBackup(c *gin.Context) {
 		return
 	}
 	backup := &velerov1.Backup{}
-	if err := cl.Get(context.Background(), client.ObjectKey{Name: name, Namespace: "velero"}, backup); err != nil {
+	if err := cl.Get(context.Background(), client.ObjectKey{Name: name, Namespace: velerons.Namespace()}, backup); err != nil {
 		if apierrors.IsNotFound(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "backup not found"})
 			return
@@ -624,7 +625,7 @@ func ListRestores(c *gin.Context) {
 		return
 	}
 	restoreList := &velerov1.RestoreList{}
-	namespace := c.DefaultQuery("namespace", "velero")
+	namespace := c.DefaultQuery("namespace", velerons.Namespace())
 	if err := cl.List(context.Background(), restoreList, client.InNamespace(namespace)); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -744,7 +745,7 @@ func CreateRestore(c *gin.Context) {
 	restore := &velerov1.Restore{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      req.Name,
-			Namespace: "velero",
+			Namespace: velerons.Namespace(),
 			Labels: map[string]string{
 				"supkube.io/managed-by": "supkube",
 			},
@@ -884,7 +885,7 @@ func GetRestore(c *gin.Context) {
 		return
 	}
 	restore := &velerov1.Restore{}
-	if err := cl.Get(context.Background(), client.ObjectKey{Name: name, Namespace: "velero"}, restore); err != nil {
+	if err := cl.Get(context.Background(), client.ObjectKey{Name: name, Namespace: velerons.Namespace()}, restore); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
@@ -900,7 +901,7 @@ func DeleteRestore(c *gin.Context) {
 		return
 	}
 	restore := &velerov1.Restore{}
-	if err := cl.Get(context.Background(), client.ObjectKey{Name: name, Namespace: "velero"}, restore); err != nil {
+	if err := cl.Get(context.Background(), client.ObjectKey{Name: name, Namespace: velerons.Namespace()}, restore); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
@@ -948,7 +949,7 @@ func GetRestoreResults(c *gin.Context) {
 		return
 	}
 	restore := &velerov1.Restore{}
-	if err := cl.Get(context.Background(), client.ObjectKey{Name: name, Namespace: "velero"}, restore); err != nil {
+	if err := cl.Get(context.Background(), client.ObjectKey{Name: name, Namespace: velerons.Namespace()}, restore); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
@@ -1015,7 +1016,7 @@ func ListSchedules(c *gin.Context) {
 		return
 	}
 	scheduleList := &velerov1.ScheduleList{}
-	namespace := c.DefaultQuery("namespace", "velero")
+	namespace := c.DefaultQuery("namespace", velerons.Namespace())
 	if err := cl.List(context.Background(), scheduleList, client.InNamespace(namespace)); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -1265,7 +1266,7 @@ func ListStorageLocations(c *gin.Context) {
 		return
 	}
 	bslList := &velerov1.BackupStorageLocationList{}
-	namespace := c.DefaultQuery("namespace", "velero")
+	namespace := c.DefaultQuery("namespace", velerons.Namespace())
 	if err := cl.List(context.Background(), bslList, client.InNamespace(namespace)); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -1293,7 +1294,7 @@ func CreateStorageLocation(c *gin.Context) {
 	bsl := &velerov1.BackupStorageLocation{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      req.Name,
-			Namespace: "velero",
+			Namespace: velerons.Namespace(),
 		},
 		Spec: velerov1.BackupStorageLocationSpec{
 			Provider: req.Provider,

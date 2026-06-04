@@ -43,6 +43,7 @@ import (
 
 	"github.com/supkube/supkube-backend/internal/auth"
 	"github.com/supkube/supkube-backend/internal/k8s"
+	"github.com/supkube/supkube-backend/internal/velerons"
 )
 
 // Label keys used for manual snapshots. Kept here next to the endpoint
@@ -170,7 +171,7 @@ func CreateManualSnapshot(c *gin.Context) {
 	backup := &velerov1.Backup{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      backupName,
-			Namespace: "velero",
+			Namespace: velerons.Namespace(),
 			Labels: map[string]string{
 				LabelManualSnapshot:  "true",
 				LabelSourceNamespace: namespace,

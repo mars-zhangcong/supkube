@@ -92,3 +92,16 @@ whenever dex is enabled, so this never emits a bare "/dex".
 {{- printf "%s/dex" (trimSuffix "/" .Values.auth.dex.publicURL) -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+supkube.veleroNamespace — single source of truth for the namespace Velero
+(server, BSLs, cloud-credentials Secret, Backup/Restore CRs) lives in, shared
+by configmap.yaml (→ backend VELERO_NAMESPACE) and local-store.yaml (local
+BSL + its credentials Secret). An explicit config.veleroNamespace wins; else
+it auto-resolves to the release namespace when Velero is bundled (the subchart
+ignores namespaceOverride and lands in .Release.Namespace), or "velero" for an
+external Velero install.
+*/}}
+{{- define "supkube.veleroNamespace" -}}
+{{- .Values.config.veleroNamespace | default (ternary .Release.Namespace "velero" .Values.velero.enabled) -}}
+{{- end -}}

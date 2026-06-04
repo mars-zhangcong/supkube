@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/supkube/supkube-backend/internal/velerons"
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,7 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const veleroNamespace = "velero"
+var veleroNamespace = velerons.Namespace()
 
 // veleroBackupLister 通过查 Velero 的 BackupList (按 spec.storageLocation
 // 过滤) 来发现某 BSL 上的 backup. Velero 自己会 periodic sync BSL → CR,

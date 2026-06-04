@@ -49,6 +49,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/supkube/supkube-backend/internal/k8s"
+	"github.com/supkube/supkube-backend/internal/velerons"
 )
 
 // LogLine is one rendered line as the UI consumes it. The frontend
@@ -107,8 +108,8 @@ var componentRegistry = map[string]componentSpec{
 	// Velero ships pods with `deploy=velero` selector (per the upstream
 	// velero helm chart's Deployment.spec.selector.matchLabels). node-agent
 	// is a DaemonSet, labelled `name=node-agent`. Both verified.
-	"velero":     {Namespace: "velero", Selector: "deploy=velero", Display: "Velero Server"},
-	"node-agent": {Namespace: "velero", Selector: "name=node-agent", Display: "Velero node-agent (DaemonSet)"},
+	"velero":     {Namespace: velerons.Namespace(), Selector: "deploy=velero", Display: "Velero Server"},
+	"node-agent": {Namespace: velerons.Namespace(), Selector: "name=node-agent", Display: "Velero node-agent (DaemonSet)"},
 }
 
 // GetLogComponents returns the list of components for the UI dropdown.

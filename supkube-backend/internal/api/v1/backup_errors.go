@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/supkube/supkube-backend/internal/k8s"
+	"github.com/supkube/supkube-backend/internal/velerons"
 )
 
 // BackupErrorEntry is one error / failure message attributable to a
@@ -92,7 +93,7 @@ func GetBackupErrors(c *gin.Context) {
 	// Confirm the Backup exists — otherwise return 404 so the UI shows
 	// "Backup not found" instead of "no errors".
 	bk := &velerov1.Backup{}
-	if err := cl.Get(context.Background(), client.ObjectKey{Name: name, Namespace: "velero"}, bk); err != nil {
+	if err := cl.Get(context.Background(), client.ObjectKey{Name: name, Namespace: velerons.Namespace()}, bk); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
@@ -105,7 +106,7 @@ func GetBackupErrors(c *gin.Context) {
 	// user sees "this DataUpload failed" with no detail rather than
 	// nothing.
 	duList := &velerov2alpha1.DataUploadList{}
-	if err := cl.List(context.Background(), duList, client.InNamespace("velero"), client.MatchingLabels{"velero.io/backup-name": name}); err == nil {
+	if err := cl.List(context.Background(), duList, client.InNamespace(velerons.Namespace()), client.MatchingLabels{"velero.io/backup-name": name}); err == nil {
 		for _, du := range duList.Items {
 			if du.Status.Phase != velerov2alpha1.DataUploadPhaseFailed && du.Status.Phase != velerov2alpha1.DataUploadPhaseCanceled {
 				continue
@@ -131,7 +132,7 @@ func GetBackupErrors(c *gin.Context) {
 
 	// ── PodVolumeBackup errors (Filesystem backup path) ───────────
 	pvbList := &velerov1.PodVolumeBackupList{}
-	if err := cl.List(context.Background(), pvbList, client.InNamespace("velero"), client.MatchingLabels{"velero.io/backup-name": name}); err == nil {
+	if err := cl.List(context.Background(), pvbList, client.InNamespace(velerons.Namespace()), client.MatchingLabels{"velero.io/backup-name": name}); err == nil {
 		for _, pvb := range pvbList.Items {
 			if pvb.Status.Phase != velerov1.PodVolumeBackupPhaseFailed {
 				continue

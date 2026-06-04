@@ -15,6 +15,8 @@
 ## [Unreleased]
 
 ### Docs
+- **D-WAIT 单源根治（2026-06-04，SCM）**：根治"D-WAIT 决策待办 + 取号"跨分支碎裂。① `等待决策.md` 瘦身为 **INDEX**（一张表：号/标题/状态/owner/日期/链接），每条 D-WAIT 拆成 `等待决策/D-WAIT-NNN-*.md` **独立文件**（一事一文件，并行 agent 永不撞）；② **D-WAIT 登记进 LEDGER §一速查表**成正式取号系列（下个空号 D-WAIT-013）+ §八 Rule E 专属纪律；③ FDE（PR#8）4 条决策 + K3S A 路线因撞号/无号，按 Rule G **forward-only 重编为 D-WAIT-008~012**（旧号不抢，映射留痕在 INDEX；engineer-testing/ 原件按边界未改）；④ canonical 无号项（Vitest / ADR-040 色号）补号 D-WAIT-006/007；撞号的 D-WAIT-004/005 ORIG 合并入各自文件作 audit；⑤ ENGINEERING 新增 **Rule I 并行 Agent 写共享文档纪律**（一事一文件 / LEDGER 集中预分配 / git worktree 隔离 / 冲突先解不 fork）。全部历史/audit 保留。
+- **D-WAIT 收尾（2026-06-04，SCM）**：① ENGINEERING **Rule I 子条 3 升级为显式默认**（每支并行部队默认一棵 worktree + 协调者开工前物理校验 mtime/lock/进程cwd，不靠"清场确认"）；② 新建 **MERGE-PLAYBOOK.md**（PR#10 dwait / prd-007 / prd-010 / prd-011 / FDE PR#8 五分支并入 main 的确切顺序 + 冲突解法，**plan-only 不执行 merge**；铁律：`等待决策.md` 冲突一律取 INDEX 侧）；③ `等待决策.md` INDEX 头加「如何新增一条 D-WAIT」3 步 SOP（后续 COPY-001/002 等待决项按新结构 + LEDGER 取号 D-WAIT-013 起补入）。
 - 建立 **术语表.md**（Glossary 单一来源）：收口 Resilience Score vs Posture、Layer 1-5 vs L1/L2、Snapshot/Export/Copy 三组高发术语撞车。
 - 建立 **CHANGELOG.md**（本文件，补 D-21/task P2-6 欠债）、**ENGINEERING.md**（工程手册，落地 Rule A/B/C + verify-before-ship）。
 - 建立 **API-REFERENCE.md**（13 组 ~90 端点目录 + 认证三模式 + RBAC 三角色 + ADR-035 错误信封，派生自 `rbac.go`）+ **openapi.yaml**（OpenAPI 3.1，cross-cutting 契约 + 核心资源种子）→ 部分填平 ENGINEERING.md §6「API 无契约」债。

@@ -12,8 +12,8 @@
 | Series | 已占最高号 | **下个空号** | 用途 | 详表 |
 |---|---|---|---|---|
 | **PRD** | PRD-015 | **PRD-016** | Product Requirements Document（影响 UX/数据模型的功能） | §二 |
-| **ADR** | ADR-046 | **ADR-047** | Architecture Decision Record（架构级决策，含让号占位） | §三 |
-| **TC-REG** | TC-REG-011 | **TC-REG-012** | Regression test case（bug fix 强制回归） | §四 |
+| **ADR** | ADR-047 | **ADR-048** | Architecture Decision Record（架构级决策，含让号占位） | §三 |
+| **TC-REG** | TC-REG-012 | **TC-REG-013** | Regression test case（bug fix 强制回归） | §四 |
 | **TC-POL** | TC-POL-008 | **TC-POL-009** | Policy 测试用例 | §四 |
 | **TC-APP** | TC-APP-003 | **TC-APP-004** | Applications 测试用例 | §四 |
 | **TC-IMP** | TC-IMP-004 | **TC-IMP-005** | Import Policy 测试用例 | §四 |
@@ -23,6 +23,7 @@
 | **TC-MC** | TC-MC-004 | **TC-MC-005** | Multi-Cluster 测试用例 | §四 |
 | **D**（战略/产品决策） | D-35 | **D-36** | dashboard `DECISIONS` 数组里的当日决策 | §五 |
 | **C**（客户痛点） | C-012 | **C-013** | dashboard `CUSTOMER_PAIN` 数组 | §六 |
+| **D-WAIT**（决策待办） | D-WAIT-012 | **D-WAIT-013** | 等待 Mars 拍板才能继续的事项（Auto 模式阻塞项；一事一文件，并行 agent 永不撞） | [等待决策.md](./等待决策.md) (INDEX) + `等待决策/` |
 
 > **如果你的 series 不在上面**：在 §七"新 series 注册"加一行（e.g. 新增 TC-SEC 安全扫描 series），然后回到本表加一行下个空号。
 
@@ -73,6 +74,7 @@
 | ADR-044 | **快速调试模式 (Fast Debug Mode)：本地秒级内循环 `hack/dev-local.sh` + feature 分支推送节奏**（与 ADR-042 云端部署通道互补；触发词"进入快速调试模式"→ Vite HMR + go run / port-forward 二模式，绕过 docker build/ACR/AKS；调试期每 2h(改动大 1h) push 到 feature 分支，仅触发 CI 校验不触发部署） | Mars 决策 / Claude 起草 / 2026-06-02 | **草稿** ✅（架构设计.md §9 正文 7 段已写: Context/Decision/Consequences/Alternatives/Coverage/Verification/References；hack/dev-local.sh + FAST-DEBUG-MODE.md + README 指引已落） | 架构设计.md §9 ADR-044 / hack/dev-local.sh / FAST-DEBUG-MODE.md |
 | ADR-045 | **ApprovalPolicy/ApprovalRequest CRD 设计 + Dex MFA 集成模式** ← 让号自 ADR-044（PRD-013 原非正式预占 ADR-044，与快速调试模式 ADR-044 撞号，按 Rule G §C 让号至下个空号） | PRD-013 让号 / 2026-06-02 | **占号**（待 PRD-013 ship 时写 架构设计.md §9 正文） | 架构设计.md §9（待写）/ PRD.md `#prd-013` |
 | ADR-046 | **AI 容灾决策两层体系（标准基本盘 A + 客户决策面 B）**：A=评分+盲区检测权威（永不被覆盖，跨客户可比）；B=DRP/CRP 执行权威（AI 枚举待决策→暴露差异→客户终审签字→决策历史库→唯一执行准则）。"从权 B>A" **仅指执行层、非评分层**（两层正交，故无跨客户不可横比问题）。闭环=标准兜底/AI引导/客户终审/系统落地/全程可追溯；非自治 Rule F 不变。完整能力（决策库+盲区检测+DRP/CRP编排+风险框架工具箱）= Premium 独占，超 PRD-011 MVP → 建议立 PRD-015 | Mars 决策 / Claude 起草 / 2026-06-03 | **草稿**（机制已写 PRD-011 §4.4；架构设计.md §9 正文待写）| PRD.md `#prd-011` §4.4 / 架构设计.md §9（待写）|
+| ADR-047 | **禁止幽灵配置（No Phantom Config）**：配置值必须有断了会大声失败的消费链路（跨层绑定有端到端测试 / 传子系统的 key 对照真实 schema / 每个 key 指得出消费者行）。机械执行=CI `Phantom Config Guard` + Helm 接缝测试 + `internal/velerons`/`supkube.veleroNamespace` 单一真源。教训来源=2026-06-04 Velero ns 事故（`namespaceOverride` 死值 + 后端 80+ 硬编码 ns）。配套 ENGINEERING.md Rule J + 座右铭 | Mars 决策 / Claude 起草 / 2026-06-04 | **草稿** ✅（ENGINEERING.md Rule J 已写 + CI/脚本已落；架构设计.md §9 正文待补）| ENGINEERING.md Rule J / 架构设计.md §9（待写）/ hack/check-phantom-config.sh |
 
 ---
 
@@ -85,6 +87,7 @@
 |---|---|---|
 | TC-REG-001 ~ 010 | 历史回归用例（见 测试用例.md） | — |
 | TC-REG-011 | backup-errors-visibility 回归测试 | 2026-05-?? |
+| TC-REG-012 | velero-ns 接缝一致性回归（后端读 ns == Velero 运行 ns == BSL ns） | 2026-06-04 |
 
 ### TC-POL (Policy)
 | 号 | 主题 | 时间 |
@@ -234,6 +237,22 @@
 2. **不改速查表的"下个空号"**（避免后人撞号；让号是 forward-only）
 3. 这意味着 LEDGER 历史会出现"跳号"——这是正常的，号是 immutable 标识
 ```
+
+### E. D-WAIT 系列特别说明（2026-06-04 单源根治立）
+
+`D-WAIT-NNN` = Auto 模式期间**等 Mars 拍板才能继续**的阻塞项，是 LEDGER 正式取号系列（§一速查表）。它的取号、并发、让号纪律与 PRD/ADR 完全一致，外加 3 条专属约束（教训来源：2026-06-04 跨分支碎裂 + 撞两个 004/005 + FDE fork）：
+
+```
+1. 一事一文件：详情写 等待决策/D-WAIT-NNN-<slug>.md，禁往单一大文件 append（append = 并行写必撞）
+2. 取号经 LEDGER：新建 D-WAIT 先来 §一速查表取下个空号；并行场景由 main agent 集中预分配，
+   把号写进各 agent prompt（"你的号 = D-WAIT-013，不要自己取号"）——见 ENGINEERING Rule G / Rule I
+3. 让号 forward-only：撞号让到下个空号、旧号不抢、不改已闭环条目既有号；
+   ORIG / 历史提问保留作 audit（不删历史，但各有唯一身份行）
+```
+
+- **INDEX**：`等待决策.md` 是瘦 INDEX（一张表：号/标题/状态 open|closed|audit/owner/日期/链接），不放详情。
+- **不进 dashboard**：D-WAIT **不**进 `dashboard/data.js`（与战略决策 D-XX 区分）——`gen-data.mjs` 不校验 D-WAIT，故 D-WAIT 变更不引漂移；但每次提交仍跑 gen-data 守 PRD/ADR。
+- **历史**：已撞号的 D-WAIT-004/005 ORIG（同一逻辑决策的提问+结论）合并入各自文件作 audit 段；FDE 自占的 D-WAIT-004~007 + K3S A 路线已 forward-only 重编为 008~012（映射见 INDEX）。
 
 ---
 
