@@ -31,6 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/supkube/supkube-backend/internal/k8s"
+	"github.com/supkube/supkube-backend/internal/velerons"
 )
 
 const perClusterProbeTimeout = 5 * time.Second
@@ -218,13 +219,13 @@ func probeClusterForSummary(ctx context.Context, base ClusterDTO) ClusterSummary
 	// pairs here — the MCM page is a count summary, not an authoritative
 	// policy list. (The Policies page already de-dups for its own table.)
 	scheduleList := &velerov1.ScheduleList{}
-	if err := cli.List(probeCtx, scheduleList, client.InNamespace("velero")); err == nil {
+	if err := cli.List(probeCtx, scheduleList, client.InNamespace(velerons.Namespace())); err == nil {
 		out.PolicyCount = len(scheduleList.Items)
 	}
 
 	// RPCount + LastBackupAt: Velero Backup CRs.
 	backupList := &velerov1.BackupList{}
-	if err := cli.List(probeCtx, backupList, client.InNamespace("velero")); err == nil {
+	if err := cli.List(probeCtx, backupList, client.InNamespace(velerons.Namespace())); err == nil {
 		out.RPCount = len(backupList.Items)
 		var latest time.Time
 		for i := range backupList.Items {

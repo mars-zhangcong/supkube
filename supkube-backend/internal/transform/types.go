@@ -23,6 +23,8 @@
 //     that the startup migration splits into the two-layer shape).
 package transform
 
+import "github.com/supkube/supkube-backend/internal/velerons"
+
 const (
 	// SupKubeNamespace is the canonical home for Transforms,
 	// TransformSets, and derived (compiled) ConfigMaps.
@@ -89,7 +91,13 @@ const (
 	// pre-v1.3 single-layer CMs *used to* live before the migration ran).
 	// Concretely: LegacyNamespace == VeleroNamespace == "velero" today,
 	// but they serve two distinct roles, hence two names.
-	VeleroNamespace = "velero"
+)
+
+// VeleroNamespace is where DERIVED CMs (compile results) land — the live
+// Velero namespace, resolved from VELERO_NAMESPACE.
+var VeleroNamespace = velerons.Namespace()
+
+const (
 
 	// KindCompiledRM marks a derived (compiled) ConfigMap so the GC
 	// loop can list-and-clean them without confusing them with atomic

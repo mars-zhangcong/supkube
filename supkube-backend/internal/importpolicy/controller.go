@@ -30,6 +30,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/supkube/supkube-backend/internal/velerons"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -48,10 +49,13 @@ const (
 	// minContinuousInterval 是允许的最小间隔. 低于此值, handler 拒绝 +
 	// controller 兜底 clamp (防御性, 万一 CRD validation 漏过).
 	minContinuousInterval = 30 * time.Second
+)
 
-	// defaultTargetVeleroNamespace 是 spec.targetVeleroNamespace 缺省值.
-	defaultTargetVeleroNamespace = "velero"
+// defaultTargetVeleroNamespace 是 spec.targetVeleroNamespace 缺省值,
+// 来自 VELERO_NAMESPACE (单 ns 收口后与 Velero 实际安装 ns 一致).
+var defaultTargetVeleroNamespace = velerons.Namespace()
 
+const (
 	// Labels 写到导入的 Velero Backup CR 上.
 	LabelImported          = "supkube.io/imported"
 	LabelSourceCluster     = "supkube.io/source-cluster"

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/supkube/supkube-backend/internal/velerons"
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -91,7 +92,7 @@ func GetDashboardSummary(c *gin.Context) {
 	}
 
 	backupList := &velerov1.BackupList{}
-	if err := runtimeClient.List(context.Background(), backupList, client.InNamespace("velero")); err != nil {
+	if err := runtimeClient.List(context.Background(), backupList, client.InNamespace(velerons.Namespace())); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -133,7 +134,7 @@ func GetDashboardSummary(c *gin.Context) {
 
 	// Storage locations count
 	bslList := &velerov1.BackupStorageLocationList{}
-	if err := runtimeClient.List(context.Background(), bslList, client.InNamespace("velero")); err == nil {
+	if err := runtimeClient.List(context.Background(), bslList, client.InNamespace(velerons.Namespace())); err == nil {
 		summary.StorageLocations = len(bslList.Items)
 	}
 

@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/supkube/supkube-backend/internal/velerons"
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -147,7 +148,7 @@ func GetTopology(c *gin.Context) {
 	// 现在改用 k8sCli.Nodes().List() 直接探测 control-plane node 名,
 	// 跟 buildThisClusterDTO 共用同一套优先级 — 不再需要 dynCli。
 	ctx := context.Background()
-	veleroNS := "velero"
+	veleroNS := velerons.Namespace()
 	supkubeNS := "supkube"
 
 	resp := TopologyResponse{

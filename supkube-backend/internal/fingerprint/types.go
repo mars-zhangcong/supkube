@@ -46,17 +46,22 @@ import (
 	"context"
 	"errors"
 	"time"
+
+	"github.com/supkube/supkube-backend/internal/velerons"
 )
 
 // Schema constants — keep in lockstep with the shared-contract block in
 // the PRD. Changing any of these is a breaking change for every existing
 // fingerprint on every BSL; bump the Version field if it ever happens.
 const (
-	Version         = "v1"
-	Algo            = "HMAC-SHA256"
-	FilenameInBSL   = ".supkube-fingerprint.json"
-	DefaultVeleroNS = "velero"
+	Version       = "v1"
+	Algo          = "HMAC-SHA256"
+	FilenameInBSL = ".supkube-fingerprint.json"
 )
+
+// DefaultVeleroNS is the namespace Velero (and its Backup CRs) live in,
+// resolved once from VELERO_NAMESPACE (falls back to "velero").
+var DefaultVeleroNS = velerons.Namespace()
 
 // FingerprintMode controls how strictly the validator enforces fingerprint
 // presence/validity. The ImportPolicy CR carries the mode the user picked.

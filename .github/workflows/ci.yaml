@@ -74,6 +74,19 @@ jobs:
       - name: Check dashboard data drift
         run: node dashboard/gen-data.mjs
 
+  phantom-config:
+    name: Phantom Config Guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 座右铭（ENGINEERING.md Rule I）：治理办法没用，有用的是永远不给错误发生
+      # 的条件。这道墙把"幽灵配置回潮"变成红板——后端绕过 internal/velerons 单
+      # 一真源重新硬编码 "velero" ns，或 values 重新出现死值 namespaceOverride，
+      # 都直接 fail。纯 grep，无需任何 setup。背景见本次 Velero ns 事故 RCA。
+      - name: No phantom config (velero-ns single source of truth)
+        run: bash hack/check-phantom-config.sh
+
   # 旧的 ghcr `docker` push job 已移除：真实发布仓库是 ACR（supkube.azurecr.io），
   # 镜像构建+推送由 .github/workflows/cd.yaml 在打 tag 时接管；PR 阶段的镜像
   # 构建冒烟 + 安全扫描由下面的 image-scan job 覆盖。
@@ -165,3 +178,9 @@ jobs:
 
       - name: Lint chart
         run: helm lint ./supkube-helm/supkube --set eula.accept=true
+
+      # 接缝契约：渲染后断言 后端读的 ns == Velero 运行 ns == BSL 所在 ns。
+      # 三端劈叉（本次事故根因：后端读 velero、Velero 在 supkube）任何单点测试
+      # 都不会红——这条专抓接缝。deps 已在上一步 build，直接渲染态跑。
+      - name: Velero namespace seam (backend == velero == BSL)
+        run: bash hack/test-velero-ns-seam.sh

@@ -21,6 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/supkube/supkube-backend/internal/k8s"
+	"github.com/supkube/supkube-backend/internal/velerons"
 )
 
 // VeleroResultSection mirrors Velero's internal `results.Result` struct. Each
@@ -69,7 +70,7 @@ func fetchRestoreDetailedResults(ctx context.Context, restoreName string) (*Vele
 	dr := &velerov1.DownloadRequest{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      drName,
-			Namespace: "velero",
+			Namespace: velerons.Namespace(),
 			Labels: map[string]string{
 				"supkube.io/managed-by": "supkube",
 			},
@@ -88,7 +89,7 @@ func fetchRestoreDetailedResults(ctx context.Context, restoreName string) (*Vele
 	// expire it after ~10 minutes.
 	defer func() {
 		_ = cl.Delete(context.Background(), &velerov1.DownloadRequest{
-			ObjectMeta: metav1.ObjectMeta{Name: drName, Namespace: "velero"},
+			ObjectMeta: metav1.ObjectMeta{Name: drName, Namespace: velerons.Namespace()},
 		})
 	}()
 
@@ -97,7 +98,7 @@ func fetchRestoreDetailedResults(ctx context.Context, restoreName string) (*Vele
 	var downloadURL string
 	for time.Now().Before(deadline) {
 		cur := &velerov1.DownloadRequest{}
-		if err := cl.Get(ctx, client.ObjectKey{Name: drName, Namespace: "velero"}, cur); err != nil {
+		if err := cl.Get(ctx, client.ObjectKey{Name: drName, Namespace: velerons.Namespace()}, cur); err != nil {
 			if apierrors.IsNotFound(err) {
 				// shouldn't happen this fast — wait & retry
 				time.Sleep(500 * time.Millisecond)
