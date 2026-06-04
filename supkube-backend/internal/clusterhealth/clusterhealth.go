@@ -34,6 +34,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/supkube/supkube-backend/internal/velerons"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -179,7 +180,7 @@ func probe(ctx context.Context, cli kubernetes.Interface) statusUpdate {
 		upd.NodeCount = len(nl.Items)
 	}
 
-	if d, err := cli.AppsV1().Deployments("velero").Get(ctx, "velero", metav1.GetOptions{}); err == nil {
+	if d, err := cli.AppsV1().Deployments(velerons.Namespace()).Get(ctx, "velero", metav1.GetOptions{}); err == nil {
 		upd.VeleroInstalled = true
 		if len(d.Spec.Template.Spec.Containers) > 0 {
 			img := d.Spec.Template.Spec.Containers[0].Image

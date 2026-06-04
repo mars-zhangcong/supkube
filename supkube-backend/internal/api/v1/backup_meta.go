@@ -42,6 +42,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/supkube/supkube-backend/internal/k8s"
+	"github.com/supkube/supkube-backend/internal/velerons"
 )
 
 // SupKubeBackupMeta is the "supkube" sidecar attached to each enriched
@@ -219,7 +220,7 @@ func collectVolumeMetadata(ctx context.Context, cl client.Client, backupName str
 	// CSI-compatible storage class are snapshotted; others fall back
 	// to fs backup).
 	pvbList := &velerov1.PodVolumeBackupList{}
-	if err := cl.List(ctx, pvbList, client.InNamespace("velero"), client.MatchingLabels{"velero.io/backup-name": backupName}); err == nil {
+	if err := cl.List(ctx, pvbList, client.InNamespace(velerons.Namespace()), client.MatchingLabels{"velero.io/backup-name": backupName}); err == nil {
 		for _, pvb := range pvbList.Items {
 			// PodVolumeBackup.Status.Progress has TotalBytes — bytes
 			// actually written, which is what we WANT here. Falls
@@ -239,7 +240,7 @@ func collectVolumeMetadata(ctx context.Context, cl client.Client, backupName str
 	// processed — showing "0 bytes, 2 volumes" tells the user
 	// "you protected 2 volumes; one happened to be empty".
 	duList := &velerov2alpha1.DataUploadList{}
-	if err := cl.List(ctx, duList, client.InNamespace("velero"), client.MatchingLabels{"velero.io/backup-name": backupName}); err == nil {
+	if err := cl.List(ctx, duList, client.InNamespace(velerons.Namespace()), client.MatchingLabels{"velero.io/backup-name": backupName}); err == nil {
 		for _, du := range duList.Items {
 			volumeBytes += du.Status.Progress.TotalBytes
 			volumeCount++
@@ -460,7 +461,7 @@ func collectVolumeMetadataBatch(ctx context.Context, cl client.Client) map[strin
 
 	// Filesystem backup — namespaced; one List in velero ns.
 	pvbList := &velerov1.PodVolumeBackupList{}
-	if err := cl.List(ctx, pvbList, client.InNamespace("velero")); err == nil {
+	if err := cl.List(ctx, pvbList, client.InNamespace(velerons.Namespace())); err == nil {
 		for _, pvb := range pvbList.Items {
 			name, ok := pvb.Labels["velero.io/backup-name"]
 			if !ok || name == "" {
@@ -472,7 +473,7 @@ func collectVolumeMetadataBatch(ctx context.Context, cl client.Client) map[strin
 
 	// Data Mover (v2alpha1) — namespaced; one List in velero ns.
 	duList := &velerov2alpha1.DataUploadList{}
-	if err := cl.List(ctx, duList, client.InNamespace("velero")); err == nil {
+	if err := cl.List(ctx, duList, client.InNamespace(velerons.Namespace())); err == nil {
 		for _, du := range duList.Items {
 			name, ok := du.Labels["velero.io/backup-name"]
 			if !ok || name == "" {

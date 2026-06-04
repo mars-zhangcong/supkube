@@ -44,6 +44,7 @@ import (
 
 	"github.com/supkube/supkube-backend/internal/auth"
 	"github.com/supkube/supkube-backend/internal/k8s"
+	"github.com/supkube/supkube-backend/internal/velerons"
 )
 
 // ─── Conflict severity ──────────────────────────────────────────────────
@@ -187,7 +188,7 @@ func PreflightRestore(c *gin.Context) {
 	}
 
 	backup := &velerov1.Backup{}
-	if err := rcl.Get(context.Background(), client.ObjectKey{Name: req.BackupName, Namespace: "velero"}, backup); err != nil {
+	if err := rcl.Get(context.Background(), client.ObjectKey{Name: req.BackupName, Namespace: velerons.Namespace()}, backup); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}

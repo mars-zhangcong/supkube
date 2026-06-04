@@ -201,7 +201,20 @@ ingress:
         - path: /
           pathType: Prefix
 config:
-  veleroNamespace: velero
+  # Namespace where Velero (server + node-agent + BackupStorageLocation +
+  # cloud-credentials Secret + Backup/Restore CRs) lives. Surfaced to the
+  # backend as the VELERO_NAMESPACE env so it reads/writes BSLs in the SAME
+  # place Velero actually runs — historically these drifted apart (Velero in
+  # the release ns, backend hardcoded to "velero") and every BSL showed up
+  # Unknown.
+  #
+  # Leave EMPTY (recommended) to auto-resolve (see configmap.yaml):
+  #   • bundled Velero (velero.enabled=true)  → the release namespace, because
+  #     the velero subchart lands there (it ignores namespaceOverride). So
+  #     `helm install -n supkube` keeps SupKube + Velero + BSL all in supkube.
+  #   • external Velero (velero.enabled=false) → defaults to "velero".
+  # Set explicitly only if your external Velero lives somewhere non-standard.
+  veleroNamespace: ""
   logLevel: info
 # ===========================================================================
 # v0.8.13 HC1: Velero subchart (bundled)
@@ -221,13 +234,14 @@ config:
 # so customers get our supported feature matrix out of the box.
 velero:
   enabled: true
-  # Namespace install target. The Velero subchart respects this in its
-  # NOTES.txt but the actual namespace is the Helm release's. We keep
-  # SupKube and Velero in separate namespaces (supkube + velero) for
-  # operational clarity — `kubectl logs -n velero` follows Velero docs.
-  # This requires `helm install --namespace velero --create-namespace`
-  # at the top level when bundled. Documented in USER_MANUAL §1.
-  namespaceOverride: velero
+  # ⚠️ DO NOT add `namespaceOverride` here. The velero subchart (chart 12.0.1)
+  # IGNORES it — every resource is templated with `namespace: .Release.Namespace`
+  # — so a `namespaceOverride: velero` silently did NOTHING: Velero landed in
+  # the release ns (supkube) while the backend hunted BSLs in a separate empty
+  # `velero` ns, leaving every storage location stuck at Unknown. We now keep
+  # SupKube + Velero in ONE namespace (the release ns) and the backend follows
+  # it via config.veleroNamespace (auto-resolved). `kubectl -n supkube logs
+  # deploy/velero` to read Velero's logs.
   # CSI snapshot feature flag — required for the L1/L2 policypair model.
   # Without this Velero falls back to filesystem-only backup, which works
   # but is slower and misses CSI-aware semantics.

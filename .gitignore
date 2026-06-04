@@ -25,6 +25,12 @@ dist/
 engineer-testing/
 *.kubeconfig
 
+# CD environment source-of-truth — kubeconfigs + full deploy commands/params
+# per cluster. Local only (contains kubeconfigs with client-key-data). This is
+# the pre-CMDB single place to look up "how to deploy to cluster X"; when a CMDB
+# exists, this folder is replaced by a CMDB lookup. NEVER commit (creds inside).
+CD/
+
 # Helm subcharts downloaded by `helm dependency update`. Chart.lock
 # pins versions so reproducibility is preserved without committing the
 # .tgz payloads (which can be 10s of MB each). hack/publish-release.sh

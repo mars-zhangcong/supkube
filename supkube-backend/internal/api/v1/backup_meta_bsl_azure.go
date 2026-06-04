@@ -30,6 +30,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	azservice "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	"github.com/supkube/supkube-backend/internal/velerons"
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -141,13 +142,13 @@ func loadAzureSharedKey(ctx context.Context, cl client.Client, bsl *velerov1.Bac
 		// path. The default Secret name for an Azure-installed Velero
 		// is also `cloud-credentials`.
 		secret := &corev1.Secret{}
-		if err := cl.Get(ctx, client.ObjectKey{Name: "cloud-credentials", Namespace: "velero"}, secret); err != nil {
+		if err := cl.Get(ctx, client.ObjectKey{Name: "cloud-credentials", Namespace: velerons.Namespace()}, secret); err != nil {
 			return "", fmt.Errorf("no credential on BSL and cloud-credentials missing: %w", err)
 		}
 		return parseAzureSecretForKey(secret.Data["cloud"]), nil
 	}
 	secret := &corev1.Secret{}
-	if err := cl.Get(ctx, client.ObjectKey{Name: cred.Name, Namespace: "velero"}, secret); err != nil {
+	if err := cl.Get(ctx, client.ObjectKey{Name: cred.Name, Namespace: velerons.Namespace()}, secret); err != nil {
 		return "", fmt.Errorf("get secret %s: %w", cred.Name, err)
 	}
 	raw, ok := secret.Data[cred.Key]

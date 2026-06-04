@@ -17,6 +17,7 @@ import (
 	sigyaml "sigs.k8s.io/yaml"
 
 	"github.com/supkube/supkube-backend/internal/k8s"
+	"github.com/supkube/supkube-backend/internal/velerons"
 )
 
 // rfc1123SubdomainPattern matches the K8s DNS-1123 subdomain spec, which is
@@ -55,7 +56,7 @@ func GetBackupResources(c *gin.Context) {
 
 	// First verify the backup exists
 	backup := &velerov1.Backup{}
-	if err := cl.Get(context.Background(), client.ObjectKey{Name: name, Namespace: "velero"}, backup); err != nil {
+	if err := cl.Get(context.Background(), client.ObjectKey{Name: name, Namespace: velerons.Namespace()}, backup); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
@@ -136,7 +137,7 @@ func ListBackupArtifacts(c *gin.Context) {
 		return
 	}
 	backup := &velerov1.Backup{}
-	if err := rcl.Get(context.Background(), client.ObjectKey{Name: name, Namespace: "velero"}, backup); err != nil {
+	if err := rcl.Get(context.Background(), client.ObjectKey{Name: name, Namespace: velerons.Namespace()}, backup); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
@@ -295,7 +296,7 @@ func VerifyStorageLocation(c *gin.Context) {
 
 	// Get the BSL
 	bsl := &velerov1.BackupStorageLocation{}
-	if err := cl.Get(context.Background(), client.ObjectKey{Name: name, Namespace: "velero"}, bsl); err != nil {
+	if err := cl.Get(context.Background(), client.ObjectKey{Name: name, Namespace: velerons.Namespace()}, bsl); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
@@ -468,7 +469,7 @@ func CreateStorageLocationWithSecret(c *gin.Context) {
 		secret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      secretName,
-				Namespace: "velero",
+				Namespace: velerons.Namespace(),
 				Labels: map[string]string{
 					"app.kubernetes.io/managed-by": "supkube",
 					"supkube.io/bsl-name":          req.Name,
@@ -478,7 +479,7 @@ func CreateStorageLocationWithSecret(c *gin.Context) {
 			Type: corev1.SecretTypeOpaque,
 			Data: map[string][]byte{"cloud": credentialData},
 		}
-		if _, err = k8sClient.CoreV1().Secrets("velero").Create(context.Background(), secret, metav1.CreateOptions{}); err != nil {
+		if _, err = k8sClient.CoreV1().Secrets(velerons.Namespace()).Create(context.Background(), secret, metav1.CreateOptions{}); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create credentials secret: " + err.Error()})
 			return
 		}
@@ -496,7 +497,7 @@ func CreateStorageLocationWithSecret(c *gin.Context) {
 	bsl := &velerov1.BackupStorageLocation{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      req.Name,
-			Namespace: "velero",
+			Namespace: velerons.Namespace(),
 		},
 		Spec: velerov1.BackupStorageLocationSpec{
 			Provider: req.Provider,
@@ -530,7 +531,7 @@ func GetStorageLocation(c *gin.Context) {
 		return
 	}
 	bsl := &velerov1.BackupStorageLocation{}
-	if err := cl.Get(context.Background(), client.ObjectKey{Name: name, Namespace: "velero"}, bsl); err != nil {
+	if err := cl.Get(context.Background(), client.ObjectKey{Name: name, Namespace: velerons.Namespace()}, bsl); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
@@ -556,7 +557,7 @@ func rotateBSLSecret(name string, bsl *velerov1.BackupStorageLocation, credentia
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secretName,
-			Namespace: "velero",
+			Namespace: velerons.Namespace(),
 			Labels: map[string]string{
 				"app.kubernetes.io/managed-by": "supkube",
 				"supkube.io/bsl-name":          name,
@@ -566,8 +567,8 @@ func rotateBSLSecret(name string, bsl *velerov1.BackupStorageLocation, credentia
 		Type: corev1.SecretTypeOpaque,
 		Data: map[string][]byte{"cloud": credentialData},
 	}
-	if _, err := k8sClient.CoreV1().Secrets("velero").Create(context.Background(), secret, metav1.CreateOptions{}); err != nil {
-		if _, err2 := k8sClient.CoreV1().Secrets("velero").Update(context.Background(), secret, metav1.UpdateOptions{}); err2 != nil {
+	if _, err := k8sClient.CoreV1().Secrets(velerons.Namespace()).Create(context.Background(), secret, metav1.CreateOptions{}); err != nil {
+		if _, err2 := k8sClient.CoreV1().Secrets(velerons.Namespace()).Update(context.Background(), secret, metav1.UpdateOptions{}); err2 != nil {
 			return fmt.Errorf("failed to update credentials secret: %w", err2)
 		}
 	}
@@ -639,7 +640,7 @@ func UpdateStorageLocation(c *gin.Context) {
 	}
 
 	bsl := &velerov1.BackupStorageLocation{}
-	if err := runtimeClient.Get(context.Background(), client.ObjectKey{Name: name, Namespace: "velero"}, bsl); err != nil {
+	if err := runtimeClient.Get(context.Background(), client.ObjectKey{Name: name, Namespace: velerons.Namespace()}, bsl); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
@@ -766,7 +767,7 @@ func DeleteStorageLocation(c *gin.Context) {
 		return
 	}
 	bsl := &velerov1.BackupStorageLocation{}
-	if err := cl.Get(context.Background(), client.ObjectKey{Name: name, Namespace: "velero"}, bsl); err != nil {
+	if err := cl.Get(context.Background(), client.ObjectKey{Name: name, Namespace: velerons.Namespace()}, bsl); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
@@ -775,9 +776,9 @@ func DeleteStorageLocation(c *gin.Context) {
 	if bsl.Spec.Credential != nil && bsl.Spec.Credential.Name != "" {
 		k8sClient, err := k8s.GetClient()
 		if err == nil {
-			secret, getErr := k8sClient.CoreV1().Secrets("velero").Get(context.Background(), bsl.Spec.Credential.Name, metav1.GetOptions{})
+			secret, getErr := k8sClient.CoreV1().Secrets(velerons.Namespace()).Get(context.Background(), bsl.Spec.Credential.Name, metav1.GetOptions{})
 			if getErr == nil && secret.Labels["app.kubernetes.io/managed-by"] == "supkube" {
-				_ = k8sClient.CoreV1().Secrets("velero").Delete(context.Background(), secret.Name, metav1.DeleteOptions{})
+				_ = k8sClient.CoreV1().Secrets(velerons.Namespace()).Delete(context.Background(), secret.Name, metav1.DeleteOptions{})
 			}
 		}
 	}
@@ -804,7 +805,7 @@ func ListVolumeSnapshotLocations(c *gin.Context) {
 		return
 	}
 	list := &velerov1.VolumeSnapshotLocationList{}
-	if err := cl.List(context.Background(), list, client.InNamespace("velero")); err != nil {
+	if err := cl.List(context.Background(), list, client.InNamespace(velerons.Namespace())); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -820,7 +821,7 @@ func GetVolumeSnapshotLocation(c *gin.Context) {
 		return
 	}
 	vsl := &velerov1.VolumeSnapshotLocation{}
-	if err := cl.Get(context.Background(), client.ObjectKey{Name: name, Namespace: "velero"}, vsl); err != nil {
+	if err := cl.Get(context.Background(), client.ObjectKey{Name: name, Namespace: velerons.Namespace()}, vsl); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
@@ -855,7 +856,7 @@ func CreateVolumeSnapshotLocation(c *gin.Context) {
 	vsl := &velerov1.VolumeSnapshotLocation{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      req.Name,
-			Namespace: "velero",
+			Namespace: velerons.Namespace(),
 		},
 		Spec: velerov1.VolumeSnapshotLocationSpec{
 			Provider: req.Provider,
@@ -880,7 +881,7 @@ func DeleteVolumeSnapshotLocation(c *gin.Context) {
 		return
 	}
 	vsl := &velerov1.VolumeSnapshotLocation{}
-	if err := cl.Get(context.Background(), client.ObjectKey{Name: name, Namespace: "velero"}, vsl); err != nil {
+	if err := cl.Get(context.Background(), client.ObjectKey{Name: name, Namespace: velerons.Namespace()}, vsl); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}

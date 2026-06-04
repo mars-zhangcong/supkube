@@ -33,6 +33,7 @@ import (
 	awsConfig "github.com/aws/aws-sdk-go-v2/config"
 	awsCreds "github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/supkube/supkube-backend/internal/velerons"
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	"gopkg.in/ini.v1"
 	corev1 "k8s.io/api/core/v1"
@@ -114,7 +115,7 @@ func (b *bslClient) ListPrefix(ctx context.Context, bslName, keyPrefix string) (
 
 func (b *bslClient) loadBSL(ctx context.Context, name string) (*velerov1.BackupStorageLocation, error) {
 	bsl := &velerov1.BackupStorageLocation{}
-	if err := b.cl.Get(ctx, client.ObjectKey{Name: name, Namespace: "velero"}, bsl); err != nil {
+	if err := b.cl.Get(ctx, client.ObjectKey{Name: name, Namespace: velerons.Namespace()}, bsl); err != nil {
 		return nil, fmt.Errorf("get BSL %s: %w", name, err)
 	}
 	return bsl, nil
@@ -224,7 +225,7 @@ func (b *bslClient) buildS3Client(ctx context.Context, bsl *velerov1.BackupStora
 		// Fall back to velero's `cloud-credentials`; if that's missing
 		// too, try the SDK default chain (IRSA / IMDS).
 		fallback := &corev1.Secret{}
-		if err := b.cl.Get(ctx, client.ObjectKey{Name: "cloud-credentials", Namespace: "velero"}, fallback); err == nil {
+		if err := b.cl.Get(ctx, client.ObjectKey{Name: "cloud-credentials", Namespace: velerons.Namespace()}, fallback); err == nil {
 			if raw, ok := fallback.Data["cloud"]; ok {
 				if ak, sk, st, perr := parseAWSCredsINI(raw); perr == nil {
 					return loadStatic(ak, sk, st)
@@ -239,7 +240,7 @@ func (b *bslClient) buildS3Client(ctx context.Context, bsl *velerov1.BackupStora
 	}
 
 	secret := &corev1.Secret{}
-	if err := b.cl.Get(ctx, client.ObjectKey{Name: cred.Name, Namespace: "velero"}, secret); err != nil {
+	if err := b.cl.Get(ctx, client.ObjectKey{Name: cred.Name, Namespace: velerons.Namespace()}, secret); err != nil {
 		return nil, fmt.Errorf("get secret %s: %w", cred.Name, err)
 	}
 	raw, ok := secret.Data[cred.Key]
@@ -424,7 +425,7 @@ func (b *bslClient) loadAzureSharedKey(ctx context.Context, bsl *velerov1.Backup
 	cred := bsl.Spec.Credential
 	if cred == nil || cred.Name == "" {
 		secret := &corev1.Secret{}
-		if err := b.cl.Get(ctx, client.ObjectKey{Name: "cloud-credentials", Namespace: "velero"}, secret); err != nil {
+		if err := b.cl.Get(ctx, client.ObjectKey{Name: "cloud-credentials", Namespace: velerons.Namespace()}, secret); err != nil {
 			if apierrors.IsNotFound(err) {
 				return "", fmt.Errorf("no BSL credential and cloud-credentials Secret not found")
 			}
@@ -433,7 +434,7 @@ func (b *bslClient) loadAzureSharedKey(ctx context.Context, bsl *velerov1.Backup
 		return parseAzureKey(secret.Data["cloud"]), nil
 	}
 	secret := &corev1.Secret{}
-	if err := b.cl.Get(ctx, client.ObjectKey{Name: cred.Name, Namespace: "velero"}, secret); err != nil {
+	if err := b.cl.Get(ctx, client.ObjectKey{Name: cred.Name, Namespace: velerons.Namespace()}, secret); err != nil {
 		return "", fmt.Errorf("get secret %s: %w", cred.Name, err)
 	}
 	raw, ok := secret.Data[cred.Key]

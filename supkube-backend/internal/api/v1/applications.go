@@ -13,6 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/supkube/supkube-backend/internal/k8s"
+	"github.com/supkube/supkube-backend/internal/velerons"
 )
 
 // ApplicationInfo represents a namespace with its workload and protection info.
@@ -145,7 +146,7 @@ func ListApplications(c *gin.Context) {
 	}
 
 	backupList := &velerov1.BackupList{}
-	if err := runtimeClient.List(context.Background(), backupList, client.InNamespace("velero")); err != nil {
+	if err := runtimeClient.List(context.Background(), backupList, client.InNamespace(velerons.Namespace())); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

@@ -27,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/supkube/supkube-backend/internal/k8s"
+	"github.com/supkube/supkube-backend/internal/velerons"
 )
 
 const (
@@ -110,7 +111,7 @@ func GetLocalStoreStatus(c *gin.Context) {
 	// Velero namespace is hardcoded to "velero" across the codebase
 	// (handlers.go does the same). When we eventually parameterize this,
 	// it'll be one find/replace — for now consistency beats DRY.
-	veleroNS := "velero"
+	veleroNS := velerons.Namespace()
 	supkubeNS := "supkube"
 
 	ctx := context.Background()
