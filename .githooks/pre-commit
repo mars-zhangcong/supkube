@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# pre-commit — worktree 隔离护栏（ENGINEERING Rule I 落地）。
+#
+# 目的：禁止在「主 worktree」里直接 commit。主 worktree 只用来
+#       `git worktree add` 和看 main；所有作业必须在各自独立的
+#       linked worktree 里进行，避免多 agent 共享一棵树互相 checkout 踩踏。
+#
+# ★ 默认【未武装】：没有 sentinel 文件时直接放行（exit 0）——所以现在
+#   把它装上对正在跑的循环零影响。等你把所有会话迁进各自 worktree、
+#   主树清空后，再武装：
+#
+#       武装：  touch "$(git rev-parse --git-common-dir)/worktree-guard-on"
+#       解除：  rm    "$(git rev-parse --git-common-dir)/worktree-guard-on"
+#       单次绕过：  GUARD_OFF=1 git commit ...
+set -euo pipefail
+
+# 单次临时绕过
+[ "${GUARD_OFF:-}" = "1" ] && exit 0
+
+COMMON=$(git rev-parse --git-common-dir 2>/dev/null) || exit 0
+GITDIR=$(git rev-parse --absolute-git-dir 2>/dev/null) || exit 0
+
+# 未武装 → 放行（装上即生效会打断正在跑的循环，故默认惰性）
+[ -f "$COMMON/worktree-guard-on" ] || exit 0
+
+abs() { (cd "$1" 2>/dev/null && pwd -P); }
+# 主 worktree 判据：它的 git-dir == git-common-dir；
+# linked worktree 的 git-dir 在 $COMMON/worktrees/<name> 下，二者不等。
+if [ "$(abs "$GITDIR")" = "$(abs "$COMMON")" ]; then
+  cat >&2 <<'MSG'
+
+  ❌ 提交被 worktree 隔离护栏拦下：你正在「主 worktree」里 commit。
+
+  主 worktree 是作业禁区——多 agent 共享它会互相 checkout 踩踏。
+  请在你自己的独立 worktree 里作业：
+
+      git worktree add /private/tmp/sk-<任务> -b <分支> origin/main
+      cd /private/tmp/sk-<任务>
+
+  单次绕过： GUARD_OFF=1 git commit …
+  解除护栏： rm "$(git rev-parse --git-common-dir)/worktree-guard-on"
+
+MSG
+  exit 1
+fi
+exit 0

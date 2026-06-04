@@ -14,6 +14,7 @@ import (
 
 	"github.com/supkube/supkube-backend/internal/auth"
 	"github.com/supkube/supkube-backend/internal/k8s"
+	"github.com/supkube/supkube-backend/internal/velerons"
 )
 
 // GetSchedule (v0.8.9) returns a Policy (one or two Schedules aggregated).
@@ -303,7 +304,7 @@ func RunScheduleOnce(c *gin.Context) {
 		backup := &velerov1.Backup{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      backupName,
-				Namespace: "velero",
+				Namespace: velerons.Namespace(),
 				Labels:    labels,
 				Annotations: map[string]string{
 					"supkube.io/triggered-by": "policy-run-once",

@@ -28,6 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/supkube/supkube-backend/internal/k8s"
+	"github.com/supkube/supkube-backend/internal/velerons"
 )
 
 // PluginStatus is one row in the Settings → Plugins table.
@@ -84,7 +85,7 @@ func GetPluginsStatus(c *gin.Context) {
 
 	// ── Velero ───────────────────────────────────────────────────────
 	veleroInstalled := false
-	if d, err := k8sCli.AppsV1().Deployments("velero").Get(ctx, "velero", metav1.GetOptions{}); err == nil && d.Status.ReadyReplicas >= 1 {
+	if d, err := k8sCli.AppsV1().Deployments(velerons.Namespace()).Get(ctx, "velero", metav1.GetOptions{}); err == nil && d.Status.ReadyReplicas >= 1 {
 		veleroInstalled = true
 	}
 	plugins = append(plugins, PluginStatus{

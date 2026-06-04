@@ -43,6 +43,7 @@ import (
 	awsConfig "github.com/aws/aws-sdk-go-v2/config"
 	awsCreds "github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/supkube/supkube-backend/internal/velerons"
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	"gopkg.in/ini.v1"
 	corev1 "k8s.io/api/core/v1"
@@ -113,7 +114,7 @@ func getBackupTarballSize(ctx context.Context, cl client.Client, backup *velerov
 // live in dedicated helpers. The dispatch + caching live here.
 func hydrateBSLSizes(ctx context.Context, cl client.Client, bslName string) tarballSizes {
 	bsl := &velerov1.BackupStorageLocation{}
-	if err := cl.Get(ctx, client.ObjectKey{Name: bslName, Namespace: "velero"}, bsl); err != nil {
+	if err := cl.Get(ctx, client.ObjectKey{Name: bslName, Namespace: velerons.Namespace()}, bsl); err != nil {
 		return tarballSizes{expiry: time.Now().Add(bslCacheTTL), err: "BSL not found: " + err.Error()}
 	}
 	switch strings.ToLower(bsl.Spec.Provider) {
@@ -245,7 +246,7 @@ func buildS3Client(ctx context.Context, cl client.Client, bsl *velerov1.BackupSt
 		// will error out with "no EC2 IMDS role" if it can't find
 		// anything, which is the truthful message in that case.
 		fallback := &corev1.Secret{}
-		if err := cl.Get(ctx, client.ObjectKey{Name: "cloud-credentials", Namespace: "velero"}, fallback); err == nil {
+		if err := cl.Get(ctx, client.ObjectKey{Name: "cloud-credentials", Namespace: velerons.Namespace()}, fallback); err == nil {
 			if raw, ok := fallback.Data["cloud"]; ok {
 				if ak, sk, st, perr := parseAWSCredsINI(raw); perr == nil {
 					region := bsl.Spec.Config["region"]
@@ -274,7 +275,7 @@ func buildS3Client(ctx context.Context, cl client.Client, bsl *velerov1.BackupSt
 
 	// Pull the Secret. Velero stores it in the velero namespace.
 	secret := &corev1.Secret{}
-	if err := cl.Get(ctx, client.ObjectKey{Name: cred.Name, Namespace: "velero"}, secret); err != nil {
+	if err := cl.Get(ctx, client.ObjectKey{Name: cred.Name, Namespace: velerons.Namespace()}, secret); err != nil {
 		return nil, fmt.Errorf("get secret %s: %w", cred.Name, err)
 	}
 	raw, ok := secret.Data[cred.Key]

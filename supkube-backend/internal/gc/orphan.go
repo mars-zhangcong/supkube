@@ -45,6 +45,7 @@ import (
 	"time"
 
 	snapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
+	"github.com/supkube/supkube-backend/internal/velerons"
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	velerov2alpha1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v2alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -97,7 +98,7 @@ func Scan(ctx context.Context, cl client.Client) ScanResult {
 	// orphans by absence. Doing one List up-front means each orphan check
 	// is O(1) map lookup, not an O(N) Get round-trip.
 	backupList := &velerov1.BackupList{}
-	if err := cl.List(ctx, backupList, client.InNamespace("velero")); err != nil {
+	if err := cl.List(ctx, backupList, client.InNamespace(velerons.Namespace())); err != nil {
 		r.Err = fmt.Errorf("list backups: %w", err)
 		r.FinishedAt = time.Now().UTC()
 		return r
@@ -161,7 +162,7 @@ func Scan(ctx context.Context, cl client.Client) ScanResult {
 
 	// ── 3. PodVolumeBackup (filesystem path) ───────────────────────
 	pvbList := &velerov1.PodVolumeBackupList{}
-	if err := cl.List(ctx, pvbList, client.InNamespace("velero")); err == nil {
+	if err := cl.List(ctx, pvbList, client.InNamespace(velerons.Namespace())); err == nil {
 		for i := range pvbList.Items {
 			pvb := &pvbList.Items[i]
 			backupName := pvb.Labels["velero.io/backup-name"]
@@ -179,7 +180,7 @@ func Scan(ctx context.Context, cl client.Client) ScanResult {
 
 	// ── 4. DataUpload (Data Mover path) ────────────────────────────
 	duList := &velerov2alpha1.DataUploadList{}
-	if err := cl.List(ctx, duList, client.InNamespace("velero")); err == nil {
+	if err := cl.List(ctx, duList, client.InNamespace(velerons.Namespace())); err == nil {
 		for i := range duList.Items {
 			du := &duList.Items[i]
 			backupName := du.Labels["velero.io/backup-name"]

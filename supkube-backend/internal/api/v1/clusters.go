@@ -42,6 +42,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/supkube/supkube-backend/internal/k8s"
+	"github.com/supkube/supkube-backend/internal/velerons"
 )
 
 const (
@@ -190,7 +191,7 @@ func buildThisClusterDTO(ctx context.Context) ClusterDTO {
 			// (无 node 时保留 "Local Cluster" 默认)
 		}
 	}
-	if _, err := k8sCli.AppsV1().Deployments("velero").Get(ctx, "velero", metav1.GetOptions{}); err == nil {
+	if _, err := k8sCli.AppsV1().Deployments(velerons.Namespace()).Get(ctx, "velero", metav1.GetOptions{}); err == nil {
 		dto.VeleroInstalled = true
 	}
 	return dto
@@ -481,7 +482,7 @@ func testClusterConnection(kubeconfig []byte, contextName string) (phase, messag
 		nodes = len(nl.Items)
 	}
 
-	if d, err := cli.AppsV1().Deployments("velero").Get(ctx, "velero", metav1.GetOptions{}); err == nil {
+	if d, err := cli.AppsV1().Deployments(velerons.Namespace()).Get(ctx, "velero", metav1.GetOptions{}); err == nil {
 		veleroInstalled = true
 		// Velero deployments label the image tag onto the container; best-effort.
 		if len(d.Spec.Template.Spec.Containers) > 0 {
