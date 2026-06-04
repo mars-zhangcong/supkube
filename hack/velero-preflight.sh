@@ -73,12 +73,13 @@ check_context() {
     RC=2; return
   fi
 
-  # SupKube's DR controllers (fingerprint runner + BSL/secret reader) HARDCODE
-  # the `velero` namespace (backend internal/fingerprint, internal/importpolicy).
-  # If Velero only runs elsewhere, DR features won't see it even if Velero is
-  # otherwise healthy — flag it.
+  # SupKube's DR controllers (fingerprint runner + import/BSL reader) act on the
+  # namespace SupKube is pointed at via VELERO_NAMESPACE. Older builds default
+  # that to `velero`; newer builds honor the setting. Either way, Velero + BSL +
+  # secret must live in the SAME namespace SupKube targets — flag a likely
+  # mismatch when Velero isn't in the conventional `velero` ns.
   if ! grep -qx "velero" <<< "$nslist"; then
-    warn "Velero runs in [$(paste -sd, - <<< "$nslist")] but NOT in 'velero' ns — SupKube DR (fingerprint/import) hardcodes the 'velero' ns and will not use it"
+    warn "Velero runs in [$(paste -sd, - <<< "$nslist")], not the conventional 'velero' ns — make sure SupKube's VELERO_NAMESPACE points at this ns, or DR (fingerprint/import) won't see it"
   fi
 
   local hard=0 ns

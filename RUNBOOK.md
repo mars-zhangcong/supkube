@@ -124,10 +124,12 @@ kubectl --context $CTX -n $NS get bsl -o custom-columns=NAME:.metadata.name,PHAS
 - 根因 2（key 缺）——补全 secret 内容（azure 的 `cloud` 文件需含 `AZURE_STORAGE_ACCOUNT_ACCESS_KEY` + `AZURE_CLOUD_NAME`），见 [SECURITY.md](SECURITY.md)。
 - 根因 3——按 §1 / `preflight.sh` 排 ACR / 磁盘 / 调度。
 
-> **namespace 一致性陷阱**：SupKube 后端的 DR 逻辑（fingerprint runner、BSL/secret 读取）**硬编码
-> 在 `velero` namespace**（`internal/fingerprint`、`internal/importpolicy`）。如果某集群的 Velero
-> 只装在别的 ns（如 helm 把 Velero 装进 release ns `supkube`），即使 Velero 本身健康，**SupKube 的
-> 指纹/导入也看不到它**。`velero-preflight.sh` 会对「Velero 不在 `velero` ns」单独告警。
+> **namespace 一致性陷阱**：SupKube 后端的 DR 逻辑（fingerprint runner、BSL/secret 读取）作用于
+> **`VELERO_NAMESPACE` 指向的那个 namespace**（旧版默认硬编码 `velero`；新版可配，honor 该设置）。
+> 关键是 **Velero + BSL + 凭据 secret 必须都在 SupKube 所指向的同一个 ns**。如果某集群的 Velero
+> 装在别的 ns（如 helm 把 Velero 装进 release ns `supkube`）而 `VELERO_NAMESPACE` 没对齐，即使
+> Velero 本身健康，**SupKube 的指纹/导入也看不到它**。`velero-preflight.sh` 会对「Velero 不在
+> 约定的 `velero` ns」单独告警，提示核对 `VELERO_NAMESPACE`。
 
 **防复发（核心——把「没人知道」变成「几分钟知道」）**：
 1. **进定时**：`bash hack/velero-preflight.sh --all` 进 cron / scheduled agent（15–30 min），非 0 退出即告警。这是 38h 静默的真正解药。
