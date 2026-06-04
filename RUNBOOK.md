@@ -2,8 +2,20 @@
 
 > **用途**：故障时**照着做**的操作手册——SRE / 客户支持遇到「备份卡住 / 还原不动 / 云账单飙升 / 删不掉」时，按症状查到根因 + 处置步骤，不靠口口相传。
 > **读者**：SRE、客户支持、值班工程师。
-> **配套脚本**（`hack/`）：`supkube_debug.sh`（诊断包）· `verify-cluster.sh`（依赖体检）· `preflight.sh`（装前预检）· `diagnose-rp-deletion.sh`（删除卡住）· `mirror-images.sh`（air-gap 镜像）。
+> **配套脚本**（`hack/`）：`supkube_debug.sh`（诊断包）· `verify-cluster.sh`（依赖体检）· `velero-preflight.sh`（**Velero 自身健康，§1.5**）· `preflight.sh`（装前预检）· `diagnose-rp-deletion.sh`（删除卡住）· `mirror-images.sh`（air-gap 镜像）。
 > **关联**：[SECURITY.md](SECURITY.md) · [架构设计.md](架构设计.md) · [API-REFERENCE.md](API-REFERENCE.md)（`/status` 探针）· [SLO-RTO-RPO.md](SLO-RTO-RPO.md)（目标值）
+
+---
+
+> ## ⚠️ 头号教训：「我们自己的 DR 坏了，38 小时没人知道」（2026-06-04 RCA）
+> test 集群的 Velero 卡 `Init:0/2` **38 小时**，无人察觉——**我们卖容灾，自己的容灾却静默挂了**。
+> 根因不是疑难杂症，是个**几秒就能查出**的低级错：Velero pod 要挂载的 `cloud-credentials`
+> secret 不在 Velero 的 namespace 里（被建到了**另一个 ns**）。pod 挂不上卷 → 连 init 容器都
+> 没机会启动 → `Init:0/2` 永远卡着 → BSL 永远不 Available。详见 [§1.5](#15-velero-自身健康我们自己的-dr--our-own-dr)。
+>
+> **为什么 38h 没人知道 = 没人在跑体检**。修复不是「修这一次」，而是**把体检自动化**：
+> `bash hack/velero-preflight.sh --all` 几秒出结果，**进定时（cron / scheduled agent，15–30 min）**，
+> 红了就告警。详见 [§1.5](#15-velero-自身健康我们自己的-dr--our-own-dr) 末「防复发」。
 
 ---
 
@@ -20,9 +32,13 @@ bash hack/verify-cluster.sh
 
 # 3) 一键诊断包（客户侧也能跑，类比 Kasten k10_debug.sh）
 bash hack/supkube_debug.sh                  # → 生成 tarball，附到工单
+
+# 4) 我们自己的 DR 还活着吗？（Velero 自身健康，几秒出结果——见头号教训）
+bash hack/velero-preflight.sh               # 当前 context；--all 扫所有 context
 ```
 
 > 没有 `buildStamp` 变化 → helm upgrade 没真正滚出去（见 §6）。`verify-cluster.sh` 红 → 依赖缺失，先补依赖再谈功能。
+> `velero-preflight.sh` 红 → 我们的 Velero/BSL 本身坏了（见 §1.5），任何备份/还原/DR 都无从谈起。
 
 ---
 
@@ -54,6 +70,71 @@ kubectl get nodes -o json | jq -r '.items[].status.allocatable["ephemeral-storag
 - 若 velero 是旧 `*-dirty` build → **升级到固化的 v1.18.0 官方 release**（CHANGELOG `0.9.1.9-alpha`）。
 - 若 node-agent 缺/挂 → 重建 DaemonSet，确认 hostPath 挂载与节点磁盘空间。
 - **绝不**手动删 datupload CR 来「解卡」——会留孤儿快照（→ §4 云账单）。先查清再动（Mars 现场原则：先查清原因再说）。
+
+---
+
+## 1.5 Velero 自身健康（我们自己的 DR） — Our Own DR
+
+**症状**：Velero pod 卡 `Init:0/2`（或 `Pending`）很久不动；node-agent 卡 `ContainerCreating`；
+BSL 一直**不是** `Available`（`status.phase` 为空）。备份/还原/导入全部无从谈起。
+
+**别被 `Init:0/2` 误导**：它看起来像「init 容器（插件）拉不下来 / 卡住」，但**更常见的真因
+是 pod 在 init 之前就卡在卷挂载**——kubelet 挂不上某个 `secret` 卷时，pod 连 init 容器都不会
+创建（`describe` 里 init 容器 `Container ID` 为空、`State: Waiting/PodInitializing`）。**挂载发生
+在 init 之前**，所以这不是 ACR/插件/调度问题。
+
+**根因优先级**：
+1. **Velero pod 要挂的 `cloud-credentials` secret 不在 Velero 的 namespace 里**（2026-06-04 test 根因）。
+   常见变体：secret **建到了别的 ns**（dev 约定 `velero` ns / 本集群 Velero 实际在 `supkube` ns，
+   两边不一致就会错位）。
+2. secret 名字对、ns 对，但**内容缺 key**（azure 需 `cloud` 文件含 `AZURE_STORAGE_ACCOUNT_ACCESS_KEY`）。
+3. 真·init 容器问题（ACR 私网拉取失败 / 节点磁盘满 / 调度不上）——**排在最后**，先排除 1/2。
+
+**先跑预检（几秒定位，read-only）**：
+```bash
+bash hack/velero-preflight.sh <context>     # 自动发现 Velero 所在 ns、查 pod Running、
+                                            # 查每个被挂载的 secret 是否在该 ns、查 BSL Available
+```
+它会直接打印「secret X 不在 ns/A，但存在于 ns/B（建错 ns 了，复制过去）」这种结论。
+
+**手动核对**：
+```bash
+CTX=<context>; NS=<velero 所在 ns，dev 多为 velero、本集群 helm 内置多为 supkube>
+# a. pod 卡在哪一步（看 init 容器 Container ID 是否为空 + Events 里的 FailedMount）
+kubectl --context $CTX -n $NS describe pod -l name=velero | grep -iE "FailedMount|secret|PodInitializing|MountVolume"
+# b. Velero pod / node-agent 到底要挂哪个 secret
+kubectl --context $CTX -n $NS get deploy velero -o jsonpath='{range .spec.template.spec.volumes[*]}{.name}={.secret.secretName}{"\n"}{end}'
+# c. 那个 secret 在不在本 ns？在别的 ns 吗？
+kubectl --context $CTX -n $NS get secret <name>
+kubectl --context $CTX get secret -A --field-selector metadata.name=<name>
+# d. BSL 状态
+kubectl --context $CTX -n $NS get bsl -o custom-columns=NAME:.metadata.name,PHASE:.status.phase
+```
+
+**处置（按根因）**：
+- 根因 1（secret 建错 ns）——把凭据 secret **补建到 Velero 所在 ns**（不要删别处那个，避免动到既存）：
+  ```bash
+  # 从错误 ns 复制到正确 ns（示例：velero → supkube）。配对 + 可逆。
+  kubectl --context $CTX -n <wrong-ns> get secret <name> -o yaml \
+    | sed -E 's/namespace: <wrong-ns>/namespace: <velero-ns>/; /resourceVersion:|uid:|creationTimestamp:/d' \
+    | kubectl --context $CTX -n <velero-ns> apply -f -
+  # 回滚：kubectl --context $CTX -n <velero-ns> delete secret <name>
+  ```
+  secret 一就位，kubelet 几十秒内自动挂载 → init 容器开始跑 → pod Running → BSL 转 Available。**无需重建 pod**。
+- 根因 2（key 缺）——补全 secret 内容（azure 的 `cloud` 文件需含 `AZURE_STORAGE_ACCOUNT_ACCESS_KEY` + `AZURE_CLOUD_NAME`），见 [SECURITY.md](SECURITY.md)。
+- 根因 3——按 §1 / `preflight.sh` 排 ACR / 磁盘 / 调度。
+
+> **namespace 一致性陷阱**：SupKube 后端的 DR 逻辑（fingerprint runner、BSL/secret 读取）**硬编码
+> 在 `velero` namespace**（`internal/fingerprint`、`internal/importpolicy`）。如果某集群的 Velero
+> 只装在别的 ns（如 helm 把 Velero 装进 release ns `supkube`），即使 Velero 本身健康，**SupKube 的
+> 指纹/导入也看不到它**。`velero-preflight.sh` 会对「Velero 不在 `velero` ns」单独告警。
+
+**防复发（核心——把「没人知道」变成「几分钟知道」）**：
+1. **进定时**：`bash hack/velero-preflight.sh --all` 进 cron / scheduled agent（15–30 min），非 0 退出即告警。这是 38h 静默的真正解药。
+2. **每次 cluster 起来后 / 每次 helm 升级后**跑一遍（和 `verify-cluster.sh` 一起）。
+3. **评估并入 `verify-cluster.sh`**：现版 `verify-cluster.sh` 默认 `VELERO_NS=velero`、且**不查凭据 secret**，
+   所以它在 test（Velero 在 `supkube` ns、secret 缺位）这种场景会报「Velero not installed in 'velero'」
+   而**错过真因**。建议把 `velero-preflight.sh` 的「自动发现 ns + 查挂载 secret」补进 `verify-cluster.sh` §3/§7。
 
 ---
 
@@ -193,4 +274,5 @@ bash hack/preflight.sh            # 装前预检（CRD/SC/snapshot-controller/�
 
 | 日期 | 操作人 | 变更 |
 |---|---|---|
+| 2026-06-04 | Claude (SRE) | **头号教训 banner**「我们自己的 DR 坏了 38h 没人知道」+ **新增 §1.5 Velero 自身健康**（test `Init:0/2` 38h RCA：`cloud-credentials` secret 建错 ns → pod 卡在 init 前的卷挂载 → BSL 永不 Available；纠正「ACR/调度」误判；含修复+回滚+namespace 一致性陷阱）+ **新脚本 `hack/velero-preflight.sh`**（自动发现 Velero ns、查挂载 secret、查 BSL，几秒定位；建议进定时 + 评估并入 `verify-cluster.sh`）。§0 黄金 5 分钟加第 4 步。 |
 | 2026-06-01 | Claude | 初版。9 个故障域 runbook：node-agent hang（#102 根因）/ RP 删除卡住（#101 + diagnose 脚本）/ CSI VSC 缺失 / **防云账单 checklist** / force-delete / 镜像没滚出去 / RBAC 403 排障 / air-gap / support bundle。grounding 到 hack/ 现有脚本。 |
