@@ -10,6 +10,15 @@
 
 > 这些规则是从踩坑里长出来的，**不是建议，是纪律**。例外都写明了。
 
+> ## 🪧 座右铭（Mars, 2026-06-04）
+> ## **治理办法是没用的，有用的是永远不给错误发生的条件。**
+>
+> 有治理（规则、评审、Runbook、口头确认）只是在错误发生*之后*补救；真正有用的是
+> 在源头**消除错误发生的条件**——把规则变成一道**断了就报错的机制**（CI 红板 /
+> 启动 fail-fast / 单一真源 / 物理隔离），让人**绕不过去**。每条铁律优先用机械手段
+> 落地；纯靠人记性的条款，本身就是下一个事故的条件。本节多数 Rule 都配了机械执行
+> 点（CI job / 守卫脚本），Rule I 是这条座右铭的范本。
+
 ### Rule A — PRD 先于代码
 
 任何**影响 UX 的 Feature** 必须先过 PRD（走状态机：草稿→排队评审→评审中→{改正中｜驳回｜已评审}→研发中→待验收→Shipped→归档），**再写代码**。
@@ -90,6 +99,23 @@
 - ❌ 不更新台账，靠下次 grep 全文找最大号 → 多文件分散后必漂
 - ❌ 跨 session 续工作，不查 LEDGER 直接照记忆里的号写 → 撞旧号
 
+### Rule I — 禁止幽灵配置（No Phantom Config，2026-06-04 立 / ADR-047）
+
+**幽灵配置 = 一个看起来权威、但没有任何东西真正消费它的配置项。**配置与它的消费者之间只靠"约定/惯例"连着，而不是靠"断了就报错"的机制连着。这是座右铭的直接产物。
+
+**铁律**：任何配置值都必须有一条**断了会大声失败**的消费链路。具体三条：
+
+1. **跨层绑定必须有端到端测试**：凡是 helm → env → code 一路传的值（如 `VELERO_NAMESPACE`），必须有一个测试断言"配置端 == 消费端"。光把 env 注进 Pod、代码却不读它 = 幽灵。
+2. **传给子系统的值必须对照对方真实 schema 验证**：传给子 chart / 第三方的 key（如 velero 子 chart 的 `namespaceOverride`），必须确认对方真的读这个 key；对方不读 = 死值，删掉。
+3. **每个 config key 必须能指出消费者那一行**：code-review 与自检时，指不出读它的代码行 = 幽灵 = 删。同类信息只能有一个**单一真源**（Rule C 的延伸；如 ns 收口到 `internal/velerons`）。
+
+**执行机制（不靠记性，靠墙）**：
+- CI job **`Phantom Config Guard`**（`hack/check-phantom-config.sh`）：后端绕过单一真源重新硬编码 ns、或 values 重现死值 `namespaceOverride`，**构建直接红**。
+- CI job **`Helm Lint` 内的接缝测试**（`hack/test-velero-ns-seam.sh`）：渲染后断言 后端读的 ns == Velero 运行 ns == BSL 所在 ns，劈叉即红。
+- 现场：`hack/test-velero-ns-seam.sh --live` 对真集群做同样断言（FED 体检）。
+
+**教训来源**：2026-06-04 Velero ns 事故——`velero.namespaceOverride`（子 chart 不读的死值）+ 后端 80+ 处硬编码 `"velero"`（让注入的 `VELERO_NAMESPACE` 形同虚设）两个幽灵配置叠加，导致 Velero 装进 supkube ns、后端却读 velero ns，存储桶全 Unknown。历史同类：`image.registry`（"documentation lie，chart 从不读它"）。**这类是接缝 bug，不是粗心 bug——正确反应不是"下次仔细点"，是在接缝上架一道断了会响的机制。**
+
 ---
 
 ## 2. 单一来源清单（Single Source of Truth）
@@ -113,6 +139,7 @@
 | **API 契约** | **openapi.yaml + API-REFERENCE.md**（端点×角色矩阵派生自 `supkube-backend/internal/auth/rbac.go`） |
 | **运维排障** | **RUNBOOK.md** |
 | **RTO/RPO/SLO 目标值** | **SLO-RTO-RPO.md**（同时是 PRD-011 Resilience Score 评分阈值的单源） |
+| **Velero 命名空间** | 后端 **`internal/velerons`**（运行时单源，读 `VELERO_NAMESPACE`）+ Helm **`supkube.veleroNamespace`** helper（渲染时单源）。禁止任何地方硬编码 `"velero"` ns（Rule I，CI 守卫） |
 
 > ⚠ **已知违规**：`dashboard/index.html` 把 PRD/ADR/任务数据硬编码复制，已与源漂移。整改方向见 §6。
 
