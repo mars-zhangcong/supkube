@@ -46,13 +46,21 @@ git worktree list
 
 echo
 echo "  各 worktree 未提交改动："
-git worktree list --porcelain | sed -n 's/^worktree //p' | while read -r wt; do
-  n=$(git -C "$wt" status --porcelain 2>/dev/null | wc -l | tr -d ' ')
-  br=$(git -C "$wt" rev-parse --abbrev-ref HEAD 2>/dev/null)
-  mark=""; [ "$n" != 0 ] && mark="   ← 有活没 commit"
-  printf "    [%-38s] %s 处%s\n" "$br" "$n" "$mark"
-  [ "$n" != 0 ] && git -C "$wt" status --short 2>/dev/null | sed 's/^/        /'
-done
+# NUL-safe 枚举：--porcelain -z 用 NUL 作行/记录终止符，read -r -d '' 逐条读，
+# 路径含空格（本仓库 "Claude Code"）甚至换行都不会断。变量一律加引号。
+# ⚠ 绝不用 `for wt in $(… awk '{print $2}')`／`cut -d' '` —— 遇空格即断、漏条目。
+while IFS= read -r -d '' field; do
+  case "$field" in
+    "worktree "*)
+      wt="${field#worktree }"
+      n=$(git -C "$wt" status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+      br=$(git -C "$wt" rev-parse --abbrev-ref HEAD 2>/dev/null)
+      mark=""; [ "$n" != 0 ] && mark="   ← 有活没 commit"
+      printf "    [%-38s] %s 处%s\n" "$br" "$n" "$mark"
+      [ "$n" != 0 ] && git -C "$wt" status --short 2>/dev/null | sed 's/^/        /'
+      ;;
+  esac
+done < <(git worktree list --porcelain -z)
 
 echo
 echo "════════════════════════════════════════════════════════════"
