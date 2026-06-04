@@ -23,7 +23,7 @@
 | **TC-MC** | TC-MC-004 | **TC-MC-005** | Multi-Cluster 测试用例 | §四 |
 | **D**（战略/产品决策） | D-35 | **D-36** | dashboard `DECISIONS` 数组里的当日决策 | §五 |
 | **C**（客户痛点） | C-012 | **C-013** | dashboard `CUSTOMER_PAIN` 数组 | §六 |
-| **D-WAIT**（决策待办） | D-WAIT-012 | **D-WAIT-013** | 等待 Mars 拍板才能继续的事项（Auto 模式阻塞项；一事一文件，并行 agent 永不撞） | [等待决策.md](./等待决策.md) (INDEX) + `等待决策/` |
+| **D-WAIT**（决策待办） | D-WAIT-014 | **D-WAIT-015** | 等待 Mars 拍板才能继续的事项（Auto 模式阻塞项；一事一文件，并行 agent 永不撞） | [等待决策.md](./等待决策.md) (INDEX) + `等待决策/` |
 
 > **如果你的 series 不在上面**：在 §七"新 series 注册"加一行（e.g. 新增 TC-SEC 安全扫描 series），然后回到本表加一行下个空号。
 
