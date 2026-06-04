@@ -17,7 +17,7 @@
 > 在源头**消除错误发生的条件**——把规则变成一道**断了就报错的机制**（CI 红板 /
 > 启动 fail-fast / 单一真源 / 物理隔离），让人**绕不过去**。每条铁律优先用机械手段
 > 落地；纯靠人记性的条款，本身就是下一个事故的条件。本节多数 Rule 都配了机械执行
-> 点（CI job / 守卫脚本），Rule I 是这条座右铭的范本。
+> 点（CI job / 守卫脚本），Rule J 是这条座右铭的范本。
 
 ### Rule A — PRD 先于代码
 
@@ -99,7 +99,7 @@
 - ❌ 不更新台账，靠下次 grep 全文找最大号 → 多文件分散后必漂
 - ❌ 跨 session 续工作，不查 LEDGER 直接照记忆里的号写 → 撞旧号
 
-### Rule I — 禁止幽灵配置（No Phantom Config，2026-06-04 立 / ADR-047）
+### Rule J — 禁止幽灵配置（No Phantom Config，2026-06-04 立 / ADR-047）
 
 **幽灵配置 = 一个看起来权威、但没有任何东西真正消费它的配置项。**配置与它的消费者之间只靠"约定/惯例"连着，而不是靠"断了就报错"的机制连着。这是座右铭的直接产物。
 
@@ -139,7 +139,7 @@
 | **API 契约** | **openapi.yaml + API-REFERENCE.md**（端点×角色矩阵派生自 `supkube-backend/internal/auth/rbac.go`） |
 | **运维排障** | **RUNBOOK.md** |
 | **RTO/RPO/SLO 目标值** | **SLO-RTO-RPO.md**（同时是 PRD-011 Resilience Score 评分阈值的单源） |
-| **Velero 命名空间** | 后端 **`internal/velerons`**（运行时单源，读 `VELERO_NAMESPACE`）+ Helm **`supkube.veleroNamespace`** helper（渲染时单源）。禁止任何地方硬编码 `"velero"` ns（Rule I，CI 守卫） |
+| **Velero 命名空间** | 后端 **`internal/velerons`**（运行时单源，读 `VELERO_NAMESPACE`）+ Helm **`supkube.veleroNamespace`** helper（渲染时单源）。禁止任何地方硬编码 `"velero"` ns（Rule J，CI 守卫） |
 
 > ⚠ **已知违规**：`dashboard/index.html` 把 PRD/ADR/任务数据硬编码复制，已与源漂移。整改方向见 §6。
 
