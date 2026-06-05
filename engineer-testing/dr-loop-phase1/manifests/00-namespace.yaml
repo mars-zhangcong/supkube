@@ -1,0 +1,8 @@
+# DR-loop Phase-1 test namespace.
+# Phase-0 fact: namespace MUST be `dr-test` (NOT the doc's `test-app`).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dr-test
+  labels:
+    supkube.io/dr-loop: phase1

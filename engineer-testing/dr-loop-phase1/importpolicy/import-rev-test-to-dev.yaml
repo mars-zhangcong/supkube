@@ -1,0 +1,27 @@
+# ImportPolicy (REVERSE / failback): target = DEV cluster, imports backups
+# that the TEST cluster (AKS) wrote to the SHARED Azure BSL.
+#
+# Apply this in the DEV cluster's `supkube` namespace. Mirror image of the
+# forward policy: it filters on the TEST cluster's UID so dev only pulls
+# back test-originated backups.
+#
+# Same schema notes as import-fwd-dev-to-test.yaml.
+apiVersion: supkube.io/v1
+kind: ImportPolicy
+metadata:
+  name: import-rev-test-to-dev
+  namespace: supkube
+spec:
+  # On DEV the BSL named `azure-blob` lives in the `velero` namespace and is
+  # Available (verified read-only 2026-06-03).
+  sourceBSL: azure-blob
+  mode: Continuous
+  continuousInterval: 60s
+  # Import only TEST-originated backups. test's kube-system UID, verified:
+  #   - test backend log: "[fingerprint] source cluster: ... (4a72405599584405950b8e1fd994e829)"
+  #   - get ns kube-system uid => 4a724055-9958-4405-950b-8e1fd994e829 (same, dashed)
+  sourceClusterID: "4a72405599584405950b8e1fd994e829"
+  fingerprintMode: enforce
+  # Dev runs Velero (with the Available azure-blob BSL) in the `velero` ns.
+  targetVeleroNamespace: velero
+  paused: false

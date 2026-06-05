@@ -1,0 +1,89 @@
+# PostgreSQL StatefulSet — the stateful payload of the DR loop.
+# Shape mirrors 测试用例.md §0.2 but adapted to Phase-0 facts:
+#   - namespace = dr-test (not test-app)
+#   - storageClassName = longhorn  (SOURCE cluster SC; the sc-remap-fwd
+#     Transform rewrites longhorn -> managed-csi on restore into AKS)
+#   - headless Service (clusterIP: None) named `postgres` for stable DNS.
+#
+# fs-backup note (Phase-0): backups of this PVC MUST use Kopia file-system
+# backup (snapshotMoveData / file-system-backup), NEVER pure CSI snapshot.
+# That is a Backup-spec concern (set at `velero backup create` / SupKube
+# Backup CR time), not expressible on the workload manifest — see runbook.
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-credentials
+  namespace: dr-test
+type: Opaque
+stringData:
+  POSTGRES_USER: testuser
+  POSTGRES_PASSWORD: testpass
+  POSTGRES_DB: testdb
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: dr-test
+  labels:
+    app: postgres
+spec:
+  clusterIP: None
+  selector:
+    app: postgres
+  ports:
+    - name: pg
+      port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: dr-test
+  labels:
+    app: postgres
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15
+          envFrom:
+            - secretRef:
+                name: postgres-credentials
+          # PGDATA in a subdir so the PVC root (which holds lost+found on
+          # some CSI drivers) doesn't break initdb.
+          env:
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - containerPort: 5432
+              name: pg
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "testuser", "-d", "testdb"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        # SOURCE storage class. sc-remap-fwd rewrites this to managed-csi.
+        storageClassName: longhorn
+        resources:
+          requests:
+            storage: 5Gi

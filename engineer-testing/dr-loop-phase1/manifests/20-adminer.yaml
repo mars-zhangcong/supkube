@@ -1,0 +1,50 @@
+# Adminer DB web UI + a Service of type LoadBalancer.
+#
+# The LoadBalancer Service is the deliberate "Terminating trap" from
+# 测试用例.md §0.2: when this namespace is restored into a cluster WITHOUT
+# a cloud LB controller (e.g. K3S), the Service's finalizer/cloud-provider
+# reconcile can hang and the namespace gets stuck in `Terminating`.
+# The lb-to-clusterip Transform converts type LoadBalancer -> ClusterIP at
+# restore time so the restored namespace tears down cleanly.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: adminer
+  namespace: dr-test
+  labels:
+    app: adminer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: adminer
+  template:
+    metadata:
+      labels:
+        app: adminer
+    spec:
+      containers:
+        - name: adminer
+          image: adminer:4
+          ports:
+            - containerPort: 8080
+          env:
+            - name: ADMINER_DEFAULT_SERVER
+              value: postgres
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: adminer
+  namespace: dr-test
+  labels:
+    app: adminer
+spec:
+  type: LoadBalancer
+  selector:
+    app: adminer
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080

@@ -1,0 +1,41 @@
+# ImportPolicy (FORWARD): target = TEST cluster (AKS), imports backups that
+# the DEV cluster wrote to the SHARED Azure BSL.
+#
+# Apply this in the TEST cluster's `supkube` namespace. The controller polls
+# the named BSL and creates Velero Backup CRs in targetVeleroNamespace for
+# every new backup whose fingerprint passes (fingerprintMode=enforce).
+#
+# Schema note (verified against internal/importpolicy/types.go + the CRD at
+# supkube-helm/supkube/crds/importpolicies.yaml):
+#   - The filter field is FLAT `spec.sourceClusterID` (a string), NOT a
+#     nested `sourceClusterFilter.clusterId`. It is the source cluster's
+#     kube-system UID (32-hex), same value stamped into the fingerprint.
+#   - mode=Continuous requires continuousInterval (min 30s, controller-
+#     enforced). We use 60s (the controller default).
+#   - sourceBSL must name a BSL that already exists in targetVeleroNamespace.
+apiVersion: supkube.io/v1
+kind: ImportPolicy
+metadata:
+  name: import-fwd-dev-to-test
+  namespace: supkube
+spec:
+  # On TEST the BSL named `azure-blob` lives in the `supkube` namespace
+  # (verified read-only 2026-06-03). NOTE: test's BSL is currently NOT
+  # Available (velero pod stuck Init:0/2, no cloud-credentials secret) —
+  # this is a B-blocker, see 等待决策.md D-WAIT-005.
+  sourceBSL: azure-blob
+  mode: Continuous
+  continuousInterval: 60s
+  # Import only DEV-originated backups. This is dev's kube-system UID = the id
+  # the dev fingerprint runner stamps. Verified two ways:
+  #   - dev backend log: "[fingerprint] source cluster: ... (0363fe094a3045759956406f777f062c)"
+  #   - get ns kube-system uid => 0363fe09-4a30-4575-9956-406f777f062c (same, dashed)
+  # Using UNDASHED form (matches fingerprint runner log). If enforce rejects on
+  # format at first run, switch to the dashed form.
+  sourceClusterID: "0363fe094a3045759956406f777f062c"
+  # enforce: reject any backup with missing/invalid HMAC fingerprint.
+  # (warn is half-baked per Phase-0 — do NOT use.)
+  fingerprintMode: enforce
+  # Test runs Velero in `supkube` (NOT `velero`).
+  targetVeleroNamespace: supkube
+  paused: false

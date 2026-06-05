@@ -1,0 +1,54 @@
+# Seed Job: inserts EXACTLY 5 rows into a known table `dr_checkpoint`.
+# verify-count.sh asserts SELECT count(*) == 5 on both source and restored
+# clusters; verify-pgsha.sh asserts pg_dump SHA matches cross-cluster.
+#
+# Idempotent: TRUNCATE before insert so re-runs stay at exactly 5 rows.
+# psql is run inside the postgres pod via the postgres:15 image's client,
+# connecting over the headless `postgres` Service.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: seed-5rows
+  namespace: dr-test
+  labels:
+    app: dr-seed
+spec:
+  backoffLimit: 6
+  template:
+    metadata:
+      labels:
+        app: dr-seed
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: seed
+          image: postgres:15
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: POSTGRES_PASSWORD
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              echo "waiting for postgres to accept connections..."
+              until pg_isready -h postgres -U testuser -d testdb; do sleep 2; done
+              psql -h postgres -U testuser -d testdb -v ON_ERROR_STOP=1 <<'SQL'
+              CREATE TABLE IF NOT EXISTS dr_checkpoint (
+                id    int PRIMARY KEY,
+                msg   text NOT NULL,
+                ts    timestamptz NOT NULL DEFAULT now()
+              );
+              TRUNCATE dr_checkpoint;
+              INSERT INTO dr_checkpoint (id, msg) VALUES
+                (1, 'dr-loop-row-1'),
+                (2, 'dr-loop-row-2'),
+                (3, 'dr-loop-row-3'),
+                (4, 'dr-loop-row-4'),
+                (5, 'dr-loop-row-5');
+              SQL
+              echo "seeded; row count:"
+              psql -h postgres -U testuser -d testdb -tAc "SELECT count(*) FROM dr_checkpoint;"
