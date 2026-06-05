@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/supkube/supkube-backend/internal/velerons"
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -58,17 +59,17 @@ type PreflightSummary struct {
 func Preflight(ctx context.Context, cl client.Client, req PreflightRequest) (*PreflightResult, error) {
 	// 1. 验 BSL 存在
 	sourceBSL := &velerov1.BackupStorageLocation{}
-	if err := cl.Get(ctx, types.NamespacedName{Name: req.SourceBSL, Namespace: "velero"}, sourceBSL); err != nil {
+	if err := cl.Get(ctx, types.NamespacedName{Name: req.SourceBSL, Namespace: velerons.Namespace()}, sourceBSL); err != nil {
 		return nil, fmt.Errorf("source BSL %q not found: %w", req.SourceBSL, err)
 	}
 	targetBSL := &velerov1.BackupStorageLocation{}
-	if err := cl.Get(ctx, types.NamespacedName{Name: req.TargetBSL, Namespace: "velero"}, targetBSL); err != nil {
+	if err := cl.Get(ctx, types.NamespacedName{Name: req.TargetBSL, Namespace: velerons.Namespace()}, targetBSL); err != nil {
 		return nil, fmt.Errorf("target BSL %q not found: %w", req.TargetBSL, err)
 	}
 
 	// 2. 列 backup, 过滤 storageLocation=source
 	list := &velerov1.BackupList{}
-	if err := cl.List(ctx, list, client.InNamespace("velero")); err != nil {
+	if err := cl.List(ctx, list, client.InNamespace(velerons.Namespace())); err != nil {
 		return nil, fmt.Errorf("list backups: %w", err)
 	}
 

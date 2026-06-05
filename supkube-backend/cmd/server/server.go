@@ -15,6 +15,7 @@ import (
 	"github.com/supkube/supkube-backend/internal/importpolicy"
 	"github.com/supkube/supkube-backend/internal/k8s"
 	"github.com/supkube/supkube-backend/internal/policypair"
+	"github.com/supkube/supkube-backend/internal/velerons"
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -189,7 +190,7 @@ func Run() error {
 		)}
 		bslCheck := func(ctx context.Context, name string) (bool, error) {
 			bsl := &velerov1.BackupStorageLocation{}
-			err := runtimeCli.Get(ctx, types.NamespacedName{Namespace: "velero", Name: name}, bsl)
+			err := runtimeCli.Get(ctx, types.NamespacedName{Namespace: velerons.Namespace(), Name: name}, bsl)
 			switch {
 			case err == nil:
 				return true, nil
@@ -434,6 +435,11 @@ func Run() error {
 		// RegisterRoutes — keeps importpolicy's permission rules
 		// co-located with handlers).
 		importpolicy.RegisterRoutes(api)
+
+		// PRD-011 §4.6 AI Backup Advisor: POST /ai/score (evaluator) +
+		// GET /ai/explain/:taskId (SSE stub for the upcoming LLM
+		// explainer). See internal/api/v1/ai_routes.go.
+		v1.RegisterAIRoutes(api)
 	}
 
 	return r.Run(":8080")

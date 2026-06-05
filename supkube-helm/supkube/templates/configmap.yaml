@@ -5,5 +5,10 @@ metadata:
   labels:
     {{- include "supkube.labels" . | nindent 4 }}
 data:
-  veleroNamespace: {{ .Values.config.veleroNamespace | quote }}
+  # Resolve the Velero namespace the backend talks to. The bundled Velero
+  # subchart (chart 12.0.1) deploys into .Release.Namespace — it does NOT
+  # honor namespaceOverride — so when velero.enabled, SupKube and Velero share
+  # the release namespace and the backend must follow it. An explicit
+  # config.veleroNamespace always wins (use it for an external Velero install).
+  veleroNamespace: {{ include "supkube.veleroNamespace" . | quote }}
   logLevel: {{ .Values.config.logLevel | quote }}

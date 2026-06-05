@@ -43,6 +43,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/supkube/supkube-backend/internal/k8s"
+	"github.com/supkube/supkube-backend/internal/velerons"
 )
 
 // breakdownItem is the per-resource lightweight row. No YAML — the
@@ -184,7 +185,7 @@ func GetBackupArtifactBreakdown(c *gin.Context) {
 		return
 	}
 	backup := &velerov1.Backup{}
-	if err := rcl.Get(c.Request.Context(), client.ObjectKey{Name: name, Namespace: "velero"}, backup); err != nil {
+	if err := rcl.Get(c.Request.Context(), client.ObjectKey{Name: name, Namespace: velerons.Namespace()}, backup); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}

@@ -38,6 +38,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/supkube/supkube-backend/internal/k8s"
+	"github.com/supkube/supkube-backend/internal/velerons"
 )
 
 // ─── Action types ───────────────────────────────────────────────────────
@@ -216,7 +217,7 @@ func ListActions(c *gin.Context) {
 	// 1. Backups → Action
 	if typeFilter == "" || typeFilter == ActionTypeBackup {
 		backupList := &velerov1.BackupList{}
-		if err := cl.List(context.Background(), backupList, client.InNamespace("velero")); err != nil {
+		if err := cl.List(context.Background(), backupList, client.InNamespace(velerons.Namespace())); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "list backups: " + err.Error()})
 			return
 		}
@@ -231,7 +232,7 @@ func ListActions(c *gin.Context) {
 	// 2. Restores → Action
 	if typeFilter == "" || typeFilter == ActionTypeRestore {
 		restoreList := &velerov1.RestoreList{}
-		if err := cl.List(context.Background(), restoreList, client.InNamespace("velero")); err != nil {
+		if err := cl.List(context.Background(), restoreList, client.InNamespace(velerons.Namespace())); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "list restores: " + err.Error()})
 			return
 		}
@@ -301,7 +302,7 @@ func GetAction(c *gin.Context) {
 	switch actionType {
 	case ActionTypeBackup:
 		b := &velerov1.Backup{}
-		if err := cl.Get(context.Background(), client.ObjectKey{Name: id, Namespace: "velero"}, b); err != nil {
+		if err := cl.Get(context.Background(), client.ObjectKey{Name: id, Namespace: velerons.Namespace()}, b); err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 			return
 		}
@@ -311,7 +312,7 @@ func GetAction(c *gin.Context) {
 		})
 	case ActionTypeRestore:
 		r := &velerov1.Restore{}
-		if err := cl.Get(context.Background(), client.ObjectKey{Name: id, Namespace: "velero"}, r); err != nil {
+		if err := cl.Get(context.Background(), client.ObjectKey{Name: id, Namespace: velerons.Namespace()}, r); err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 			return
 		}
@@ -429,7 +430,7 @@ func backupToAction(b *velerov1.Backup, localSchedules map[string]bool) Action {
 func localScheduleSet(ctx context.Context, cl client.Client) map[string]bool {
 	set := map[string]bool{}
 	list := &velerov1.ScheduleList{}
-	if err := cl.List(ctx, list, client.InNamespace("velero")); err != nil {
+	if err := cl.List(ctx, list, client.InNamespace(velerons.Namespace())); err != nil {
 		return set
 	}
 	for i := range list.Items {

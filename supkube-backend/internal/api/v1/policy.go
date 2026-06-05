@@ -43,6 +43,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/supkube/supkube-backend/internal/velerons"
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -159,7 +160,7 @@ func (r *PolicyRequest) buildSchedule(role string) (*velerov1.Schedule, error) {
 	return &velerov1.Schedule{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        scheduleNameForRole(r.Name, role),
-			Namespace:   "velero",
+			Namespace:   velerons.Namespace(),
 			Labels:      labels,
 			Annotations: r.Annotations,
 		},
@@ -210,7 +211,7 @@ func findPolicy(ctx context.Context, cl client.Client, name string) (*PolicyAggr
 	// New-model lookup by label.
 	list := &velerov1.ScheduleList{}
 	if err := cl.List(ctx, list,
-		client.InNamespace("velero"),
+		client.InNamespace(velerons.Namespace()),
 		client.MatchingLabels{labelPolicyName: name},
 	); err != nil {
 		return nil, err
@@ -235,7 +236,7 @@ func findPolicy(ctx context.Context, cl client.Client, name string) (*PolicyAggr
 
 	// Legacy fallback: exact name match, no label.
 	single := &velerov1.Schedule{}
-	if err := cl.Get(ctx, client.ObjectKey{Name: name, Namespace: "velero"}, single); err != nil {
+	if err := cl.Get(ctx, client.ObjectKey{Name: name, Namespace: velerons.Namespace()}, single); err != nil {
 		return nil, err
 	}
 	return &PolicyAggregate{
@@ -310,7 +311,7 @@ func aggregateSchedulesIntoPolicies(schedules []velerov1.Schedule) []PolicyAggre
 // since the cost is negligible.
 func enrichRestorePointCounts(ctx context.Context, cl client.Client, policies []PolicyAggregate) []PolicyAggregate {
 	backupList := &velerov1.BackupList{}
-	if err := cl.List(ctx, backupList, client.InNamespace("velero")); err != nil {
+	if err := cl.List(ctx, backupList, client.InNamespace(velerons.Namespace())); err != nil {
 		// Non-fatal: leave RestorePointCount at zero. The UI gracefully
 		// shows "0" in muted style; we don't want a transient backup
 		// API hiccup to break the whole Policies page render.

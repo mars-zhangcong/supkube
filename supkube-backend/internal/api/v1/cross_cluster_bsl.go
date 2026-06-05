@@ -37,10 +37,13 @@ import (
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/supkube/supkube-backend/internal/k8s"
+	"github.com/supkube/supkube-backend/internal/velerons"
 )
 
+// veleroNS is the Velero install namespace, resolved from VELERO_NAMESPACE.
+var veleroNS = velerons.Namespace()
+
 const (
-	veleroNS = "velero"
 	// backupSyncTimeout caps how long we wait for the target cluster's
 	// Velero to surface our source Backup. Velero defaults to a 60s
 	// backupSyncPeriod, so 90s gives us a healthy headroom + accounts
