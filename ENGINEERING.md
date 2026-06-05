@@ -107,6 +107,7 @@ Rule B（并行开多 Agent）+ Rule C（共享契约单源）+ Rule G（取号�
 2. **共享序号经 LEDGER + main 集中预分配**：D-WAIT / PRD / ADR / TC 等序号经 [`LEDGER.md`](./LEDGER.md) 取号；并行场景**由 main agent 启动子 agent 前一次性预分配**，把号写进各子 agent 的 prompt（"你的号 = D-WAIT-013，不要自己取号"）。禁止 N 个子 agent 各自跑去取号 / 自占号。
 3. **并行 Agent 用 git worktree 隔离（显式默认）**：**默认每支并行部队一棵 worktree**——多个并行 agent **各自一个 `git worktree`**（独立工作目录 + 独立 HEAD/index，仅共享 .git 对象库），**禁止多个 agent 在同一 checkout / 同一分支上写**（共享工作树并发写 = 文件互踩 + 谁 commit 落在谁的 HEAD 不可控）。`git worktree add <path> <branch>`。**协调者不依赖"清场确认"**：派活/开工前自己做**物理校验**（共享文件 `mtime` 是否在动 / `.git/index.lock` / `lsof` 看活进程 cwd），用证据判定战场是否真静默——"指令说清场" ≠ "现场真清场"（2026-06-04 实测：收到"清场已确认"后，开工瞬间仍逮到 live writer 在写共享树）。
 4. **冲突先解不 fork**：发现共享文件带冲突标记 / 仓库状态异常 → **先解冲突 + 收口单源**，**不**绕开它 fork 出一份新文件（fork = 把单源碎裂问题往后拖）。无法独立解时，停下来报告（live-contended 仓库上做结构改动会再撞）。
+5. **并发顶层会话也要隔离，不只 spawn 的子 agent（2026-06-05 补）**：子条 3 原本只覆盖"协调者 spawn 的并行子部队"。但**多个独立启动的顶层交互会话**都默认 cwd=项目根，没有协调者给它们建树 → 同样会 N 个会话挤在同一 checkout 上写（实测 `agent-census.sh` §2 逮到 6 会话挤主目录）。**纪律**：任一会话开工前，若 `hack/agent-census.sh` §2 / `hack/session-isolation-guard.sh` 显示主目录已有其他活会话 → **本会话先 `hack/session-claim-worktree.sh --run` 搬进独立 worktree** 再做任何 git 写操作（checkout/commit/stage）；只读除外。**机械执行（靠墙不靠记性）**：把 `session-isolation-guard.sh` 接成 **SessionStart hook**，会话一启动就检测+告警（脚本只读、非阻断、退出码恒 0）。
 
 ### Rule J — 禁止幽灵配置（No Phantom Config，2026-06-04 立 / ADR-047）
 
