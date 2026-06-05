@@ -915,6 +915,29 @@ export default {
       one: '1 Off-site',
       immutable: '1 Immutable',
       zero: '0 Errors'
+    },
+    // PRD-010 / ADR-040 D3 — Layer 1-5 badge tooltips (vocabulary aligned to PRD-009)
+    layer: {
+      l1: { short: 'Snapshot',     tooltip: 'L1 · Local Snapshot — CSI volumesnapshot, data stays in cluster' },
+      l2: { short: 'Local BSL',    tooltip: 'L2 · Snapshot Export to local — in-cluster MinIO / NFS' },
+      l3: { short: 'Cloud',        tooltip: 'L3 · Snapshot Export to cloud — Azure Blob / S3 / OSS' },
+      l4: { short: 'Backup Copy',  tooltip: 'L4 · Backup Copy — cross-cloud rclone replica' },
+      l5: { short: 'DR Drill',     tooltip: 'L5 · Recoverability verification — periodic sandbox restore' }
+    },
+    // PRD-010 / ADR-040 D4 — Layer 5 top verification badge (4 states)
+    l5: {
+      ok:    'Verified · last drill recent',
+      warn:  'Overdue · last drill > 7d',
+      error: 'Never verified',
+      muted: 'DR Drill not enabled'
+    },
+    // PRD-010 / ADR-040 D2 — flow type labels (5 locked enum)
+    flowType: {
+      snapshot: 'Snapshot',
+      export:   'Export',
+      import:   'Import',
+      copy:     'Backup Copy',
+      restore:  'Restore'
     }
   },
   storage: {

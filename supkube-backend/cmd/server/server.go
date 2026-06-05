@@ -435,6 +435,11 @@ func Run() error {
 		// RegisterRoutes — keeps importpolicy's permission rules
 		// co-located with handlers).
 		importpolicy.RegisterRoutes(api)
+
+		// PRD-011 §4.6 AI Backup Advisor: POST /ai/score (evaluator) +
+		// GET /ai/explain/:taskId (SSE stub for the upcoming LLM
+		// explainer). See internal/api/v1/ai_routes.go.
+		v1.RegisterAIRoutes(api)
 	}
 
 	return r.Run(":8080")

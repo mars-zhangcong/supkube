@@ -887,6 +887,29 @@ export default {
       one: '1 份异地',
       immutable: '1 份不可变',
       zero: '0 错误'
+    },
+    // PRD-010 / ADR-040 D3 — 与 PRD-009 词汇对齐
+    layer: {
+      l1: { short: '本地快照',   tooltip: 'L1 · 本地快照 (Snapshot) — CSI volumesnapshot, 数据不离开集群' },
+      l2: { short: '本地 BSL',   tooltip: 'L2 · 本地 BSL (Snapshot Export to local) — 集群内 MinIO / NFS' },
+      l3: { short: '云端',       tooltip: 'L3 · 云 BSL (Snapshot Export to cloud) — Azure Blob / S3 / OSS' },
+      l4: { short: '跨云复制',   tooltip: 'L4 · 跨云复制 (Backup Copy) — rclone 跨第二朵云副本' },
+      l5: { short: 'DR 演练',     tooltip: 'L5 · 可恢复性验证 (DR Drill) — 周期性沙箱还原验证' }
+    },
+    // PRD-010 / ADR-040 D4 — 顶部"可恢复性验证徽章" 4 状态
+    l5: {
+      ok:    '已验证 · 最近完成',
+      warn:  '超期 · 距上次 > 7 天',
+      error: '从未验证',
+      muted: '未启用 DR Drill'
+    },
+    // PRD-010 / ADR-040 D2 — 数据流 5 类
+    flowType: {
+      snapshot: '快照',
+      export:   '导出',
+      import:   '导入',
+      copy:     '跨云复制',
+      restore:  '还原'
     }
   },
   storage: {
