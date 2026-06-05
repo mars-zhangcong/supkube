@@ -74,13 +74,16 @@ func ExplainStubHandler(c *gin.Context) {
 	// hand-encode (the literal has no special chars).
 	w := c.Writer
 
-	fmt.Fprintf(w,
+	if _, err := fmt.Fprintf(w,
 		"event: stub\n"+
 			"data: {\"message\":\"LLM explainer 待 PRD-011 后续单件接入, 当前是桩\","+
 			"\"taskId\":\"%s\","+
 			"\"scoreRulesVersion\":\"v1.0.0\"}\n\n",
 		escapeJSONString(taskID),
-	)
+	); err != nil {
+		// client disconnected — nothing left to stream.
+		return
+	}
 
 	// Flush after the stub frame so the client EventSource fires its
 	// onmessage handler immediately (rather than waiting for the connection
@@ -91,10 +94,12 @@ func ExplainStubHandler(c *gin.Context) {
 
 	// "done" event lets the client close gracefully — mirrors the real
 	// streaming protocol's terminator (PRD-011 §4.6 stream sample).
-	fmt.Fprint(w,
+	if _, err := fmt.Fprint(w,
 		"event: done\n"+
 			"data: {\"reason\":\"stub\"}\n\n",
-	)
+	); err != nil {
+		return
+	}
 	if flusher, ok := w.(http.Flusher); ok {
 		flusher.Flush()
 	}
