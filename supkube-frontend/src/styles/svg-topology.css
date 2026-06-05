@@ -1,0 +1,257 @@
+/*
+ * SupKube DR Topology SVG design tokens (PRD-010 / ADR-040)
+ * ─────────────────────────────────────────────────────────────────────
+ * Source of truth: 架构设计.md §ADR-040 D1-D5
+ *
+ * Why this file exists:
+ *   Before PRD-010, DRTopology.vue hard-coded every hex value:
+ *     - Cluster card stroke #c4b5fd (light purple)   ← collided with
+ *     - BSL cloud fill   #8b5cf6 (purple)            ← demo customers
+ *       could not tell the two purples apart.
+ *   ADR-040 D5 mandates that ALL color values live here as CSS
+ *   variables — the .vue file must contain ZERO #RRGGBB literals.
+ *   CI grep enforces this (TC-TOPO-005).
+ *
+ * Naming convention (ADR-040 D5):
+ *   --svg-{node|arrow|badge}-{type}-{light|dark}-{bg|stroke|fg}
+ *
+ * Color-system rules (ADR-040 D1):
+ *   - 6 node families, HSL hue distance ≥ 60° (mutually exclusive)
+ *   - Cluster   = blue   (was light purple, fixes #c4b5fd ↔ #8b5cf6 clash)
+ *   - L1 Snap   = teal-green
+ *   - L2 BSL    = orange   (was blue, now distinct from cluster)
+ *   - L3 BSL    = purple   (now SOLE owner of purple)
+ *   - L4 Copy   = pink
+ *   - L5/disabled = grey
+ *
+ * Arrow rules (ADR-040 D2):
+ *   - 5 flow types, locked enum: snapshot / export / import / copy / restore
+ *   - solid = synchronous, dashed = asynchronous
+ *   - solid triangle marker = data movement
+ *   - hollow triangle marker = data copy
+ *   - restore = curved arc, the only reverse-direction arrow
+ *
+ * Dark mode:
+ *   Activated by `html.dark` class (same hook as tokens.css), NOT
+ *   prefers-color-scheme — so the user's explicit Settings → Color
+ *   Scheme toggle wins over OS-level default.
+ */
+
+:root {
+  /* ════════════════════════════════════════════════════════════════
+   * D1 — 6 node color families (24 variables: 6 × 2 light/dark × 2 bg/stroke)
+   * ════════════════════════════════════════════════════════════════ */
+
+  /* — Cluster (blue) — physical k8s cluster, data source */
+  --svg-node-cluster-light-bg:      #dbeafe;
+  --svg-node-cluster-light-stroke:  #3b82f6;
+  --svg-node-cluster-dark-bg:       #1e3a8a;
+  --svg-node-cluster-dark-stroke:   #60a5fa;
+
+  /* — Layer 1 Local Snapshot (teal-green) — CSI snapshot, in-cluster */
+  --svg-node-snapshot-light-bg:     #d1fae5;
+  --svg-node-snapshot-light-stroke: #10b981;
+  --svg-node-snapshot-dark-bg:      #064e3b;
+  --svg-node-snapshot-dark-stroke:  #34d399;
+
+  /* — Layer 2 Local BSL (orange) — in-cluster MinIO / NFS */
+  --svg-node-bsl-local-light-bg:      #fed7aa;
+  --svg-node-bsl-local-light-stroke:  #f97316;
+  --svg-node-bsl-local-dark-bg:       #7c2d12;
+  --svg-node-bsl-local-dark-stroke:   #fb923c;
+
+  /* — Layer 3 Cloud BSL (purple) — Azure Blob / S3 / OSS */
+  --svg-node-bsl-cloud-light-bg:      #e9d5ff;
+  --svg-node-bsl-cloud-light-stroke:  #a855f7;
+  --svg-node-bsl-cloud-dark-bg:       #581c87;
+  --svg-node-bsl-cloud-dark-stroke:   #c084fc;
+
+  /* — Layer 4 Backup Copy target (pink) — 2nd-cloud rclone target */
+  --svg-node-copy-light-bg:      #fce7f3;
+  --svg-node-copy-light-stroke:  #ec4899;
+  --svg-node-copy-dark-bg:       #831843;
+  --svg-node-copy-dark-stroke:   #f472b6;
+
+  /* — Disabled-layer placeholder (grey, dashed border) */
+  --svg-node-disabled-light-bg:      #f9fafb;
+  --svg-node-disabled-light-stroke:  #9ca3af;
+  --svg-node-disabled-dark-bg:       #1f2937;
+  --svg-node-disabled-dark-stroke:   #6b7280;
+
+  /* ════════════════════════════════════════════════════════════════
+   * D2 — 5 flow-arrow styles (15 variables: 5 × {color, dash, marker})
+   * ════════════════════════════════════════════════════════════════ */
+
+  /* — snapshot: Cluster → Local Snapshot, solid blue, filled triangle */
+  --svg-arrow-snapshot-color:   #3b82f6;
+  --svg-arrow-snapshot-dash:    0;
+  --svg-arrow-snapshot-marker:  filled-triangle;
+
+  /* — export: Cluster → BSL, solid purple, filled triangle */
+  --svg-arrow-export-color:     #a855f7;
+  --svg-arrow-export-dash:      0;
+  --svg-arrow-export-marker:    filled-triangle;
+
+  /* — import: BSL → Cluster (PRD-009 ImportPolicy), dashed pink, hollow triangle */
+  --svg-arrow-import-color:     #ec4899;
+  --svg-arrow-import-dash:      4 2;
+  --svg-arrow-import-marker:    hollow-triangle;
+
+  /* — copy: Cloud BSL → Backup Copy target, dashed orange, hollow triangle */
+  --svg-arrow-copy-color:       #f97316;
+  --svg-arrow-copy-dash:        4 2;
+  --svg-arrow-copy-marker:      hollow-triangle;
+
+  /* — restore: RP → Cluster, solid green arc, filled triangle */
+  --svg-arrow-restore-color:    #10b981;
+  --svg-arrow-restore-dash:     0;
+  --svg-arrow-restore-marker:   filled-triangle;
+
+  /* ════════════════════════════════════════════════════════════════
+   * D3 — Layer 1-5 corner badges (uses node stroke + white fg)
+   * ════════════════════════════════════════════════════════════════ */
+  --svg-badge-l1-bg:     var(--svg-node-snapshot-light-stroke);
+  --svg-badge-l2-bg:     var(--svg-node-bsl-local-light-stroke);
+  --svg-badge-l3-bg:     var(--svg-node-bsl-cloud-light-stroke);
+  --svg-badge-l4-bg:     var(--svg-node-copy-light-stroke);
+  --svg-badge-l5-bg:     var(--svg-node-disabled-light-stroke);
+  --svg-badge-layer-fg:  #ffffff;
+
+  /* ════════════════════════════════════════════════════════════════
+   * D4 — Layer 5 top "DR Drill verification" badge (4 states)
+   *   ok      = within window (last drill < 7d)
+   *   warn    = overdue       (last drill > 7d)
+   *   error   = never drilled
+   *   muted   = DR Drill not enabled
+   * ════════════════════════════════════════════════════════════════ */
+  --svg-badge-l5-ok-bg:      #d1fae5;
+  --svg-badge-l5-ok-fg:      #10b981;
+  --svg-badge-l5-warn-bg:    #fed7aa;
+  --svg-badge-l5-warn-fg:    #f97316;
+  --svg-badge-l5-error-bg:   #fee2e2;
+  --svg-badge-l5-error-fg:   #dc2626;
+  --svg-badge-l5-muted-bg:   #f3f4f6;
+  --svg-badge-l5-muted-fg:   #9ca3af;
+
+  /* ════════════════════════════════════════════════════════════════
+   * Canvas chrome (background gradient, tooltip)
+   * ════════════════════════════════════════════════════════════════ */
+  --svg-canvas-bg-from:   #fafbfc;
+  --svg-canvas-bg-to:     #f5f6fa;
+  --svg-tooltip-bg:       rgba(31, 41, 55, 0.97);
+  --svg-tooltip-fg:       #ffffff;
+  --svg-tooltip-code-bg:  rgba(255, 255, 255, 0.12);
+
+  /* Misc supporting colors (capacity bar, status chips inside cards) */
+  --svg-card-bg:           #ffffff;
+  --svg-card-bg-unavail:   #fef2f2;
+  --svg-card-stroke-unavail: #fecaca;
+  --svg-cap-track:         #e5e7eb;
+  --svg-cap-fill:          #4f46e5;
+  --svg-chip-ok-fg:        #059669;
+  --svg-chip-bad-fg:       #dc2626;
+  --svg-chip-warn-fg:      #d97706;
+  --svg-chip-lock-fg:      #059669;
+  --svg-score-ok-fg:       #10b981;
+  --svg-score-bad-fg:      #d1d5db;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+ * Dark mode overrides — same token names, dark values.
+ * Activated by html.dark (matches tokens.css convention).
+ * ════════════════════════════════════════════════════════════════════ */
+html.dark {
+  /* Node families: swap to dark-mode pair for active stroke / fill */
+  --svg-badge-l1-bg:     var(--svg-node-snapshot-dark-stroke);
+  --svg-badge-l2-bg:     var(--svg-node-bsl-local-dark-stroke);
+  --svg-badge-l3-bg:     var(--svg-node-bsl-cloud-dark-stroke);
+  --svg-badge-l4-bg:     var(--svg-node-copy-dark-stroke);
+  --svg-badge-l5-bg:     var(--svg-node-disabled-dark-stroke);
+
+  /* Arrow colors stay perceptually identical — they sit on a dark
+     canvas but the hue stays the hue. We only swap the canvas + tooltip. */
+  --svg-canvas-bg-from:  #141414;
+  --svg-canvas-bg-to:    #1d1f23;
+  --svg-tooltip-bg:      rgba(229, 234, 243, 0.95);
+  --svg-tooltip-fg:      #141414;
+  --svg-tooltip-code-bg: rgba(0, 0, 0, 0.12);
+
+  --svg-card-bg:           #1d1f23;
+  --svg-card-bg-unavail:   #3a1f1f;
+  --svg-card-stroke-unavail: #7f1d1d;
+  --svg-cap-track:         #3a3e45;
+  --svg-cap-fill:          #818cf8;
+
+  --svg-badge-l5-ok-bg:    #064e3b;
+  --svg-badge-l5-ok-fg:    #34d399;
+  --svg-badge-l5-warn-bg:  #7c2d12;
+  --svg-badge-l5-warn-fg:  #fb923c;
+  --svg-badge-l5-error-bg: #7f1d1d;
+  --svg-badge-l5-error-fg: #f87171;
+  --svg-badge-l5-muted-bg: #25282d;
+  --svg-badge-l5-muted-fg: #6b7280;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+ * Component classes — applied on SVG elements in DRTopology.vue
+ * NOTE: DRTopology.vue MUST reference these classes, not raw hex.
+ *       CI verifies via TC-TOPO-005 grep.
+ * ════════════════════════════════════════════════════════════════════ */
+
+/* Node-family card backgrounds (D1) */
+.svg-node-cluster      { fill: var(--svg-node-cluster-light-bg);    stroke: var(--svg-node-cluster-light-stroke); }
+.svg-node-snapshot     { fill: var(--svg-node-snapshot-light-bg);   stroke: var(--svg-node-snapshot-light-stroke); }
+.svg-node-bsl-local    { fill: var(--svg-node-bsl-local-light-bg);  stroke: var(--svg-node-bsl-local-light-stroke); }
+.svg-node-bsl-cloud    { fill: var(--svg-node-bsl-cloud-light-bg);  stroke: var(--svg-node-bsl-cloud-light-stroke); }
+.svg-node-copy         { fill: var(--svg-node-copy-light-bg);       stroke: var(--svg-node-copy-light-stroke); }
+.svg-node-disabled     { fill: var(--svg-node-disabled-light-bg);   stroke: var(--svg-node-disabled-light-stroke); stroke-dasharray: 4 4; opacity: 0.6; }
+
+html.dark .svg-node-cluster      { fill: var(--svg-node-cluster-dark-bg);    stroke: var(--svg-node-cluster-dark-stroke); }
+html.dark .svg-node-snapshot     { fill: var(--svg-node-snapshot-dark-bg);   stroke: var(--svg-node-snapshot-dark-stroke); }
+html.dark .svg-node-bsl-local    { fill: var(--svg-node-bsl-local-dark-bg);  stroke: var(--svg-node-bsl-local-dark-stroke); }
+html.dark .svg-node-bsl-cloud    { fill: var(--svg-node-bsl-cloud-dark-bg);  stroke: var(--svg-node-bsl-cloud-dark-stroke); }
+html.dark .svg-node-copy         { fill: var(--svg-node-copy-dark-bg);       stroke: var(--svg-node-copy-dark-stroke); }
+html.dark .svg-node-disabled     { fill: var(--svg-node-disabled-dark-bg);   stroke: var(--svg-node-disabled-dark-stroke); }
+
+/* Flow-arrow style classes (D2) — 5 types, locked enum */
+.svg-arrow-snapshot { stroke: var(--svg-arrow-snapshot-color); stroke-dasharray: 0;   marker-end: url(#svg-marker-filled); }
+.svg-arrow-export   { stroke: var(--svg-arrow-export-color);   stroke-dasharray: 0;   marker-end: url(#svg-marker-filled); }
+.svg-arrow-import   { stroke: var(--svg-arrow-import-color);   stroke-dasharray: 4 2; marker-end: url(#svg-marker-hollow); }
+.svg-arrow-copy     { stroke: var(--svg-arrow-copy-color);     stroke-dasharray: 4 2; marker-end: url(#svg-marker-hollow); }
+.svg-arrow-restore  { stroke: var(--svg-arrow-restore-color);  stroke-dasharray: 0;   marker-end: url(#svg-marker-filled); }
+
+/* Layer badges (D3) — corner-of-node small rounded rect */
+.svg-badge-l1 { fill: var(--svg-badge-l1-bg); }
+.svg-badge-l2 { fill: var(--svg-badge-l2-bg); }
+.svg-badge-l3 { fill: var(--svg-badge-l3-bg); }
+.svg-badge-l4 { fill: var(--svg-badge-l4-bg); }
+.svg-badge-l5 { fill: var(--svg-badge-l5-bg); }
+.svg-badge-layer-text { fill: var(--svg-badge-layer-fg); font: 700 9px/1 'Inter', sans-serif; }
+
+/* Layer-5 verification badge (D4) — top of SVG, 4 states */
+.svg-l5-badge-ok    { fill: var(--svg-badge-l5-ok-bg);    stroke: var(--svg-badge-l5-ok-fg); }
+.svg-l5-badge-warn  { fill: var(--svg-badge-l5-warn-bg);  stroke: var(--svg-badge-l5-warn-fg); }
+.svg-l5-badge-error { fill: var(--svg-badge-l5-error-bg); stroke: var(--svg-badge-l5-error-fg); }
+.svg-l5-badge-muted { fill: var(--svg-badge-l5-muted-bg); stroke: var(--svg-badge-l5-muted-fg); }
+.svg-l5-badge-text-ok    { fill: var(--svg-badge-l5-ok-fg); }
+.svg-l5-badge-text-warn  { fill: var(--svg-badge-l5-warn-fg); }
+.svg-l5-badge-text-error { fill: var(--svg-badge-l5-error-fg); }
+.svg-l5-badge-text-muted { fill: var(--svg-badge-l5-muted-fg); }
+
+/* Canvas chrome */
+.svg-canvas-bg {
+  background: linear-gradient(135deg, var(--svg-canvas-bg-from) 0%, var(--svg-canvas-bg-to) 100%);
+}
+
+/* Capacity bar + status chips (moved out of DRTopology to keep that file
+   hex-free; CI grep ignores .css). */
+.svg-card-bg-default     { fill: var(--svg-card-bg); }
+.svg-card-bg-unavailable { fill: var(--svg-card-bg-unavail); stroke: var(--svg-card-stroke-unavail); }
+.svg-cap-track           { fill: var(--svg-cap-track); }
+.svg-cap-bar             { fill: var(--svg-cap-fill); }
+.svg-chip-ok             { fill: var(--svg-chip-ok-fg); }
+.svg-chip-bad            { fill: var(--svg-chip-bad-fg); }
+.svg-chip-warn           { fill: var(--svg-chip-warn-fg); }
+.svg-chip-lock           { fill: var(--svg-chip-lock-fg); }
+.svg-score-ok            { color: var(--svg-score-ok-fg); }
+.svg-score-bad           { color: var(--svg-score-bad-fg); }
