@@ -19,6 +19,12 @@ var kbClusterGVR = schema.GroupVersionResource{
 	Resource: "clusters",
 }
 
+var kbRestoreGVR = schema.GroupVersionResource{
+	Group:    "dataprotection.kubeblocks.io",
+	Version:  "v1alpha1",
+	Resource: "restores",
+}
+
 // gateRestoringDB checks:
 //  1. KB Cluster CR phase == "Running"
 //  2. Headless service DNS resolves (svc.<ns>.svc.cluster.local)
@@ -51,9 +57,16 @@ func gateRestoringDB(ctx context.Context, k8sCli kubernetes.Interface, dynCli dy
 }
 
 // gateRestoringApp checks that the app pod is Running + all containers Ready.
+// It uses both the caller-supplied TargetApp selector and the run-specific
+// drflow-run-id label so that multiple concurrent drill runs don't interfere.
 func gateRestoringApp(ctx context.Context, k8sCli kubernetes.Interface, r Run) error {
+	// Always scope to this run's pods via the run ID label
+	selector := labelRunID + "=" + r.ID
+	if r.TargetApp != "" {
+		selector = r.TargetApp + "," + selector
+	}
 	pods, err := k8sCli.CoreV1().Pods(r.DrillNS).List(ctx, metav1.ListOptions{
-		LabelSelector: r.TargetApp,
+		LabelSelector: selector,
 	})
 	if err != nil {
 		return fmt.Errorf("list pods(%s): %w", r.TargetApp, err)
@@ -212,45 +225,65 @@ func pgHandshake(conn net.Conn, user, pass string) error {
 	}
 }
 
-// gateValidating runs: SELECT 1 probe + row count/checksum + a negative
-// deviation injection to confirm the drill copy is truly isolated.
+// gateValidating verifies data integrity and negative deviation isolation
+// (ADR-053 D4 Q4 / PRD-017 整改②):
 //
-// For M3 baseline (ADR-053 D4/Q4), this verifies:
-//  1. DB responds to queries (SELECT 1)
-//  2. dr_seed row count and checksum match the M4 baseline
-//  3. A test INSERT on a canary table is visible (proves write isolation)
+//  1. Injects a canary row into dr_seed (idempotent — skips if already present).
+//  2. Verifies post-injection row count = 13 (12 baseline + 1 canary).
+//  3. Verifies checksum of original rows (category != 'canary') matches M1 baseline.
 //
-// The actual checksum comparison and canary INSERT are done against the
-// drill namespace DB, never against PG-Source.
+// The canary injection is the "≥1 negative deviation" that proves the drill copy is
+// truly writable and isolated from production (ADR-053 D5). All writes are confined
+// to the drill-ns DB; the production/source DB is never touched.
+//
+// Checksum SQL mirrors the M1 verification query in m1-seed-data.sql:
+//
+//	md5(string_agg(id::text || category || value || num::text ORDER BY id))
+const validateChecksum = "1efaf3e404186952d8d303932eb2f67d"
+
 func gateValidating(ctx context.Context, k8sCli kubernetes.Interface, r Run) error {
-	// Read DB credentials from the drill namespace secret
 	secret, err := k8sCli.CoreV1().Secrets(r.DrillNS).Get(ctx, r.DBSecret, metav1.GetOptions{})
 	if err != nil {
 		return fmt.Errorf("read DB secret: %w", err)
 	}
-	host := fmt.Sprintf("%s-postgresql.%s.svc.cluster.local", r.KBCluster, r.DrillNS)
 	user := string(secret.Data["username"])
 	pass := string(secret.Data["password"])
-
-	// Probe via TCP (simple connectivity check; full SQL probe via exec
-	// into a psql pod is handled by the integration test path — the gate
-	// runner itself only does the TCP probe to keep drflow dependency-free
-	// from a psql binary).
-	dialCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	conn, err := (&net.Dialer{}).DialContext(dialCtx, "tcp", host+":5432")
-	if err != nil {
-		return fmt.Errorf("DB probe (SELECT 1 equivalent): %w", err)
+	dbName := "demo"
+	if v := secret.Data["database"]; len(v) > 0 {
+		dbName = string(v)
 	}
-	_ = conn.Close()
+	addr := fmt.Sprintf("%s-postgresql.%s.svc.cluster.local:5432", r.KBCluster, r.DrillNS)
 
-	// Suppress unused variable warnings until SQL probe is wired
-	_ = user
-	_ = pass
+	// 1. Inject canary row (idempotent: skip if this run's canary already present).
+	// The canary value is keyed on run ID so multiple runs don't interfere.
+	canaryVal := "drill-" + r.ID[:8]
+	injectSQL := fmt.Sprintf(
+		`INSERT INTO dr_seed (category, value, num) SELECT 'canary', '%s', -1 WHERE NOT EXISTS (SELECT 1 FROM dr_seed WHERE value = '%s')`,
+		canaryVal, canaryVal,
+	)
+	if err := pgExec(ctx, addr, user, pass, dbName, injectSQL); err != nil {
+		return fmt.Errorf("canary injection: %w", err)
+	}
 
-	// TODO(ADR-053 D4): wire psql exec-into-pod probe for row count
-	// + MD5 checksum against M4 baseline (12 rows, 1efaf3e404186952...).
-	// For M3 scaffold, TCP connectivity is the gate; replace with SQL
-	// probe before M4 validation run.
+	// 2. Row count: 12 baseline + 1 canary = 13
+	countStr, err := pgSimpleQuery(ctx, addr, user, pass, dbName, "SELECT COUNT(*)::text FROM dr_seed")
+	if err != nil {
+		return fmt.Errorf("row count query: %w", err)
+	}
+	if countStr != "13" {
+		return fmt.Errorf("post-injection row count=%s (want 13 = 12 baseline + canary)", countStr)
+	}
+
+	// 3. Checksum of original rows only (exclude canary) must match M1 baseline.
+	// Using the exact SQL from m1-seed-data.sql verification query.
+	checksumSQL := `SELECT md5(string_agg(id::text || category || value || num::text ORDER BY id)) FROM dr_seed WHERE category != 'canary'`
+	chk, err := pgSimpleQuery(ctx, addr, user, pass, dbName, checksumSQL)
+	if err != nil {
+		return fmt.Errorf("checksum query: %w", err)
+	}
+	if chk != validateChecksum {
+		return fmt.Errorf("checksum=%s (want %s) — baseline data divergence detected", chk, validateChecksum)
+	}
+
 	return nil
 }
