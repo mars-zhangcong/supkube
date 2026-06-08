@@ -10,6 +10,7 @@ import (
 	"github.com/supkube/supkube-backend/internal/auth"
 	"github.com/supkube/supkube-backend/internal/clusterhealth"
 	"github.com/supkube/supkube-backend/internal/csi"
+	"github.com/supkube/supkube-backend/internal/drflow"
 	"github.com/supkube/supkube-backend/internal/fingerprint"
 	"github.com/supkube/supkube-backend/internal/gc"
 	"github.com/supkube/supkube-backend/internal/importpolicy"
@@ -19,6 +20,8 @@ import (
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 )
 
 func Run() error {
@@ -210,6 +213,20 @@ func Run() error {
 		log.Printf("[importpolicy] controller started")
 		ctrl.Run(context.Background())
 	}()
+
+	// ADR-053 DRFlowRunner clients. Initialized once here so the handler
+	// registration below can reference them. Failure to get a client
+	// disables the DRFlow routes rather than aborting the whole server.
+	var drflowK8s kubernetes.Interface
+	var drflowDyn dynamic.Interface
+	if k8sC, err := k8s.GetClient(); err != nil {
+		log.Printf("[drflow] kubernetes client unavailable; DRFlow routes disabled: %v", err)
+	} else if dynC, err := k8s.GetDynamicClient(); err != nil {
+		log.Printf("[drflow] dynamic client unavailable; DRFlow routes disabled: %v", err)
+	} else {
+		drflowK8s = k8sC
+		drflowDyn = dynC
+	}
 
 	// v0.8.5: Authentication. AuthCfg holds the OIDC verifier + OAuth2
 	// client; the actual discovery doc fetch is lazy (first request)
@@ -440,6 +457,13 @@ func Run() error {
 		// GET /ai/explain/:taskId (SSE stub for the upcoming LLM
 		// explainer). See internal/api/v1/ai_routes.go.
 		v1.RegisterAIRoutes(api)
+
+		// ADR-053 DRFlowRunner: POST /drflow (trigger), GET /drflow (list),
+		// GET /drflow/:id (detail). Clients injected here so the handler
+		// package stays client-free and testable without a real cluster.
+		if drflowK8s != nil && drflowDyn != nil {
+			drflow.RegisterRoutes(api, drflowK8s, drflowDyn)
+		}
 	}
 
 	return r.Run(":8080")
