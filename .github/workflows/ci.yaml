@@ -156,6 +156,42 @@ jobs:
           ignore-unfixed: true
           exit-code: "1"
 
+  factory-gate:
+    name: Factory PRR Gate (supkube)
+    runs-on: ubuntu-latest
+    # Requires a FACTORY_TOKEN secret (PAT with read access to lighthouse-factory).
+    # Without it the composite action cannot resolve the private repo.
+    # To activate: add FACTORY_TOKEN in repo Settings → Secrets and variables → Actions.
+    # Until then continue-on-error keeps CI green; factory repo CI remains the primary gate.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: mars-zhangcong/lighthouse-factory/.github/actions/factory-check@main
+        with:
+          product: supkube
+
+  zero-process-noise:
+    name: Zero Process Noise
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 产品仓不存放编号过程文档（PRD-NNN / ADR-NNN / SPRINT-x 等）——这些属于工厂仓。
+      # 规则：匹配「工厂编号命名」（PRD-数字 / ADR-数字 / SPRINT-*）的文件名即红板。
+      # 不匹配根目录既有产品文档（ENGINEERING.md / RUNBOOK.md / ROADMAP.md / PRD.md）
+      # ——这些是面向贡献者/用户的文档，不是过程管理文档。
+      - name: No numbered process docs in product repo
+        run: |
+          offenders=$(find . \( -path ./.git -o -path ./node_modules \) -prune -o -type f -print \
+            | grep -E '/(PRD-[0-9]|ADR-[0-9]|SPRINT[-_])' \
+            | grep -v 'vendor/' | grep -v '.github/' || true)
+          if [ -n "$offenders" ]; then
+            echo "::error::以下编号过程文档不应出现在产品仓（应在工厂仓 process/supkube/）："
+            echo "$offenders"
+            exit 1
+          fi
+
   helm-lint:
     name: Helm Lint
     runs-on: ubuntu-latest
