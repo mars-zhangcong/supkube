@@ -36,14 +36,14 @@ import (
 )
 
 const (
-	Namespace       = "supkube"
-	cmPrefix        = "drflow-state-"
-	labelActivity   = "supkube.io/activity"
-	labelComponent  = "supkube.io/component"
-	labelRunID      = "supkube.io/drflow-run-id"
-	labelPhase      = "supkube.io/drflow-phase"
-	reportingCtrl   = "supkube.io/drflow"
-	reportingInst   = "supkube-backend"
+	Namespace      = "supkube"
+	cmPrefix       = "drflow-state-"
+	labelActivity  = "supkube.io/activity"
+	labelComponent = "supkube.io/component"
+	labelRunID     = "supkube.io/drflow-run-id"
+	labelPhase     = "supkube.io/drflow-phase"
+	reportingCtrl  = "supkube.io/drflow"
+	reportingInst  = "supkube-backend"
 )
 
 // Phase represents the current stage of a DRFlow run.
@@ -78,13 +78,13 @@ type Run struct {
 	StartedAt   time.Time `json:"started_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 	// DrillNS is the namespace where KB Cluster + App are restored.
-	DrillNS     string    `json:"drill_ns"`
+	DrillNS string `json:"drill_ns"`
 	// TargetApp is the label selector for the app pod.
-	TargetApp   string    `json:"target_app"`
+	TargetApp string `json:"target_app"`
 	// KBCluster is the KubeBlocks Cluster CR name in DrillNS.
-	KBCluster   string    `json:"kb_cluster"`
+	KBCluster string `json:"kb_cluster"`
 	// DBSecret is the K8s Secret name with DB credentials in DrillNS.
-	DBSecret    string    `json:"db_secret"`
+	DBSecret string `json:"db_secret"`
 }
 
 // Trigger is the input to POST /api/drflow.
