@@ -76,18 +76,140 @@ func gateRestoringApp(ctx context.Context, k8sCli kubernetes.Interface, r Run) e
 	return fmt.Errorf("no Running+Ready pod matching %s in %s", r.TargetApp, r.DrillNS)
 }
 
-// gateRealigning checks that the app pod can reach the DB (TCP dial to
-// the svc on port 5432 as a lightweight connectivity probe).
-func gateRealigning(ctx context.Context, r Run) error {
-	svcAddr := fmt.Sprintf("%s-postgresql.%s.svc.cluster.local:5432", r.KBCluster, r.DrillNS)
-	dialCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	conn, err := (&net.Dialer{}).DialContext(dialCtx, "tcp", svcAddr)
+// gateRealigning verifies that the new DB credentials from the drill-namespace
+// Secret actually authenticate against the restored DB. Per ADR-052 D4 /
+// ADR-053 D3, Realigning means "App can connect with re-aligned credentials"
+// not just "port is open" — a TCP-only probe would allow a mismatched Secret
+// to silently pass here and only blow up in Validating.
+//
+// Implementation: PostgreSQL wire protocol SELECT 1. We dial the svc and send
+// a minimal StartupMessage + password exchange without needing a psql binary.
+// Failure here pins the problem to the credential/realignment layer (connection
+// refused, auth failed) vs. Validating which checks data correctness.
+func gateRealigning(ctx context.Context, k8sCli kubernetes.Interface, r Run) error {
+	secret, err := k8sCli.CoreV1().Secrets(r.DrillNS).Get(ctx, r.DBSecret, metav1.GetOptions{})
 	if err != nil {
-		return fmt.Errorf("App→DB probe to %s failed: %w", svcAddr, err)
+		return fmt.Errorf("read DB secret for realign probe: %w", err)
 	}
-	conn.Close()
+	user := string(secret.Data["username"])
+	pass := string(secret.Data["password"])
+	dbName := "demo"
+	if v := secret.Data["database"]; len(v) > 0 {
+		dbName = string(v)
+	}
+	svcAddr := fmt.Sprintf("%s-postgresql.%s.svc.cluster.local:5432", r.KBCluster, r.DrillNS)
+	return pgSelect1(ctx, svcAddr, user, pass, dbName)
+}
+
+// pgSelect1 opens a TCP connection, performs PostgreSQL MD5/cleartext auth
+// and sends SELECT 1. Returns nil on success, an error describing the
+// exact failure (TCP, auth, query) otherwise. Supports cleartext and MD5
+// password authentication (the two methods common in KB-managed clusters).
+func pgSelect1(ctx context.Context, addr, user, pass, dbName string) error {
+	dialCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
+	defer cancel()
+	conn, err := (&net.Dialer{}).DialContext(dialCtx, "tcp", addr)
+	if err != nil {
+		return fmt.Errorf("TCP dial to %s: %w", addr, err)
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(8 * time.Second)) //nolint:errcheck
+
+	// PostgreSQL startup message (protocol 3.0)
+	startup := pgStartupMessage(user, dbName)
+	if _, err := conn.Write(startup); err != nil {
+		return fmt.Errorf("write startup: %w", err)
+	}
+
+	// Read and handle server response (auth + ReadyForQuery)
+	if err := pgHandshake(conn, user, pass); err != nil {
+		return fmt.Errorf("auth probe to %s: %w", addr, err)
+	}
 	return nil
+}
+
+// pgStartupMessage builds a minimal PG3 startup packet.
+func pgStartupMessage(user, dbName string) []byte {
+	params := []byte{}
+	for _, kv := range [][2]string{{"user", user}, {"database", dbName}} {
+		params = append(params, kv[0]...)
+		params = append(params, 0)
+		params = append(params, kv[1]...)
+		params = append(params, 0)
+	}
+	params = append(params, 0) // terminator
+
+	body := make([]byte, 4+len(params))
+	// protocol version 3.0 = 0x00030000
+	body[0], body[1], body[2], body[3] = 0x00, 0x03, 0x00, 0x00
+	copy(body[4:], params)
+
+	msg := make([]byte, 4+len(body))
+	total := uint32(len(msg))
+	msg[0], msg[1], msg[2], msg[3] = byte(total>>24), byte(total>>16), byte(total>>8), byte(total)
+	copy(msg[4:], body)
+	return msg
+}
+
+// pgHandshake reads PG3 messages until ReadyForQuery or an error.
+// Handles AuthenticationOk (0), AuthenticationCleartextPassword (3),
+// AuthenticationMD5Password (5), and ErrorResponse ('E').
+func pgHandshake(conn net.Conn, user, pass string) error {
+	buf := make([]byte, 4096)
+	for {
+		if _, err := readFull(conn, buf[:1]); err != nil {
+			return fmt.Errorf("read msg type: %w", err)
+		}
+		msgType := buf[0]
+		if _, err := readFull(conn, buf[:4]); err != nil {
+			return fmt.Errorf("read msg len: %w", err)
+		}
+		msgLen := int(buf[0])<<24 | int(buf[1])<<16 | int(buf[2])<<8 | int(buf[3])
+		body := make([]byte, msgLen-4)
+		if len(body) > 0 {
+			if _, err := readFull(conn, body); err != nil {
+				return fmt.Errorf("read msg body: %w", err)
+			}
+		}
+		switch msgType {
+		case 'R': // Authentication
+			if len(body) < 4 {
+				return fmt.Errorf("short auth message")
+			}
+			authType := int(body[0])<<24 | int(body[1])<<16 | int(body[2])<<8 | int(body[3])
+			switch authType {
+			case 0: // AuthenticationOk — no password needed
+				continue
+			case 3: // CleartextPassword
+				pwMsg := pgPasswordMessage(pass)
+				if _, err := conn.Write(pwMsg); err != nil {
+					return fmt.Errorf("send cleartext password: %w", err)
+				}
+			case 5: // MD5Password — salt in body[4:8]
+				if len(body) < 8 {
+					return fmt.Errorf("short MD5 auth message")
+				}
+				salt := body[4:8]
+				md5pw := pgMD5Password(user, pass, salt)
+				pwMsg := pgPasswordMessage(md5pw)
+				if _, err := conn.Write(pwMsg); err != nil {
+					return fmt.Errorf("send MD5 password: %w", err)
+				}
+			default:
+				return fmt.Errorf("unsupported auth type %d (need scram? use KB system account)", authType)
+			}
+		case 'Z': // ReadyForQuery — handshake complete
+			return nil
+		case 'E': // ErrorResponse
+			return fmt.Errorf("PG error: %s", pgErrorMessage(body))
+		case 'S': // ParameterStatus — ignore
+			continue
+		case 'K': // BackendKeyData — ignore
+			continue
+		default:
+			return fmt.Errorf("unexpected message type %c", msgType)
+		}
+	}
 }
 
 // gateValidating runs: SELECT 1 probe + row count/checksum + a negative

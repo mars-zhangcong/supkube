@@ -21,6 +21,34 @@ const (
 // goroutines only read/write their own entry.
 var activeRuns = map[string]bool{}
 
+// RecoverInFlightRuns scans existing ConfigMaps for runs that were
+// in-progress at the time of the last server restart (ADR-053 D4 reconcile).
+// Any run in a non-terminal phase that has no active goroutine gets its
+// goroutine relaunched starting from the saved phase — so progress is
+// resumed rather than replayed from Pending.
+//
+// Call this once at server startup before the HTTP server begins serving.
+func RecoverInFlightRuns(ctx context.Context, k8sCli kubernetes.Interface, dynCli dynamic.Interface) {
+	runs, err := ListRuns(ctx, k8sCli)
+	if err != nil {
+		log.Printf("[drflow] recovery scan failed: %v", err)
+		return
+	}
+	terminal := map[Phase]bool{PhaseSucceeded: true, PhaseFailed: true}
+	for _, r := range runs {
+		if terminal[r.Phase] || activeRuns[r.ID] {
+			continue
+		}
+		run := *r
+		activeRuns[run.ID] = true
+		log.Printf("[drflow] recovering in-flight run %s (phase=%s)", run.ID, run.Phase)
+		go func() {
+			defer delete(activeRuns, run.ID)
+			resumePhases(context.Background(), k8sCli, dynCli, run)
+		}()
+	}
+}
+
 // StartRun creates a new DRFlow run and launches the runner goroutine.
 // Returns an error if a run with this ID is already active.
 func StartRun(ctx context.Context, k8sCli kubernetes.Interface, dynCli dynamic.Interface, t Trigger) (*Run, error) {
@@ -50,22 +78,49 @@ func StartRun(ctx context.Context, k8sCli kubernetes.Interface, dynCli dynamic.I
 	return &r, nil
 }
 
-// runPhases drives the linear phase progression for one run.
-// Each phase polls its gate function every gateInterval until the gate
-// passes or gateTimeout is exceeded, then advances to the next phase.
-func runPhases(ctx context.Context, k8sCli kubernetes.Interface, dynCli dynamic.Interface, r Run) {
-	phases := []struct {
+// phasePlan returns the ordered phase steps starting from the NEXT phase
+// after currentPhase. If currentPhase is Pending, all phases are included.
+// resumePhases uses this to skip already-completed phases on recovery.
+func phasePlan(ctx context.Context, k8sCli kubernetes.Interface, dynCli dynamic.Interface, r Run, currentPhase Phase) []struct {
+	next Phase
+	gate func() error
+} {
+	all := []struct {
 		next Phase
 		gate func() error
 	}{
 		{PhaseRestoringDB, func() error { return gateRestoringDB(ctx, k8sCli, dynCli, r) }},
 		{PhaseRestoringApp, func() error { return gateRestoringApp(ctx, k8sCli, r) }},
-		{PhaseRealigning, func() error { return gateRealigning(ctx, r) }},
+		{PhaseRealigning, func() error { return gateRealigning(ctx, k8sCli, r) }},
 		{PhaseValidating, func() error { return gateValidating(ctx, k8sCli, r) }},
 		{PhaseSucceeded, nil},
 	}
+	if currentPhase == PhasePending {
+		return all
+	}
+	// Find where the current phase sits and return from that step (inclusive,
+	// so the gate for the current phase is re-polled after restart — correct
+	// because the gate is idempotent and we can't know if it passed).
+	for i, step := range all {
+		if step.next == currentPhase {
+			return all[i:]
+		}
+	}
+	return all
+}
 
-	for _, step := range phases {
+// runPhases drives the linear phase progression for a new run (starts at Pending).
+func runPhases(ctx context.Context, k8sCli kubernetes.Interface, dynCli dynamic.Interface, r Run) {
+	execPhases(ctx, k8sCli, dynCli, r, PhasePending)
+}
+
+// resumePhases drives phase progression from the run's saved phase (reconcile).
+func resumePhases(ctx context.Context, k8sCli kubernetes.Interface, dynCli dynamic.Interface, r Run) {
+	execPhases(ctx, k8sCli, dynCli, r, r.Phase)
+}
+
+func execPhases(ctx context.Context, k8sCli kubernetes.Interface, dynCli dynamic.Interface, r Run, fromPhase Phase) {
+	for _, step := range phasePlan(ctx, k8sCli, dynCli, r, fromPhase) {
 		if err := advance(ctx, k8sCli, &r, step.next, step.gate); err != nil {
 			fail(ctx, k8sCli, &r, string(step.next), err.Error())
 			return

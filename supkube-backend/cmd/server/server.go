@@ -215,8 +215,8 @@ func Run() error {
 	}()
 
 	// ADR-053 DRFlowRunner clients. Initialized once here so the handler
-	// registration below can reference them. Failure to get a client
-	// disables the DRFlow routes rather than aborting the whole server.
+	// registration and recovery goroutine below can reference them.
+	// Failure to get a client disables DRFlow rather than aborting the server.
 	var drflowK8s kubernetes.Interface
 	var drflowDyn dynamic.Interface
 	if k8sC, err := k8s.GetClient(); err != nil {
@@ -226,6 +226,9 @@ func Run() error {
 	} else {
 		drflowK8s = k8sC
 		drflowDyn = dynC
+		// ADR-053 D4 reconcile: resume any runs that were in-flight before
+		// the last restart (goroutines die on restart; ConfigMaps survive).
+		go drflow.RecoverInFlightRuns(context.Background(), drflowK8s, drflowDyn)
 	}
 
 	// v0.8.5: Authentication. AuthCfg holds the OIDC verifier + OAuth2
