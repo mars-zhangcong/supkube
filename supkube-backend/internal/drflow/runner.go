@@ -57,14 +57,17 @@ func StartRun(ctx context.Context, k8sCli kubernetes.Interface, dynCli dynamic.I
 	}
 	id := generateRunID()
 	r := Run{
-		ID:        id,
-		Phase:     PhasePending,
-		StartedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-		DrillNS:   t.DrillNS,
-		TargetApp: t.TargetApp,
-		KBCluster: t.KBCluster,
-		DBSecret:  t.DBSecret,
+		ID:              id,
+		Phase:           PhasePending,
+		StartedAt:       time.Now().UTC(),
+		UpdatedAt:       time.Now().UTC(),
+		DrillNS:         t.DrillNS,
+		TargetApp:       t.TargetApp,
+		KBCluster:       t.KBCluster,
+		DBSecret:        t.DBSecret,
+		BackupName:      t.BackupName,
+		BackupNamespace: t.BackupNamespace,
+		DryRun:          t.DryRun,
 	}
 	if err := createRun(ctx, k8sCli, r); err != nil {
 		return nil, fmt.Errorf("create run CM: %w", err)
@@ -78,22 +81,32 @@ func StartRun(ctx context.Context, k8sCli kubernetes.Interface, dynCli dynamic.I
 	return &r, nil
 }
 
+// phaseStep is a single step in the DRFlow phase plan.
+type phaseStep struct {
+	next    Phase
+	trigger func() error // run once on phase entry (nil = no-op); must be idempotent
+	gate    func() error // polled until nil (nil = immediate succeed)
+}
+
 // phasePlan returns the ordered phase steps starting from the NEXT phase
 // after currentPhase. If currentPhase is Pending, all phases are included.
 // resumePhases uses this to skip already-completed phases on recovery.
-func phasePlan(ctx context.Context, k8sCli kubernetes.Interface, dynCli dynamic.Interface, r Run, currentPhase Phase) []struct {
-	next Phase
-	gate func() error
-} {
-	all := []struct {
-		next Phase
-		gate func() error
-	}{
-		{PhaseRestoringDB, func() error { return gateRestoringDB(ctx, k8sCli, dynCli, r) }},
-		{PhaseRestoringApp, func() error { return gateRestoringApp(ctx, k8sCli, r) }},
-		{PhaseRealigning, func() error { return gateRealigning(ctx, k8sCli, r) }},
-		{PhaseValidating, func() error { return gateValidating(ctx, k8sCli, r) }},
-		{PhaseSucceeded, nil},
+// Triggers are idempotent so it is safe to re-run them on reconcile restart.
+func phasePlan(ctx context.Context, k8sCli kubernetes.Interface, dynCli dynamic.Interface, r Run, currentPhase Phase) []phaseStep {
+	all := []phaseStep{
+		{
+			PhaseRestoringDB,
+			func() error { return triggerRestoringDB(ctx, dynCli, r) },
+			func() error { return gateRestoringDB(ctx, k8sCli, dynCli, r) },
+		},
+		{
+			PhaseRestoringApp,
+			func() error { return triggerRestoringApp(ctx, k8sCli, r) },
+			func() error { return gateRestoringApp(ctx, k8sCli, r) },
+		},
+		{PhaseRealigning, nil, func() error { return gateRealigning(ctx, k8sCli, r) }},
+		{PhaseValidating, nil, func() error { return gateValidating(ctx, k8sCli, r) }},
+		{PhaseSucceeded, nil, nil},
 	}
 	if currentPhase == PhasePending {
 		return all
@@ -121,7 +134,7 @@ func resumePhases(ctx context.Context, k8sCli kubernetes.Interface, dynCli dynam
 
 func execPhases(ctx context.Context, k8sCli kubernetes.Interface, dynCli dynamic.Interface, r Run, fromPhase Phase) {
 	for _, step := range phasePlan(ctx, k8sCli, dynCli, r, fromPhase) {
-		if err := advance(ctx, k8sCli, &r, step.next, step.gate); err != nil {
+		if err := advance(ctx, k8sCli, &r, step.next, step.trigger, step.gate); err != nil {
 			fail(ctx, k8sCli, &r, string(step.next), err.Error())
 			return
 		}
@@ -131,9 +144,9 @@ func execPhases(ctx context.Context, k8sCli kubernetes.Interface, dynCli dynamic
 	}
 }
 
-// advance transitions to the next phase and polls the gate until it passes
-// or gateTimeout expires.
-func advance(ctx context.Context, k8sCli kubernetes.Interface, r *Run, next Phase, gate func() error) error {
+// advance transitions to the next phase, runs the trigger once, then polls the gate
+// until it passes or gateTimeout expires. Trigger errors fail the phase immediately.
+func advance(ctx context.Context, k8sCli kubernetes.Interface, r *Run, next Phase, trigger func() error, gate func() error) error {
 	r.Phase = next
 	r.UpdatedAt = time.Now().UTC()
 	if err := updateRun(ctx, k8sCli, *r); err != nil {
@@ -141,8 +154,14 @@ func advance(ctx context.Context, k8sCli kubernetes.Interface, r *Run, next Phas
 	}
 	emitPhaseEvent(ctx, k8sCli, *r, fmt.Sprintf("DRFlow %s entered phase %s", r.ID, next))
 
+	if trigger != nil {
+		if err := trigger(); err != nil {
+			return fmt.Errorf("trigger %s: %w", next, err)
+		}
+	}
+
 	if gate == nil {
-		// Succeeded has no gate
+		// PhaseSucceeded has no gate
 		return nil
 	}
 

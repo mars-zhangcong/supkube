@@ -74,14 +74,25 @@ type Run struct {
 	KBCluster string `json:"kb_cluster"`
 	// DBSecret is the K8s Secret name with DB credentials in DrillNS.
 	DBSecret string `json:"db_secret"`
+	// BackupName is the KB Backup CR name used by the RestoringDB trigger.
+	BackupName string `json:"backup_name,omitempty"`
+	// BackupNamespace is the namespace of the Backup CR (defaults to DrillNS).
+	BackupNamespace string `json:"backup_namespace,omitempty"`
+	// DryRun disables trigger side-effects (KB Restore, Adminer deploy) for gate testing.
+	DryRun bool `json:"dry_run,omitempty"`
 }
 
 // Trigger is the input to POST /api/drflow.
 type Trigger struct {
-	DrillNS   string `json:"drill_ns"`
-	TargetApp string `json:"target_app"`
-	KBCluster string `json:"kb_cluster"`
-	DBSecret  string `json:"db_secret"`
+	DrillNS         string `json:"drill_ns"`
+	TargetApp       string `json:"target_app"`
+	KBCluster       string `json:"kb_cluster"`
+	DBSecret        string `json:"db_secret"`
+	BackupName      string `json:"backup_name"`
+	BackupNamespace string `json:"backup_namespace,omitempty"` // defaults to DrillNS
+	// DryRun skips trigger functions (KB Restore, Adminer deploy) while still
+	// polling gates. Allows verifying gate structure without real K8s mutations.
+	DryRun bool `json:"dry_run,omitempty"`
 }
 
 // Validate returns an error if required fields are missing.
@@ -97,6 +108,9 @@ func (t Trigger) Validate() error {
 	}
 	if t.DBSecret == "" {
 		return fmt.Errorf("db_secret required")
+	}
+	if !t.DryRun && t.BackupName == "" {
+		return fmt.Errorf("backup_name required (or set dry_run=true to skip restore trigger)")
 	}
 	return nil
 }
