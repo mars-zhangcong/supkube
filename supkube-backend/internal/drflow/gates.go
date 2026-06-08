@@ -112,7 +112,7 @@ func pgSelect1(ctx context.Context, addr, user, pass, dbName string) error {
 	if err != nil {
 		return fmt.Errorf("TCP dial to %s: %w", addr, err)
 	}
-	defer conn.Close()
+	defer conn.Close()                                //nolint:errcheck
 	conn.SetDeadline(time.Now().Add(8 * time.Second)) //nolint:errcheck
 
 	// PostgreSQL startup message (protocol 3.0)
@@ -242,7 +242,7 @@ func gateValidating(ctx context.Context, k8sCli kubernetes.Interface, r Run) err
 	if err != nil {
 		return fmt.Errorf("DB probe (SELECT 1 equivalent): %w", err)
 	}
-	conn.Close()
+	_ = conn.Close()
 
 	// Suppress unused variable warnings until SQL probe is wired
 	_ = user

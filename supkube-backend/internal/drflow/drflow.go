@@ -30,7 +30,6 @@
 package drflow
 
 import (
-	"context"
 	"fmt"
 	"time"
 )
@@ -58,16 +57,6 @@ const (
 	PhaseSucceeded    Phase = "Succeeded"
 	PhaseFailed       Phase = "Failed"
 )
-
-// phaseOrder defines the linear progression (index = step number).
-var phaseOrder = []Phase{
-	PhasePending,
-	PhaseRestoringDB,
-	PhaseRestoringApp,
-	PhaseRealigning,
-	PhaseValidating,
-	PhaseSucceeded,
-}
 
 // Run holds the complete state of one DRFlow drill run.
 type Run struct {
@@ -114,8 +103,3 @@ func (t Trigger) Validate() error {
 
 // cmName returns the ConfigMap name for a given run ID.
 func cmName(runID string) string { return cmPrefix + runID }
-
-// contextFor returns a context with a per-gate deadline.
-func contextFor(parent context.Context, d time.Duration) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(parent, d)
-}
