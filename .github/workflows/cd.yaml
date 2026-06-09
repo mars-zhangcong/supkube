@@ -1,20 +1,20 @@
 name: CD
 
-# 发布管道 (2026-06-04 Mars 修订 ADR-042):
-#   职责收窄为 **只构建多架构镜像并推 ACR**。自动部署到集群已**退役**。
-#     - push to main      → 构建 0.0.0-dev-<sha> 镜像推 ACR
-#     - tag v*            → 构建 <version> 镜像推 ACR
-#     - workflow_dispatch → 手动触发构建
+# 发布管道 (2026-06-09 Mars 修订)：
+#   build-push → 构建多架构镜像推 ACR（所有触发）。
+#   deploy-dev → **仅 dev** 自动滚动更新 aks-jumborca-dev（push main 时）。
+#     - push to main      → 构建 0.0.0-dev-<sha> 镜像推 ACR + 自动部署 aks-dev
+#     - tag v*            → 构建 <version> 镜像推 ACR（test/prod 不在此自动部署）
+#     - workflow_dispatch → 只构建
 #
-# 为什么退役自动部署（Mars 2026-06-04 决策）：
-#   部署所需的环境参数（每集群 kubeconfig + 完整 helm 命令 + publicURL 等）属
-#   **运维配置、与研发代码无关**，集中放在本地 **CD/ 文件夹**（gitignore，含凭据；
-#   以后接 CMDB）。GH runner 读不到本地 CD/，故部署改为 **operator 从 CD/ 手跑**：
-#       见 CD/deploy-commands.md（dev/test/prod/homelab 完整命令，复制即用）。
-#   历史教训：cd.yaml 内联 deploy 步因缺 auth.dex.publicURL（无安全默认、属环境参数）
-#   每次 push 都红——把环境参数硬塞进 CI 流水线是错位，故收窄 CI 只管构建。
+# 为什么 dev 部署加回 CI（2026-06-09，修订 2026-06-04 ADR-042 的「部署全退役」）：
+#   当初退役是因为**环境参数不固定**（kubeconfig/publicURL 无安全默认，硬塞 CI 每次 push 都红）。
+#   现在 **aks-dev 环境已固定**（LB IP=4.144.200.141 稳定、publicURL 固定），dev 的部署参数
+#   不再是变量，可安全内联。dev kubeconfig 走 GH secret（KUBECONFIG_AKS_DEV），runner 读不到本地 CD/。
+#   **客户/现场环境仍是 on-site 安装，不走此 job**——各自 kubeconfig + publicURL，由现场 operator
+#   跑 CD/deploy-commands.md。test/prod 同样仍走 operator（环境参数各异，未固定）。
 #
-# 关联：ADR-042（架构设计.md §9，待同步「部署退役」修订）· CD/README.md · RUNBOOK.md。
+# 关联：ADR-042（架构设计.md §9，本次修订「dev 部署加回 CI」）· CD/README.md · CD/deploy-commands.md。
 on:
   push:
     branches: ["main"]
@@ -111,3 +111,49 @@ jobs:
           echo "$backend_media"  | grep -q "manifest.list" || { echo "::error::backend:$V 不是 manifest list (single-arch 推上去会 ImagePullBackOff / exec format error 在 wrong-arch 节点)"; exit 1; }
           echo "$frontend_media" | grep -q "manifest.list" || { echo "::error::frontend:$V 不是 manifest list"; exit 1; }
           echo "✅ backend + frontend 双架构 manifest list verified"
+
+  # ─────────────── 部署到 aks-dev（2026-06-09 修订：dev 环境参数已固定，部署加回 CI）───────────────
+  # 仅 dev：push main 自动滚动更新 aks-jumborca-dev。dev 的环境参数现已固定（LB IP/publicURL 稳定），
+  # 不再是 ADR-042 当初退役的“不固定环境参数”。**客户/现场环境是 on-site 安装，不走此 job**
+  # （各自的 kubeconfig + publicURL，由现场 operator 跑 CD/deploy-commands.md）。
+  # 前置（一次性，Mars 配）：GitHub Actions secret KUBECONFIG_AKS_DEV = base64(CD/kubeconfigs/aks-dev.yaml)。
+  #   生成: base64 -i CD/kubeconfigs/aks-dev.yaml | pbcopy  → 贴进 repo Settings▸Secrets▸Actions。
+  deploy-dev:
+    name: Deploy → aks-jumborca-dev (dev only)
+    needs: build-push
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'  # 仅 push main，tag/dispatch 不部署
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 写入 dev kubeconfig（来自 secret，runner 读不到本地 CD/）
+        run: |
+          if [ -z "${{ secrets.KUBECONFIG_AKS_DEV }}" ]; then
+            echo "::error::缺 secret KUBECONFIG_AKS_DEV——先配: base64 -i CD/kubeconfigs/aks-dev.yaml 贴进 repo Secrets"; exit 1
+          fi
+          echo "${{ secrets.KUBECONFIG_AKS_DEV }}" | base64 -d > /tmp/kubeconfig-dev.yaml
+          chmod 600 /tmp/kubeconfig-dev.yaml
+
+      - uses: azure/setup-helm@v4
+
+      - name: helm upgrade → aks-dev（dev 固定参数）
+        env:
+          KUBECONFIG: /tmp/kubeconfig-dev.yaml
+          VERSION: ${{ needs.build-push.outputs.version }}
+        run: |
+          helm repo add vmware-tanzu https://vmware-tanzu.github.io/helm-charts
+          helm dependency build supkube-helm/supkube
+          helm upgrade --install supkube supkube-helm/supkube \
+            -n supkube --create-namespace \
+            --set eula.accept=true \
+            --set backend.image.repository=${{ env.ACR_LOGIN_SERVER }}/backend  --set backend.image.tag="$VERSION" \
+            --set frontend.image.repository=${{ env.ACR_LOGIN_SERVER }}/frontend --set frontend.image.tag="$VERSION" \
+            --set service.frontend.type=LoadBalancer \
+            --set auth.dex.publicURL=http://4.144.200.141 \
+            --wait --timeout 15m --burst-limit 300
+
+      - name: 验证（Rule D：version/buildStamp 应变新）
+        run: |
+          export KUBECONFIG=/tmp/kubeconfig-dev.yaml
+          kubectl -n supkube rollout status deploy/supkube-frontend --timeout=120s
+          curl -sf http://4.144.200.141/api/v1/status
