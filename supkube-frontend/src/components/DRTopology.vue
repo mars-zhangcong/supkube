@@ -147,7 +147,7 @@
                 rx="8"
               />
               <text :x="14" :y="24" class="dr-card-title">
-                <title>{{ cluster.name }}</title>{{ truncate(cluster.name, 28) }}
+                <title>{{ cluster.name }}</title>{{ truncate(cluster.name, titleMax(cluster)) }}
               </text>
               <text v-if="cluster.isCurrent" :x="cluster.width - 14" :y="24" text-anchor="end" class="dr-card-badge">
                 ★ {{ t('topology.current') }}
@@ -461,6 +461,12 @@ const orphanBSLs = computed(() => {
 // ──────────────────────────────────────────────────────────────────
 function truncate(name, max = 28) {
   return name && name.length > max ? name.slice(0, max) + '…' : name
+}
+// 标题可容字符数:按卡片宽度算,主集群卡要给右上「★ 主集群」标签留位,否则标题会顶上去。
+// 14px 粗体 Inter ≈ 8px/字符;左边距 x=14;有标签时右侧预留 ~82px(★+3 CJK+间距)。
+function titleMax(c) {
+  const reserve = c.isCurrent ? 82 : 24
+  return Math.max(8, Math.floor((c.width - 14 - reserve) / 8))
 }
 
 // ──────────────────────────────────────────────────────────────────
