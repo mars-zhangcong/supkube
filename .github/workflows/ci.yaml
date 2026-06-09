@@ -159,17 +159,25 @@ jobs:
   factory-gate:
     name: Factory PRR Gate (supkube)
     runs-on: ubuntu-latest
-    # Requires a FACTORY_TOKEN secret (PAT with read access to lighthouse-factory).
-    # Without it the composite action cannot resolve the private repo.
-    # To activate: add FACTORY_TOKEN in repo Settings → Secrets and variables → Actions.
-    # Until then continue-on-error keeps CI green; factory repo CI remains the primary gate.
-    continue-on-error: true
+    # 工厂 PRR 闸：clone lighthouse-factory 跑 `factory check --product supkube`。
+    # 需 FACTORY_TOKEN（对私有 lighthouse-factory 有读权限的 PAT）。
+    # **没配 → 本 job 跳过（中性，不挡合并）**；工厂仓自身 CI 仍是主闸。
+    # 修复（2026-06-09）：原先 `uses:` 一个未发布的私有 composite action，会在 action 解析阶段就
+    # 失败（continue-on-error 管不到 setup 阶段）→ 永久红挡 PR。改为 if-token 守门 + 直接 clone 跑 check。
+    if: ${{ secrets.FACTORY_TOKEN != '' }}
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: mars-zhangcong/lighthouse-factory/.github/actions/factory-check@main
+      - name: Clone lighthouse-factory
+        uses: actions/checkout@v4
         with:
-          product: supkube
+          repository: mars-zhangcong/lighthouse-factory
+          token: ${{ secrets.FACTORY_TOKEN }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+
+      - name: factory check --product supkube
+        run: cd backend && LF_ROOT="$GITHUB_WORKSPACE" go run ./cmd/factory check --product supkube
 
   zero-process-noise:
     name: Zero Process Noise
