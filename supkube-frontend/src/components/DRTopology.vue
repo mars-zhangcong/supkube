@@ -146,7 +146,9 @@
                 :height="cluster.height"
                 rx="8"
               />
-              <text :x="14" :y="24" class="dr-card-title">{{ cluster.name }}</text>
+              <text :x="14" :y="24" class="dr-card-title">
+                <title>{{ cluster.name }}</title>{{ truncate(cluster.name, 28) }}
+              </text>
               <text v-if="cluster.isCurrent" :x="cluster.width - 14" :y="24" text-anchor="end" class="dr-card-badge">
                 ★ {{ t('topology.current') }}
               </text>
@@ -453,6 +455,13 @@ const orphanBSLs = computed(() => {
     return !hasFlow && b.rpCount === 0
   })
 })
+
+// ──────────────────────────────────────────────────────────────────
+// Helpers
+// ──────────────────────────────────────────────────────────────────
+function truncate(name, max = 28) {
+  return name && name.length > max ? name.slice(0, max) + '…' : name
+}
 
 // ──────────────────────────────────────────────────────────────────
 // Layout math
