@@ -165,19 +165,31 @@ func GetBackupErrors(c *gin.Context) {
 	needResults := (bk.Status.Errors > 0 && len(resp.Errors) == 0) || bk.Status.Warnings > 0
 	if needResults {
 		res, ferr := fetchBackupDetailedResults(context.Background(), name)
-		if ferr != nil {
-			appendFetchErr(&resp, "fetch <backup>-results.gz: "+ferr.Error())
-		} else {
-			// Only take results.gz errors when the CR-level scan found none, so
-			// the same failure is not double-counted from two sources.
-			if bk.Status.Errors > 0 && len(resp.Errors) == 0 {
-				resp.Errors = append(resp.Errors, flattenResultSection(res.Errors)...)
-			}
-			resp.Warnings = append(resp.Warnings, flattenResultSection(res.Warnings)...)
-		}
+		mergeBackupResults(&resp, bk.Status.Errors, res, ferr)
 	}
 
 	c.JSON(http.StatusOK, resp)
+}
+
+// mergeBackupResults folds a <backup>-results.gz fetch outcome into resp.
+//
+// On fetch error it records a fetchError breadcrumb and leaves Errors as-is —
+// NEVER a silent "0 errors" when the Backup CR said there were some (the
+// v0.8.8.1 anti-pattern, ADR-024 §11.3). On success it adds results.gz errors
+// only when the CR-level scan (DataUpload/PVB) found none, so the same failure
+// is not double-counted from two sources; warnings are always added.
+func mergeBackupResults(resp *BackupErrorsResponse, statusErrors int, res *VeleroRestoreResults, ferr error) {
+	if ferr != nil {
+		appendFetchErr(resp, "fetch <backup>-results.gz: "+ferr.Error())
+		return
+	}
+	if res == nil {
+		return
+	}
+	if statusErrors > 0 && len(resp.Errors) == 0 {
+		resp.Errors = append(resp.Errors, flattenResultSection(res.Errors)...)
+	}
+	resp.Warnings = append(resp.Warnings, flattenResultSection(res.Warnings)...)
 }
 
 // flattenResultSection turns one Velero results.gz section (engine / cluster /
