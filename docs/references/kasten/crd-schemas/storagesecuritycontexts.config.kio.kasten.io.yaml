@@ -1,0 +1,112 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  creationTimestamp: "2026-05-23T07:21:17Z"
+  generation: 1
+  name: storagesecuritycontexts.config.kio.kasten.io
+  resourceVersion: "274374"
+  uid: 1e965912-a058-4653-b248-df8bbb1d3ff5
+spec:
+  conversion:
+    strategy: None
+  group: config.kio.kasten.io
+  names:
+    kind: StorageSecurityContext
+    listKind: StorageSecurityContextList
+    plural: storagesecuritycontexts
+    singular: storagesecuritycontext
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - jsonPath: .status.validation
+      name: Status
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: StorageSecurityContext is the Schema for the storagesecuritycontext
+          API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: StorageSecurityContextSpec defines the desired state of StorageSecurityContext
+            properties:
+              security:
+                description: StorageSecurityContextSpecSecurity defines security context
+                  for K10 to perform operations on the desired storage
+                properties:
+                  groupId:
+                    format: int64
+                    type: integer
+                  supplementalGroups:
+                    items:
+                      format: int64
+                      type: integer
+                    type: array
+                  userId:
+                    format: int64
+                    type: integer
+                type: object
+            required:
+            - security
+            type: object
+          status:
+            description: StorageSecurityContextStatus defines the observed state of
+              StorageSecurityContext
+            properties:
+              error:
+                description: List of errors with validation
+                items:
+                  type: string
+                type: array
+              validation:
+                description: Validation status
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: StorageSecurityContext
+    listKind: StorageSecurityContextList
+    plural: storagesecuritycontexts
+    singular: storagesecuritycontext
+  conditions:
+  - lastTransitionTime: "2026-05-23T07:21:17Z"
+    message: no conflicts found
+    reason: NoConflicts
+    status: "True"
+    type: NamesAccepted
+  - lastTransitionTime: "2026-05-23T07:21:17Z"
+    message: the initial names have been accepted
+    reason: InitialNamesAccepted
+    status: "True"
+    type: Established
+  storedVersions:
+  - v1alpha1

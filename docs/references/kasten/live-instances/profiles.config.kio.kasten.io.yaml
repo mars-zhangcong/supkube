@@ -1,0 +1,33 @@
+apiVersion: v1
+items:
+- apiVersion: config.kio.kasten.io/v1alpha1
+  kind: Profile
+  metadata:
+    creationTimestamp: "2026-05-26T08:17:11Z"
+    generation: 2
+    name: azure-blob-demo
+    namespace: kasten-io
+    resourceVersion: "1457591"
+    uid: 5fd95f58-0fa7-486d-895d-db8070813117
+  spec:
+    locationSpec:
+      credential:
+        secret:
+          apiVersion: v1
+          kind: secret
+          name: k10secret-nmh2n
+          namespace: kasten-io
+        secretType: AzStorageAccount
+      objectStore:
+        name: k10-backup
+        objectStoreType: AZ
+        path: k10/d456241a-3711-4383-86cc-44c0f91dd654/migration
+        pathType: Directory
+      type: ObjectStore
+    type: Location
+  status:
+    hash: 2931714983
+    validation: Success
+kind: List
+metadata:
+  resourceVersion: ""
