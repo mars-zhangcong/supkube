@@ -1,0 +1,852 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  creationTimestamp: "2026-05-23T07:21:14Z"
+  generation: 1
+  name: profiles.config.kio.kasten.io
+  resourceVersion: "274342"
+  uid: f60cd97b-af2f-4c69-b61b-2458837ff632
+spec:
+  conversion:
+    strategy: None
+  group: config.kio.kasten.io
+  names:
+    kind: Profile
+    listKind: ProfileList
+    plural: profiles
+    singular: profile
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.validation
+      name: Status
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Profile is the Schema for the profiles API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ProfileSpec defines the desired state of Profile
+            properties:
+              export:
+                description: Export
+                properties:
+                  credential:
+                    description: Secret
+                    properties:
+                      secret:
+                        description: Secret
+                        properties:
+                          apiVersion:
+                            description: API version of the referent.
+                            type: string
+                          kind:
+                            description: Kind
+                            type: string
+                          name:
+                            description: Name
+                            type: string
+                          namespace:
+                            description: Namespace
+                            type: string
+                        required:
+                        - apiVersion
+                        - kind
+                        - name
+                        - namespace
+                        type: object
+                      secretType:
+                        description: Secret Type
+                        type: string
+                    required:
+                    - secret
+                    - secretType
+                    type: object
+                  destinationAccount:
+                    description: Destination account
+                    type: string
+                  infraPortable:
+                    description: Default is false
+                    type: boolean
+                  location:
+                    description: Location
+                    properties:
+                      fileStore:
+                        description: File store
+                        properties:
+                          claimName:
+                            description: Persistent Volume Claim name
+                            type: string
+                          path:
+                            description: Path inside the root mount path
+                            type: string
+                          suppGroup:
+                            description: Supplementary group ID to be used for the
+                              location
+                            format: int64
+                            type: integer
+                        type: object
+                      imageRepo:
+                        description: ImageRepo store
+                        properties:
+                          endpoint:
+                            description: Endpoint used to access the object store
+                            type: string
+                          skipSSLVerify:
+                            description: Default is false
+                            type: boolean
+                        type: object
+                      objectStore:
+                        description: Object store
+                        properties:
+                          endpoint:
+                            description: Endpoint used to access the object store
+                            type: string
+                          name:
+                            description: Name of the container (bucket) in the object
+                              store
+                            type: string
+                          objectStoreType:
+                            description: Object store type
+                            type: string
+                          path:
+                            description: Path inside the container
+                            type: string
+                          pathType:
+                            description: Whether the path points to a directory or
+                              an object
+                            type: string
+                          protectionPeriod:
+                            description: Protection period to be applied when protecting
+                              objects in this bucket
+                            type: string
+                          region:
+                            description: Region for a location
+                            type: string
+                          skipSSLVerify:
+                            description: Default is false
+                            type: boolean
+                        required:
+                        - name
+                        - objectStoreType
+                        type: object
+                      type:
+                        description: Type
+                        type: string
+                      vbr:
+                        description: VBR store
+                        properties:
+                          repoId:
+                            description: VBR repository identifier (handled internally)
+                            type: string
+                          repoName:
+                            description: VBR repository name
+                            type: string
+                          repoType:
+                            description: VBR repository type (handled internally)
+                            type: string
+                          serverAddress:
+                            description: VBR server address
+                            type: string
+                          serverId:
+                            description: VBR server identifier (handled internally)
+                            type: string
+                          serverPort:
+                            description: VBR server port (default is 9419)
+                            type: integer
+                          serverThumbprint:
+                            description: VBR server TLS certificate thumbprint (handled
+                              internally)
+                            type: string
+                          serverVersion:
+                            description: VBR server build version (handled internally)
+                            type: string
+                          skipSSLVerify:
+                            description: Skip SSL cert verification (default is false)
+                            type: boolean
+                          vmbApiPort:
+                            description: VMB API port (handled internally)
+                            type: integer
+                        type: object
+                    required:
+                    - type
+                    type: object
+                  role:
+                    description: Role that provides write privileges to a bucket
+                    type: string
+                required:
+                - credential
+                - location
+                type: object
+              import:
+                description: Import
+                properties:
+                  credential:
+                    description: Secret
+                    properties:
+                      secret:
+                        description: Secret
+                        properties:
+                          apiVersion:
+                            description: API version of the referent.
+                            type: string
+                          kind:
+                            description: Kind
+                            type: string
+                          name:
+                            description: Name
+                            type: string
+                          namespace:
+                            description: Namespace
+                            type: string
+                        required:
+                        - apiVersion
+                        - kind
+                        - name
+                        - namespace
+                        type: object
+                      secretType:
+                        description: Secret Type
+                        type: string
+                    required:
+                    - secret
+                    - secretType
+                    type: object
+                  location:
+                    description: Location
+                    properties:
+                      fileStore:
+                        description: File store
+                        properties:
+                          claimName:
+                            description: Persistent Volume Claim name
+                            type: string
+                          path:
+                            description: Path inside the root mount path
+                            type: string
+                          suppGroup:
+                            description: Supplementary group ID to be used for the
+                              location
+                            format: int64
+                            type: integer
+                        type: object
+                      imageRepo:
+                        description: ImageRepo store
+                        properties:
+                          endpoint:
+                            description: Endpoint used to access the object store
+                            type: string
+                          skipSSLVerify:
+                            description: Default is false
+                            type: boolean
+                        type: object
+                      objectStore:
+                        description: Object store
+                        properties:
+                          endpoint:
+                            description: Endpoint used to access the object store
+                            type: string
+                          name:
+                            description: Name of the container (bucket) in the object
+                              store
+                            type: string
+                          objectStoreType:
+                            description: Object store type
+                            type: string
+                          path:
+                            description: Path inside the container
+                            type: string
+                          pathType:
+                            description: Whether the path points to a directory or
+                              an object
+                            type: string
+                          protectionPeriod:
+                            description: Protection period to be applied when protecting
+                              objects in this bucket
+                            type: string
+                          region:
+                            description: Region for a location
+                            type: string
+                          skipSSLVerify:
+                            description: Default is false
+                            type: boolean
+                        required:
+                        - name
+                        - objectStoreType
+                        type: object
+                      type:
+                        description: Type
+                        type: string
+                      vbr:
+                        description: VBR store
+                        properties:
+                          repoId:
+                            description: VBR repository identifier (handled internally)
+                            type: string
+                          repoName:
+                            description: VBR repository name
+                            type: string
+                          repoType:
+                            description: VBR repository type (handled internally)
+                            type: string
+                          serverAddress:
+                            description: VBR server address
+                            type: string
+                          serverId:
+                            description: VBR server identifier (handled internally)
+                            type: string
+                          serverPort:
+                            description: VBR server port (default is 9419)
+                            type: integer
+                          serverThumbprint:
+                            description: VBR server TLS certificate thumbprint (handled
+                              internally)
+                            type: string
+                          serverVersion:
+                            description: VBR server build version (handled internally)
+                            type: string
+                          skipSSLVerify:
+                            description: Skip SSL cert verification (default is false)
+                            type: boolean
+                          vmbApiPort:
+                            description: VMB API port (handled internally)
+                            type: integer
+                        type: object
+                    required:
+                    - type
+                    type: object
+                  role:
+                    description: Role that provides read privileges from a bucket
+                    type: string
+                required:
+                - credential
+                - location
+                type: object
+              infra:
+                description: Infra
+                properties:
+                  aws:
+                    description: AWS
+                    properties:
+                      disableEBSDirectForBlockMode:
+                        description: Disables access to the EBS Direct API for block
+                          mode operations
+                        type: boolean
+                      hasAccessForEBS:
+                        description: |-
+                          Profile has permissions for EBS via EC2 client.
+                          Deprecated: Use infra profile status parameters instead.
+                        type: boolean
+                      hasAccessForEFS:
+                        description: |-
+                          Profile has Access for EFS.
+                          Deprecated: Use infra profile status parameters instead.
+                        type: boolean
+                    type: object
+                  azure:
+                    description: Azure
+                    properties:
+                      ADEndpoint:
+                        description: AzureAD Endpoint
+                        type: string
+                      ADResource:
+                        description: AzureAD Resource
+                        type: string
+                      cloudEnv:
+                        description: Azure Cloud Environment
+                        type: string
+                      credentialType:
+                        description: Credential Type
+                        type: string
+                      resourceGroup:
+                        description: Resource Group
+                        type: string
+                      resourceManagerEndpoint:
+                        description: Azure Resource Manager Endpoint
+                        type: string
+                      subscriptionID:
+                        description: Subscription ID
+                        type: string
+                      useDefaultMSI:
+                        description: Intent of using default Azure MSI ID
+                        type: boolean
+                      useFederatedIdentity:
+                        description: Intent of using Azure Federated Identity
+                        type: boolean
+                    type: object
+                  credential:
+                    description: Credential
+                    properties:
+                      secret:
+                        description: Secret
+                        properties:
+                          apiVersion:
+                            description: API version of the referent.
+                            type: string
+                          kind:
+                            description: Kind
+                            type: string
+                          name:
+                            description: Name
+                            type: string
+                          namespace:
+                            description: Namespace
+                            type: string
+                        required:
+                        - apiVersion
+                        - kind
+                        - name
+                        - namespace
+                        type: object
+                      secretType:
+                        description: Secret Type
+                        type: string
+                    required:
+                    - secret
+                    - secretType
+                    type: object
+                  openStack:
+                    description: OpenStack
+                    properties:
+                      cinderEndpoint:
+                        description: Cinder endpoint
+                        type: string
+                      keystoneEndpoint:
+                        description: Keystone endpoint
+                        type: string
+                    type: object
+                  portworx:
+                    description: Portworx
+                    properties:
+                      namespace:
+                        description: Portworx service namespace
+                        type: string
+                      serviceName:
+                        description: Portworx service name
+                        type: string
+                    type: object
+                  type:
+                    description: Type
+                    type: string
+                  vsphere:
+                    description: VSphere
+                    properties:
+                      guestClusterName:
+                        description: |-
+                          Name of the guest cluster if available.
+                          This is set automatically by the vSphere profile validator.
+                        type: string
+                      guestClusterUid:
+                        description: |-
+                          ID of the guest cluster if available.
+                          This is set automatically by the vSphere profile validator.
+                        type: string
+                      paraVirtualizedVolumes:
+                        description: |-
+                          Indicator set if operating with para-virtualized PersistentVolumes.
+                          This is set automatically by the vSphere profile validator.
+                        type: boolean
+                      serverAddress:
+                        description: VSphere Server Address
+                        type: string
+                    type: object
+                type: object
+              kanister:
+                description: Kanister
+                properties:
+                  credential:
+                    description: Secret
+                    properties:
+                      secret:
+                        description: Secret
+                        properties:
+                          apiVersion:
+                            description: API version of the referent.
+                            type: string
+                          kind:
+                            description: Kind
+                            type: string
+                          name:
+                            description: Name
+                            type: string
+                          namespace:
+                            description: Namespace
+                            type: string
+                        required:
+                        - apiVersion
+                        - kind
+                        - name
+                        - namespace
+                        type: object
+                      secretType:
+                        description: Secret Type
+                        type: string
+                    required:
+                    - secret
+                    - secretType
+                    type: object
+                  location:
+                    description: Location
+                    properties:
+                      fileStore:
+                        description: File store
+                        properties:
+                          claimName:
+                            description: Persistent Volume Claim name
+                            type: string
+                          path:
+                            description: Path inside the root mount path
+                            type: string
+                          suppGroup:
+                            description: Supplementary group ID to be used for the
+                              location
+                            format: int64
+                            type: integer
+                        type: object
+                      imageRepo:
+                        description: ImageRepo store
+                        properties:
+                          endpoint:
+                            description: Endpoint used to access the object store
+                            type: string
+                          skipSSLVerify:
+                            description: Default is false
+                            type: boolean
+                        type: object
+                      objectStore:
+                        description: Object store
+                        properties:
+                          endpoint:
+                            description: Endpoint used to access the object store
+                            type: string
+                          name:
+                            description: Name of the container (bucket) in the object
+                              store
+                            type: string
+                          objectStoreType:
+                            description: Object store type
+                            type: string
+                          path:
+                            description: Path inside the container
+                            type: string
+                          pathType:
+                            description: Whether the path points to a directory or
+                              an object
+                            type: string
+                          protectionPeriod:
+                            description: Protection period to be applied when protecting
+                              objects in this bucket
+                            type: string
+                          region:
+                            description: Region for a location
+                            type: string
+                          skipSSLVerify:
+                            description: Default is false
+                            type: boolean
+                        required:
+                        - name
+                        - objectStoreType
+                        type: object
+                      type:
+                        description: Type
+                        type: string
+                      vbr:
+                        description: VBR store
+                        properties:
+                          repoId:
+                            description: VBR repository identifier (handled internally)
+                            type: string
+                          repoName:
+                            description: VBR repository name
+                            type: string
+                          repoType:
+                            description: VBR repository type (handled internally)
+                            type: string
+                          serverAddress:
+                            description: VBR server address
+                            type: string
+                          serverId:
+                            description: VBR server identifier (handled internally)
+                            type: string
+                          serverPort:
+                            description: VBR server port (default is 9419)
+                            type: integer
+                          serverThumbprint:
+                            description: VBR server TLS certificate thumbprint (handled
+                              internally)
+                            type: string
+                          serverVersion:
+                            description: VBR server build version (handled internally)
+                            type: string
+                          skipSSLVerify:
+                            description: Skip SSL cert verification (default is false)
+                            type: boolean
+                          vmbApiPort:
+                            description: VMB API port (handled internally)
+                            type: integer
+                        type: object
+                    required:
+                    - type
+                    type: object
+                required:
+                - credential
+                - location
+                type: object
+              locationSpec:
+                description: Location
+                properties:
+                  credential:
+                    description: Secret
+                    properties:
+                      secret:
+                        description: Secret
+                        properties:
+                          apiVersion:
+                            description: API version of the referent.
+                            type: string
+                          kind:
+                            description: Kind
+                            type: string
+                          name:
+                            description: Name
+                            type: string
+                          namespace:
+                            description: Namespace
+                            type: string
+                        required:
+                        - apiVersion
+                        - kind
+                        - name
+                        - namespace
+                        type: object
+                      secretType:
+                        description: Secret Type
+                        type: string
+                    required:
+                    - secret
+                    - secretType
+                    type: object
+                  fileStore:
+                    description: File store
+                    properties:
+                      claimName:
+                        description: Persistent Volume Claim name
+                        type: string
+                      path:
+                        description: Path inside the root mount path
+                        type: string
+                      suppGroup:
+                        description: Supplementary group ID to be used for the location
+                        format: int64
+                        type: integer
+                    type: object
+                  imageRepo:
+                    description: ImageRepo store
+                    properties:
+                      endpoint:
+                        description: Endpoint used to access the object store
+                        type: string
+                      skipSSLVerify:
+                        description: Default is false
+                        type: boolean
+                    type: object
+                  infraPortable:
+                    description: |-
+                      Default is false
+                      Temporary flag to maintain backwards compatibility
+                    type: boolean
+                  objectStore:
+                    description: Object store
+                    properties:
+                      endpoint:
+                        description: Endpoint used to access the object store
+                        type: string
+                      name:
+                        description: Name of the container (bucket) in the object
+                          store
+                        type: string
+                      objectStoreType:
+                        description: Object store type
+                        type: string
+                      path:
+                        description: Path inside the container
+                        type: string
+                      pathType:
+                        description: Whether the path points to a directory or an
+                          object
+                        type: string
+                      protectionPeriod:
+                        description: Protection period to be applied when protecting
+                          objects in this bucket
+                        type: string
+                      region:
+                        description: Region for a location
+                        type: string
+                      skipSSLVerify:
+                        description: Default is false
+                        type: boolean
+                    required:
+                    - name
+                    - objectStoreType
+                    type: object
+                  type:
+                    description: Type
+                    type: string
+                  vbr:
+                    description: VBR store
+                    properties:
+                      repoId:
+                        description: VBR repository identifier (handled internally)
+                        type: string
+                      repoName:
+                        description: VBR repository name
+                        type: string
+                      repoType:
+                        description: VBR repository type (handled internally)
+                        type: string
+                      serverAddress:
+                        description: VBR server address
+                        type: string
+                      serverId:
+                        description: VBR server identifier (handled internally)
+                        type: string
+                      serverPort:
+                        description: VBR server port (default is 9419)
+                        type: integer
+                      serverThumbprint:
+                        description: VBR server TLS certificate thumbprint (handled
+                          internally)
+                        type: string
+                      serverVersion:
+                        description: VBR server build version (handled internally)
+                        type: string
+                      skipSSLVerify:
+                        description: Skip SSL cert verification (default is false)
+                        type: boolean
+                      vmbApiPort:
+                        description: VMB API port (handled internally)
+                        type: integer
+                    type: object
+                required:
+                - type
+                type: object
+              type:
+                description: Profile purpose
+                type: string
+            required:
+            - type
+            type: object
+          status:
+            description: ProfileStatus defines the observed state of Profile
+            properties:
+              error:
+                description: List of errors with validation
+                items:
+                  type: string
+                type: array
+              hash:
+                description: Hash of Spec
+                format: int32
+                type: integer
+              infra:
+                description: Infrastructure profile status
+                properties:
+                  aws:
+                    description: AWS
+                    properties:
+                      hasAccessForEBS:
+                        description: Profile has permissions for EBS via EC2 client
+                        type: boolean
+                      hasAccessForEBSDirect:
+                        description: Profile has access to the EBS Direct API
+                        type: boolean
+                      hasAccessForEFS:
+                        description: Profile has Access for EFS
+                        type: boolean
+                    type: object
+                type: object
+              kanisterProfileCR:
+                description: |-
+                  Kanister profile CR this profile references. This is created
+                  and managed by the controller.
+                properties:
+                  apiVersion:
+                    description: API version of the referent.
+                    type: string
+                  kind:
+                    description: Kind
+                    type: string
+                  name:
+                    description: Name
+                    type: string
+                  namespace:
+                    description: Namespace
+                    type: string
+                required:
+                - apiVersion
+                - kind
+                - name
+                - namespace
+                type: object
+              validation:
+                description: True if validation succeeded
+                type: string
+              warning:
+                description: List of warnings with validation
+                items:
+                  type: string
+                type: array
+            type: object
+        required:
+        - spec
+        type: object
+        x-kubernetes-validations:
+        - message: name must be 63 characters or fewer to be usable as a Kubernetes
+            label value
+          optionalOldSelf: true
+          rule: oldSelf.hasValue() || size(self.metadata.name) <= 63
+    served: true
+    storage: true
+    subresources: {}
+status:
+  acceptedNames:
+    kind: Profile
+    listKind: ProfileList
+    plural: profiles
+    singular: profile
+  conditions:
+  - lastTransitionTime: "2026-05-23T07:21:14Z"
+    message: no conflicts found
+    reason: NoConflicts
+    status: "True"
+    type: NamesAccepted
+  - lastTransitionTime: "2026-05-23T07:21:15Z"
+    message: the initial names have been accepted
+    reason: InitialNamesAccepted
+    status: "True"
+    type: Established
+  storedVersions:
+  - v1alpha1

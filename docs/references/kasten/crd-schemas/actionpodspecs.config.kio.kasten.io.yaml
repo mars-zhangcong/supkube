@@ -1,0 +1,97 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  creationTimestamp: "2026-05-23T07:21:09Z"
+  generation: 1
+  name: actionpodspecs.config.kio.kasten.io
+  resourceVersion: "274200"
+  uid: e65c0216-29cd-4b5d-bc1a-ef53315c30b3
+spec:
+  conversion:
+    strategy: None
+  group: config.kio.kasten.io
+  names:
+    kind: ActionPodSpec
+    listKind: ActionPodSpecList
+    plural: actionpodspecs
+    singular: actionpodspec
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.validation
+      name: Status
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          ActionPodSpec is the Schema for the ActionPodSpec API
+          used for setting up ephemeral pod specs in gradual way.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+          status:
+            description: ActionPodSpecStatus defines the observed state of ActionPodSpec
+            properties:
+              error:
+                description: List of errors with validation
+                items:
+                  type: string
+                type: array
+              observedGeneration:
+                description: Object generation last observed by the controller
+                format: int64
+                type: integer
+              validation:
+                description: True if validation succeeded
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ActionPodSpec
+    listKind: ActionPodSpecList
+    plural: actionpodspecs
+    singular: actionpodspec
+  conditions:
+  - lastTransitionTime: "2026-05-23T07:21:09Z"
+    message: no conflicts found
+    reason: NoConflicts
+    status: "True"
+    type: NamesAccepted
+  - lastTransitionTime: "2026-05-23T07:21:09Z"
+    message: the initial names have been accepted
+    reason: InitialNamesAccepted
+    status: "True"
+    type: Established
+  storedVersions:
+  - v1alpha1

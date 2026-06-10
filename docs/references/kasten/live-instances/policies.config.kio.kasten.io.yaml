@@ -1,0 +1,108 @@
+apiVersion: v1
+items:
+- apiVersion: config.kio.kasten.io/v1alpha1
+  kind: Policy
+  metadata:
+    creationTimestamp: "2026-05-27T04:40:25Z"
+    generation: 2
+    name: demo-vm1-backup
+    namespace: kasten-io
+    resourceVersion: "2690841"
+    uid: bf4602dc-624a-4064-b146-442165bc9244
+  spec:
+    actions:
+    - action: backup
+      backupParameters:
+        filters: {}
+        profile:
+          name: azure-blob-demo
+          namespace: kasten-io
+    - action: export
+      exportParameters:
+        exportData:
+          enabled: true
+        frequency: '@onDemand'
+        migrationToken:
+          name: demo-vm1-backup-migration-token
+          namespace: kasten-io
+        profile:
+          name: azure-blob-demo
+          namespace: kasten-io
+        receiveString: bIzAPpoanmErnnNroUh9z5YjH1A9JBG52QyP+3MaT8A/buteyHmWR86eXuW1p/ZpIzW3zKuNGU+u7zELhTr9mXcD9R5IdrKtW4Dxsd6x8senoZ5X6yFSBBapya7XEoFWTK0TrmBtxrpO4LOQ7NzrlQqxA47ZixIesU7pNgqzzseNyrs0JhiTymiU7Hr5FEJgw5JKcY/wpVgb00o3MTiL9929XXSzHSjrpihH94zbaJdioYyeZS3AdosMu6SFyo31LZ3NZqudZdpnWDmx8FdpqCfb9cSFZ/vJ6R2SBCUtCURpQ2LC+Slw5HWvuJ2Yt8I8lAEkfI8e0yJbl4d5zW/PVbQdrucMM0sA6dpw3JD5uP6mhRqQ3IyYv3F80gLp2HE34pmlN5Ye2/P8XD58zoa8KAil0awSBezjvkWqiNACFCJBluFbLsOVNzo7VkbWje65fEa86fwreO3aEEJQ719rB3u9iIFk7bdxPCLvNTldo40IvhEUixeKIR9dPmdYAcq3yOnCilOGZDR+SaOSQDaYiC1o
+    createdBy: kasten-io:dashboardbff-svc
+    frequency: '@onDemand'
+    lastModifyHash: 2903638195
+    selector:
+      matchExpressions:
+      - key: k10.kasten.io/virtualMachineRef
+        operator: In
+        values:
+        - demo-vm1/*
+  status:
+    hash: 2791822268
+    specModifiedTime: "2026-05-27T04:40:25Z"
+    validation: Success
+- apiVersion: config.kio.kasten.io/v1alpha1
+  kind: Policy
+  metadata:
+    creationTimestamp: "2026-06-10T03:29:57Z"
+    generation: 2
+    name: k10-system-reports-policy
+    namespace: kasten-io
+    resourceVersion: "23296707"
+    uid: 3ad28a4f-24e1-4803-ba4f-d9894f077d1f
+  spec:
+    actions:
+    - action: report
+      reportParameters:
+        statsIntervalDays: 1
+    comment: The policy for enabling auto-generated reports.
+    createdBy: kasten-io:dashboardbff-svc
+    frequency: '@daily'
+    lastModifyHash: 127085328
+    selector: {}
+  status:
+    hash: 2931568582
+    specModifiedTime: "2026-06-10T03:29:57Z"
+    validation: Success
+- apiVersion: config.kio.kasten.io/v1alpha1
+  kind: Policy
+  metadata:
+    creationTimestamp: "2026-05-26T08:19:11Z"
+    generation: 2
+    name: protect-ubuntu-demo
+    namespace: kasten-io
+    resourceVersion: "1459635"
+    uid: f1f3046d-5217-4869-9154-03f39ec889af
+  spec:
+    actions:
+    - action: backup
+    - action: export
+      exportParameters:
+        exportData:
+          enabled: true
+        frequency: '@onDemand'
+        migrationToken:
+          name: protect-ubuntu-demo-migration-token
+          namespace: kasten-io
+        profile:
+          name: azure-blob-demo
+          namespace: kasten-io
+        receiveString: bIzAPpoanmE19Hshi09So+1LRjVJFQ7dlBOg1kUndqoIOLB7lk+2XM+ZP9CmhK8MDwDWzKuNGU+u7zELhTr9p24ftyc1A7qKR9yq3/Oo0sKklpo20nlMEy6ps43IIb9WYpwk4xpp0uRMlbOQ7Nz1/wL7KYn252l26CudBxXXg9ii540JH3KknDOxskzZD0NnoqdZUtaViW1600o3MTiL9929XXSzHSjrpihH94zbaJdioYyeZS3AdosMu6SFyo31LZ3NZqudZdpnWDmx8FdpqCfb9cSFZ/vJ6R2SBCUtCURpQ2LC+Slw5HWvuJ2Yt8I8lAEkfI8e0yJbl4d5zW/PVbQdrucMM0sA6dpw3JD5uP6mhRqQ3IyYv3F80gLp2HE34o2yNY1WzurgBD5ow5m8dU7snrNRXabHpkGn/pNQNWkJ0cZGM9SPYShlDRDS0anvPxSWqaxsVPvjAU5W2Ql5WTzpkN818r1tbXGydzkE/s1GuB0Mjh2HAxNAI1hSHZvklvrEKEfWUwniKuqAcqB9EOVGAk4Xvw
+    createdBy: kasten-io:dashboardbff-svc
+    frequency: '@onDemand'
+    lastModifyHash: 3204851781
+    selector:
+      matchExpressions:
+      - key: k10.kasten.io/appNamespace
+        operator: In
+        values:
+        - demo-vm
+        - kasten-io-cluster
+  status:
+    hash: 4022140365
+    specModifiedTime: "2026-05-26T08:19:11Z"
+    validation: Success
+kind: List
+metadata:
+  resourceVersion: ""

@@ -1,0 +1,102 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  creationTimestamp: "2026-05-23T07:21:15Z"
+  generation: 1
+  name: reports.reporting.kio.kasten.io
+  resourceVersion: "274346"
+  uid: 5d34a181-6d82-47b5-9b6e-5a601a87ef3a
+spec:
+  conversion:
+    strategy: None
+  group: reporting.kio.kasten.io
+  names:
+    kind: Report
+    listKind: ReportList
+    plural: reports
+    singular: report
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .results.licensing.status
+      name: License
+      type: string
+    - jsonPath: .results.policies.k10DR.status
+      name: DR
+      type: string
+    - jsonPath: .results.compliance.compliantCount
+      name: Compliant
+      priority: 1
+      type: integer
+    - jsonPath: .results.compliance.nonCompliantCount
+      name: Non-Compliant
+      priority: 1
+      type: integer
+    - jsonPath: .results.compliance.unmanagedCount
+      name: Unmanaged
+      priority: 1
+      type: integer
+    - jsonPath: .results.compliance.applicationCount
+      name: Total
+      priority: 1
+      type: integer
+    - format: date-time
+      jsonPath: .spec.reportTimestamp
+      name: Report Time
+      type: string
+    - jsonPath: .spec.reportTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Report contains the findings of a report.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          results:
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+          spec:
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+        type: object
+    served: true
+    storage: true
+    subresources: {}
+status:
+  acceptedNames:
+    kind: Report
+    listKind: ReportList
+    plural: reports
+    singular: report
+  conditions:
+  - lastTransitionTime: "2026-05-23T07:21:15Z"
+    message: no conflicts found
+    reason: NoConflicts
+    status: "True"
+    type: NamesAccepted
+  - lastTransitionTime: "2026-05-23T07:21:16Z"
+    message: the initial names have been accepted
+    reason: InitialNamesAccepted
+    status: "True"
+    type: Established
+  storedVersions:
+  - v1alpha1

@@ -1,0 +1,110 @@
+apiVersion: v1
+items:
+- actions:
+    backup:
+      kind: VirtualMachine
+      name: ""
+      outputArtifacts:
+        snapshot:
+          keyValue:
+            backupIdentifier: '{{ .Phases.backupToObjectStore.Output.backupID }}'
+            backupPath: '{{ .Options.mountPath }}'
+            funcVersion: '{{ .Phases.backupToObjectStore.Output.version }}'
+            objectStorePath: '{{ .Options.objectStorePath }}'
+            phySize: '{{ .Phases.backupToObjectStore.Output.phySize }}'
+            size: '{{ .Phases.backupToObjectStore.Output.size }}'
+      phases:
+      - args:
+          backupArtifactPrefix: '{{ .Options.objectStorePath }}'
+          container: kanister-sidecar
+          encryptionKey: '{{ .Secrets.artifactKey.Data.key | toString }}'
+          includePath: '{{ .Options.mountPath }}'
+          namespace: '{{ .VirtualMachine.Namespace }}'
+          pod: '{{ .Options.pod }}'
+          snapshotTags: '{{ .Options.snapshotTags }}'
+        func: BackupData
+        name: backupToObjectStore
+    backupToServer:
+      kind: VirtualMachine
+      name: ""
+      outputArtifacts:
+        snapshot:
+          keyValue:
+            backupIdentifier: '{{ .Phases.backupToServer.Output.backupID }}'
+            backupPath: '{{ .Options.mountPath }}'
+            funcVersion: '{{ .Phases.backupToServer.Output.version }}'
+            objectStorePath: '{{ .Options.objectStorePath }}'
+            phySize: '{{ .Phases.backupToServer.Output.phySize }}'
+            size: '{{ .Phases.backupToServer.Output.size }}'
+      phases:
+      - args:
+          certData: '{{ .Secrets.certs.Data | toJson }}'
+          container: kanister-sidecar
+          includePath: '{{ .Options.mountPath }}'
+          namespace: '{{ .VirtualMachine.Namespace }}'
+          pod: '{{ .Options.pod }}'
+          serverAddress: '{{ .Options.serverAddress }}'
+          serverPassphrase: '{{ .Secrets.serverPassphraseKey.Data.serverPassphraseKey
+            | toString }}'
+          snapshotTags: '{{ .Options.snapshotTags }}'
+          userPassphrase: '{{ index .Secrets.userPassphraseKey.Data .Options.hostName
+            | toString }}'
+        func: BackupDataToServer
+        name: backupToServer
+    restore:
+      inputArtifactNames:
+      - snapshot
+      kind: PVC
+      name: ""
+      phases:
+      - args:
+          backupArtifactPrefix: '{{ .ArtifactsIn.snapshot.KeyValue.objectStorePath
+            }}'
+          backupIdentifier: '{{ .ArtifactsIn.snapshot.KeyValue.backupIdentifier }}'
+          encryptionKey: '{{ .Secrets.artifactKey.Data.key | toString }}'
+          image: gcr.io/kasten-images/kanister-tools:8.5.9
+          namespace: '{{ .PVC.Namespace }}'
+          restorePath: '{{ .ArtifactsIn.snapshot.KeyValue.backupPath }}'
+          volumes:
+            '{{ .PVC.Name }}':
+              MountPath: '{{ .ArtifactsIn.snapshot.KeyValue.backupPath }}'
+              ReadOnly: false
+        func: RestoreData
+        name: restoreFromObjectStore
+    restoreFromServer:
+      inputArtifactNames:
+      - snapshot
+      kind: PVC
+      name: ""
+      phases:
+      - args:
+          backupIdentifier: '{{ .ArtifactsIn.snapshot.KeyValue.backupIdentifier }}'
+          certData: '{{ .Secrets.certs.Data | toJson }}'
+          image: gcr.io/kasten-images/kanister-tools:8.5.9
+          namespace: '{{ .PVC.Namespace }}'
+          restorePath: '{{ .ArtifactsIn.snapshot.KeyValue.backupPath }}'
+          serverAddress: '{{ .Options.serverAddress }}'
+          serverPassphrase: '{{ .Secrets.serverPassphraseKey.Data.serverPassphraseKey
+            | toString }}'
+          userPassphrase: '{{ index .Secrets.userPassphraseKey.Data .Options.hostName
+            | toString }}'
+          volumes:
+            '{{ .PVC.Name }}':
+              MountPath: '{{ .ArtifactsIn.snapshot.KeyValue.backupPath }}'
+              ReadOnly: false
+        func: RestoreDataFromServer
+        name: restoreFromServer
+  apiVersion: cr.kanister.io/v1alpha1
+  kind: Blueprint
+  metadata:
+    creationTimestamp: "2026-05-26T08:47:53Z"
+    generation: 1
+    labels:
+      kasten.io/createdBy: k10
+    name: k10-virtualmachine-generic-volume-8.5.9
+    namespace: kasten-io
+    resourceVersion: "1488679"
+    uid: dcca21d0-f619-417e-a180-189e739a15ce
+kind: List
+metadata:
+  resourceVersion: ""
