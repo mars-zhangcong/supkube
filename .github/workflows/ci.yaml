@@ -156,21 +156,6 @@ jobs:
           ignore-unfixed: true
           exit-code: "1"
 
-  factory-gate:
-    name: Factory PRR Gate (supkube)
-    runs-on: ubuntu-latest
-    # Requires a FACTORY_TOKEN secret (PAT with read access to lighthouse-factory).
-    # Without it the composite action cannot resolve the private repo.
-    # To activate: add FACTORY_TOKEN in repo Settings → Secrets and variables → Actions.
-    # Until then continue-on-error keeps CI green; factory repo CI remains the primary gate.
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: mars-zhangcong/lighthouse-factory/.github/actions/factory-check@main
-        with:
-          product: supkube
-
   zero-process-noise:
     name: Zero Process Noise
     runs-on: ubuntu-latest
