@@ -43,9 +43,24 @@ type VeleroRestoreResults struct {
 	Warnings VeleroResultSection `json:"warnings"`
 }
 
-// fetchRestoreDetailedResults performs the DownloadRequest dance and returns
-// the parsed results. The DownloadRequest is best-effort cleaned up on exit
-// so we don't accumulate stale CRs over time.
+// fetchRestoreDetailedResults fetches the per-namespace results for a Restore.
+func fetchRestoreDetailedResults(ctx context.Context, restoreName string) (*VeleroRestoreResults, error) {
+	return fetchDetailedResults(ctx, restoreName, velerov1.DownloadTargetKindRestoreResults)
+}
+
+// fetchBackupDetailedResults fetches the per-namespace results for a Backup.
+// Velero stores them at `backups/<name>/<backup>-<name>-results.gz` in the BSL,
+// in the exact same JSON shape as restore results (errors/warnings sections).
+// This is the v0.9 source that surfaces "Completed with N error(s)" detail the
+// Backup CR only carries as a count — see backup_errors.go.
+func fetchBackupDetailedResults(ctx context.Context, backupName string) (*VeleroRestoreResults, error) {
+	return fetchDetailedResults(ctx, backupName, velerov1.DownloadTargetKindBackupResults)
+}
+
+// fetchDetailedResults performs the DownloadRequest dance for either a Backup or
+// a Restore (selected by kind) and returns the parsed results. The
+// DownloadRequest is best-effort cleaned up on exit so we don't accumulate
+// stale CRs over time.
 //
 // Why insecureSkipVerify on the HTTP client: in-cluster BSLs (MinIO, MAYbe
 // self-signed S3 gateways) typically use HTTP or self-signed TLS. The
@@ -53,15 +68,15 @@ type VeleroRestoreResults struct {
 // public certificate authority. A future hardening pass (v0.8) will resolve
 // the BSL's `caCert` and trust it explicitly; for now the URL is short-lived
 // (~10 min) and only reachable from within the cluster.
-func fetchRestoreDetailedResults(ctx context.Context, restoreName string) (*VeleroRestoreResults, error) {
+func fetchDetailedResults(ctx context.Context, name string, kind velerov1.DownloadTargetKind) (*VeleroRestoreResults, error) {
 	cl, err := k8s.GetRuntimeClient()
 	if err != nil {
 		return nil, fmt.Errorf("k8s client: %w", err)
 	}
 
 	// Per-request unique name (DownloadRequest names must be DNS-1123).
-	// Truncate restoreName so the prefix + timestamp fits in 253 chars.
-	prefix := restoreName
+	// Truncate name so the prefix + timestamp fits in 253 chars.
+	prefix := name
 	if len(prefix) > 200 {
 		prefix = prefix[:200]
 	}
@@ -77,8 +92,8 @@ func fetchRestoreDetailedResults(ctx context.Context, restoreName string) (*Vele
 		},
 		Spec: velerov1.DownloadRequestSpec{
 			Target: velerov1.DownloadTarget{
-				Kind: velerov1.DownloadTargetKindRestoreResults,
-				Name: restoreName,
+				Kind: kind,
+				Name: name,
 			},
 		},
 	}
@@ -113,7 +128,7 @@ func fetchRestoreDetailedResults(ctx context.Context, restoreName string) (*Vele
 		time.Sleep(500 * time.Millisecond)
 	}
 	if downloadURL == "" {
-		return nil, fmt.Errorf("Velero did not populate DownloadRequest.status.downloadURL within 20s — restore-results.gz may not exist yet")
+		return nil, fmt.Errorf("timed out after 20s waiting for DownloadRequest.status.downloadURL — %s results.gz may not exist yet", kind)
 	}
 
 	// Download + gunzip + decode.
