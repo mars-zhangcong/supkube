@@ -15,6 +15,13 @@ RUN=0; [ "${1:-}" = "--run" ] && RUN=1
 BASE=/private/tmp
 git fetch origin --quiet 2>/dev/null || true
 
+# 已合并 PR 的分支(含 squash 合并):内容已在 main,属"残枝",不再建 worktree。
+# 修"领先 main"假阳性 —— squash 合并的分支 rev-list 仍领先,但活早落地了。
+MERGED_HEADS=""
+if command -v gh >/dev/null 2>&1; then
+  MERGED_HEADS=$(gh pr list --state merged --limit 300 --json headRefName -q '.[].headRefName' 2>/dev/null || true)
+fi
+
 echo "# ── worktree 预分配方案（一分支一棵树，base=$BASE）──"
 n_plan=0
 for b in $(git for-each-ref --format='%(refname:short)' refs/remotes/origin \
@@ -22,6 +29,10 @@ for b in $(git for-each-ref --format='%(refname:short)' refs/remotes/origin \
   sb=${b#origin/}
   ahead=$(git rev-list --count "origin/main..$b" 2>/dev/null || echo 0)
   [ "$ahead" -gt 0 ] 2>/dev/null || continue          # 只给领先 main 的分支建
+  # 残枝过滤:已有 merged PR(含 squash)→ 内容在 main,跳过(别被假"领先"骗)。
+  if [ -n "$MERGED_HEADS" ] && printf '%s\n' "$MERGED_HEADS" | grep -qxF "$sb"; then
+    echo "# 跳过 $sb —— 已有 merged PR(squash 残枝,内容已在 main,建议删分支)"; continue
+  fi
   slug=$(printf '%s' "$sb" | tr '/' '-')
   wt="$BASE/sk-$slug"
 
