@@ -13,14 +13,16 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-// triggerRestoringDB creates a KB Restore CR in DrillNS to restore the database
-// from the named backup into a new KB Cluster (ADR-052 D5, method A).
+// triggerRestoringDB creates a KB Cluster CR with the kubeblocks.io/restore-from-backup
+// annotation in DrillNS (ADR-052 D5 method B — corrected from standalone Restore CR).
+//
+// KB operator sees the annotation and provisions the cluster, restoring data from the
+// named backup. This produces the Running Cluster that gateRestoringDB polls for.
 //
 // Safety invariants (ADR-053 D5):
-//   - All objects are created in DrillNS only.
-//   - Every created object is labeled with labelRunID=r.ID so cleanup can
-//     identify and guard against deleting non-drflow resources.
-//   - Idempotent: if the Restore CR already exists, this is a no-op.
+//   - Cluster is created in DrillNS only.
+//   - Labeled with labelRunID=r.ID for cleanup guarding.
+//   - Idempotent: if the Cluster already exists, this is a no-op.
 //   - DryRun=true skips the Create entirely for gate-only testing.
 func triggerRestoringDB(ctx context.Context, dynCli dynamic.Interface, r Run) error {
 	if r.DryRun {
@@ -28,43 +30,71 @@ func triggerRestoringDB(ctx context.Context, dynCli dynamic.Interface, r Run) er
 		return nil
 	}
 
-	restoreName := "drflow-restore-" + r.ID[:8]
 	backupNS := r.BackupNamespace
 	if backupNS == "" {
 		backupNS = r.DrillNS
 	}
 
-	// Idempotent: check if Restore CR already exists
-	_, err := dynCli.Resource(kbRestoreGVR).Namespace(r.DrillNS).Get(ctx, restoreName, metav1.GetOptions{})
+	// Idempotent: check if Cluster already exists (handles restart/reconcile)
+	_, err := dynCli.Resource(kbClusterGVR).Namespace(r.DrillNS).Get(ctx, r.KBCluster, metav1.GetOptions{})
 	if err == nil {
-		log.Printf("[drflow] %s: Restore %s/%s already exists, skipping create", r.ID, r.DrillNS, restoreName)
+		log.Printf("[drflow] %s: Cluster %s/%s already exists, skipping create", r.ID, r.DrillNS, r.KBCluster)
 		return nil
 	}
 
-	restore := &unstructured.Unstructured{Object: map[string]interface{}{
-		"apiVersion": "dataprotection.kubeblocks.io/v1alpha1",
-		"kind":       "Restore",
+	// restore-from-backup annotation: KB creates cluster + restores data in one step.
+	// Component name "postgresql" matches componentSpecs[].name below.
+	restoreAnnotation := fmt.Sprintf(
+		`{"postgresql":{"name":%q,"namespace":%q,"volumeRestorePolicy":"Parallel"}}`,
+		r.BackupName, backupNS,
+	)
+
+	cluster := &unstructured.Unstructured{Object: map[string]interface{}{
+		"apiVersion": "apps.kubeblocks.io/v1alpha1",
+		"kind":       "Cluster",
 		"metadata": map[string]interface{}{
-			"name":      restoreName,
+			"name":      r.KBCluster,
 			"namespace": r.DrillNS,
 			"labels": map[string]interface{}{
 				labelRunID:     r.ID,
 				labelComponent: "drflow",
 				labelActivity:  "true",
 			},
+			"annotations": map[string]interface{}{
+				"kubeblocks.io/restore-from-backup": restoreAnnotation,
+			},
 		},
 		"spec": map[string]interface{}{
-			"backup": map[string]interface{}{
-				"name":      r.BackupName,
-				"namespace": backupNS,
-			},
-			"prepareDataConfig": map[string]interface{}{
-				"volumeClaimRestorePolicy": "Parallel",
-				"restoreVolumeClaimsTemplate": map[string]interface{}{
-					"storageClassName": "managed-csi",
+			"clusterDef":        "postgresql",
+			"topology":          "replication",
+			"terminationPolicy": "Delete",
+			"componentSpecs": []interface{}{
+				map[string]interface{}{
+					"name":           "postgresql",
+					"serviceVersion": "16.9.0",
+					"replicas":       int64(2),
 					"resources": map[string]interface{}{
 						"requests": map[string]interface{}{
-							"storage": "20Gi",
+							"cpu":    "500m",
+							"memory": "1Gi",
+						},
+						"limits": map[string]interface{}{
+							"cpu":    "2",
+							"memory": "2Gi",
+						},
+					},
+					"volumeClaimTemplates": []interface{}{
+						map[string]interface{}{
+							"name": "data",
+							"spec": map[string]interface{}{
+								"storageClassName": "managed-csi",
+								"accessModes":      []interface{}{"ReadWriteOnce"},
+								"resources": map[string]interface{}{
+									"requests": map[string]interface{}{
+										"storage": "20Gi",
+									},
+								},
+							},
 						},
 					},
 				},
@@ -72,11 +102,12 @@ func triggerRestoringDB(ctx context.Context, dynCli dynamic.Interface, r Run) er
 		},
 	}}
 
-	_, err = dynCli.Resource(kbRestoreGVR).Namespace(r.DrillNS).Create(ctx, restore, metav1.CreateOptions{})
+	_, err = dynCli.Resource(kbClusterGVR).Namespace(r.DrillNS).Create(ctx, cluster, metav1.CreateOptions{})
 	if err != nil {
-		return fmt.Errorf("create KB Restore %s/%s: %w", r.DrillNS, restoreName, err)
+		return fmt.Errorf("create KB Cluster %s/%s with restore annotation: %w", r.DrillNS, r.KBCluster, err)
 	}
-	log.Printf("[drflow] %s: created KB Restore %s/%s from backup %s/%s", r.ID, r.DrillNS, restoreName, backupNS, r.BackupName)
+	log.Printf("[drflow] %s: created KB Cluster %s/%s with restore-from-backup annotation (backup=%s/%s)",
+		r.ID, r.DrillNS, r.KBCluster, backupNS, r.BackupName)
 	return nil
 }
 
