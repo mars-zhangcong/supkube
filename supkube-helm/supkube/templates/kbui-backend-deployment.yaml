@@ -1,0 +1,49 @@
+{{- if .Values.kbAddon.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "supkube.fullname" . }}-kbui-backend
+  labels:
+    {{- include "supkube.labels" . | nindent 4 }}
+    app.kubernetes.io/component: kbui-backend
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "supkube.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: kbui-backend
+  template:
+    metadata:
+      labels:
+        {{- include "supkube.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: kbui-backend
+    spec:
+      serviceAccountName: {{ include "supkube.fullname" . }}-kbui
+      containers:
+        - name: kbui-backend
+          image: {{ include "supkube.image" (dict "root" $ "repository" .Values.kbAddon.backend.image.repository "tag" .Values.kbAddon.backend.image.tag) | quote }}
+          imagePullPolicy: {{ .Values.kbAddon.backend.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.kbAddon.backend.port }}
+              protocol: TCP
+          env:
+            - name: PORT
+              value: {{ .Values.kbAddon.backend.port | quote }}
+            - name: KBUI_AUTHZ_MODE
+              value: {{ .Values.kbAddon.backend.authzMode | quote }}
+          livenessProbe:
+            httpGet:
+              path: /api/healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /api/healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.kbAddon.backend.resources | nindent 12 }}
+{{- end }}
