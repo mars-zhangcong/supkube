@@ -1,0 +1,85 @@
+{{- if .Values.kbAddon.enabled }}
+# Dedicated ServiceAccount for kbui-backend so it can query/manage KubeBlocks
+# CRDs without sharing the main SupKube SA's Velero permissions.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "supkube.fullname" . }}-kbui
+  labels:
+    {{- include "supkube.labels" . | nindent 4 }}
+    app.kubernetes.io/component: kbui-backend
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "supkube.fullname" . }}-kbui
+  labels:
+    {{- include "supkube.labels" . | nindent 4 }}
+    app.kubernetes.io/component: kbui-backend
+rules:
+  # KubeBlocks cluster/component topology — full CRUD needed for the
+  # "Create / scale / delete cluster" flows in the KBUI.
+  - apiGroups: ["apps.kubeblocks.io"]
+    resources: ["clusters", "components"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Component definitions and versions are catalog objects — read-only.
+  - apiGroups: ["apps.kubeblocks.io"]
+    resources: ["componentdefinitions", "componentversions"]
+    verbs: ["get", "list", "watch"]
+  # OpsRequests drive in-place operations (scale, upgrade, switchover, …).
+  # The KBUI submits new requests and polls status; delete for cleanup.
+  - apiGroups: ["operations.kubeblocks.io"]
+    resources: ["opsrequests"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Data-protection resources: the KBUI shows backup history, triggers
+  # on-demand backups, and initiates restores.
+  - apiGroups: ["dataprotection.kubeblocks.io"]
+    resources: ["backups", "restores"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # BackupPolicies and BackupSchedules need full CRUD for the backup-policy
+  # management UI (create schedules, enable/disable, patch retention rules).
+  - apiGroups: ["dataprotection.kubeblocks.io"]
+    resources: ["backuppolicies", "backupschedules"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # BackupRepos are admin-level storage config — read-only for the KBUI.
+  - apiGroups: ["dataprotection.kubeblocks.io"]
+    resources: ["backuprepos"]
+    verbs: ["get", "list", "watch"]
+  # Parameter management — full wildcard because the parameters API group
+  # schema evolves with KB versions.
+  - apiGroups: ["parameters.kubeblocks.io"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Core: pods + services + namespaces — read-only (topology display,
+  # namespace picker, pod log links).
+  - apiGroups: [""]
+    resources: ["pods", "services", "namespaces"]
+    verbs: ["get", "list", "watch"]
+  # ConfigMaps: KBUI writes dynamic parameter ConfigMaps for KB parameter
+  # management. Read access to Secrets is needed for connection-info display
+  # (e.g. rendered DB passwords the KB operator stores in Secrets).
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Secrets: get/list/watch only — connection info is read, never written,
+  # by the KBUI (the KB operator owns Secret lifecycle).
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "supkube.fullname" . }}-kbui
+  labels:
+    {{- include "supkube.labels" . | nindent 4 }}
+    app.kubernetes.io/component: kbui-backend
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "supkube.fullname" . }}-kbui
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "supkube.fullname" . }}-kbui
+    namespace: {{ .Release.Namespace }}
+{{- end }}
