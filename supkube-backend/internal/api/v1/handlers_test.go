@@ -140,9 +140,15 @@ func TestCreateBackup_ValidBody_NoCluster(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(w, req)
 
-	// Without a cluster, expect 500; with a cluster, expect 201
-	if w.Code != http.StatusInternalServerError && w.Code != http.StatusCreated {
-		t.Errorf("expected status 500 (no cluster) or 201 (created), got %d", w.Code)
+	// Validation order: the handler asserts the BSL (backup storage location)
+	// exists FIRST and returns an actionable 422 when it doesn't (see
+	// handlers.go assertBSLExists). So without a configured BSL → 422; without a
+	// cluster connection → 500; with a valid cluster + BSL → 201.
+	// (Pre-BSL-validation this path only returned 500/201; this test predates it.)
+	if w.Code != http.StatusUnprocessableEntity &&
+		w.Code != http.StatusInternalServerError &&
+		w.Code != http.StatusCreated {
+		t.Errorf("expected 422 (BSL not found) / 500 (no cluster) / 201 (created), got %d", w.Code)
 	}
 }
 
