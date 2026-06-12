@@ -1,178 +1,265 @@
-// Package v1: restore_results.go
-//
-// Fetch the per-namespace error/warning detail for a Velero Restore by going
-// through Velero's DownloadRequest CRD flow. Used by GetRestoreResults to
-// turn "Errors (1)" into actionable messages the user can paste into a bug.
 package v1
 
 import (
-	"compress/gzip"
-	"context"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
+	"sort"
+	"strconv"
+	"strings"
 	"time"
 
-	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	"github.com/supkube/supkube-backend/internal/k8s"
-	"github.com/supkube/supkube-backend/internal/velerons"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 )
 
-// VeleroResultSection mirrors Velero's internal `results.Result` struct. Each
-// section partitions messages by where they originated during the restore.
-//
-//	Velero     — scheduler / engine messages
-//	Cluster    — cluster-scoped resource issues
-//	Namespaces — keyed by ns, the per-resource warnings/errors
-type VeleroResultSection struct {
-	Velero     []string            `json:"velero,omitempty"`
-	Cluster    []string            `json:"cluster,omitempty"`
-	Namespaces map[string][]string `json:"namespaces,omitempty"`
+type restoreResultsHandler struct {
+	cfg *rest.Config
 }
 
-// VeleroRestoreResults is the JSON shape Velero uploads to BSL at the path
-// `restores/<name>/restore-<name>-results.gz`. Two top-level sections.
-type VeleroRestoreResults struct {
-	Errors   VeleroResultSection `json:"errors"`
-	Warnings VeleroResultSection `json:"warnings"`
+type restoreResultItem struct {
+	Name              string `json:"name"`
+	Namespace         string `json:"namespace"`
+	Phase             string `json:"phase"`
+	Warnings          int    `json:"warnings"`
+	Errors            int    `json:"errors"`
+	StartedAt         string `json:"startedAt,omitempty"`
+	CompletedAt       string `json:"completedAt,omitempty"`
+	BackupName        string `json:"backupName,omitempty"`
+	ScheduleName      string `json:"scheduleName,omitempty"`
+	IncludedResources int    `json:"includedResources,omitempty"`
+	CreatedAt         string `json:"createdAt,omitempty"`
+	Age               string `json:"age,omitempty"`
+	Stale             bool   `json:"stale"`
+	Message           string `json:"message,omitempty"`
 }
 
-// fetchRestoreDetailedResults fetches the per-namespace results for a Restore.
-func fetchRestoreDetailedResults(ctx context.Context, restoreName string) (*VeleroRestoreResults, error) {
-	return fetchDetailedResults(ctx, restoreName, velerov1.DownloadTargetKindRestoreResults)
+func RegisterRestoreResultsRoutes(mux *http.ServeMux, cfg *rest.Config) {
+	h := &restoreResultsHandler{cfg: cfg}
+	mux.HandleFunc("/api/v1/restore-results", h.handle)
 }
 
-// fetchBackupDetailedResults fetches the per-namespace results for a Backup.
-// Velero stores them at `backups/<name>/<backup>-<name>-results.gz` in the BSL,
-// in the exact same JSON shape as restore results (errors/warnings sections).
-// This is the v0.9 source that surfaces "Completed with N error(s)" detail the
-// Backup CR only carries as a count — see backup_errors.go.
-func fetchBackupDetailedResults(ctx context.Context, backupName string) (*VeleroRestoreResults, error) {
-	return fetchDetailedResults(ctx, backupName, velerov1.DownloadTargetKindBackupResults)
+func (h *restoreResultsHandler) handle(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	clientset, err := kubernetes.NewForConfig(h.cfg)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("build kubernetes client: %v", err))
+		return
+	}
+
+	namespace := strings.TrimSpace(r.URL.Query().Get("namespace"))
+	staleOnly := parseBoolQuery(r, "staleOnly")
+	if namespace == "" {
+		namespace = metav1.NamespaceAll
+	}
+
+	data, err := clientset.RESTClient().Get().AbsPath("/apis/velero.io/v1/restores").DoRaw(r.Context())
+	if err != nil {
+		writeJSONError(w, http.StatusBadGateway, fmt.Sprintf("list restores: %v", err))
+		return
+	}
+
+	var list map[string]any
+	if err := json.Unmarshal(data, &list); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, fmt.Sprintf("decode restores: %v", err))
+		return
+	}
+
+	itemsAny, _ := list["items"].([]any)
+	items := make([]restoreResultItem, 0, len(itemsAny))
+	for _, raw := range itemsAny {
+		obj, _ := raw.(map[string]any)
+		if obj == nil {
+			continue
+		}
+		meta, _ := obj["metadata"].(map[string]any)
+		spec, _ := obj["spec"].(map[string]any)
+		status, _ := obj["status"].(map[string]any)
+
+		itemNamespace := stringValue(meta, "namespace")
+		if namespace != metav1.NamespaceAll && itemNamespace != namespace {
+			continue
+		}
+
+		item := restoreResultItem{
+			Name:              stringValue(meta, "name"),
+			Namespace:         itemNamespace,
+			Phase:             stringValue(status, "phase"),
+			Warnings:          intValue(status, "warnings"),
+			Errors:            intValue(status, "errors"),
+			StartedAt:         stringValue(status, "startTimestamp"),
+			CompletedAt:       stringValue(status, "completionTimestamp"),
+			BackupName:        stringValue(spec, "backupName"),
+			ScheduleName:      nestedStringValue(spec, "scheduleName"),
+			IncludedResources: intValue(status, "itemsRestored"),
+			CreatedAt:         stringValue(meta, "creationTimestamp"),
+			Message:           stringValue(status, "validationErrors"),
+		}
+
+		if item.Message == "" {
+			item.Message = stringValue(status, "failureReason")
+		}
+		if item.StartedAt == "" {
+			item.StartedAt = item.CreatedAt
+		}
+		if item.CompletedAt == "" {
+			item.CompletedAt = stringValue(status, "completionTimestamp")
+		}
+		item.Age = humanizeAge(item.CreatedAt)
+		item.Stale = computeRestoreStale(item)
+		if staleOnly && !item.Stale {
+			continue
+		}
+		items = append(items, item)
+	}
+
+	sort.SliceStable(items, func(i, j int) bool {
+		return sortTimeDesc(items[i].CreatedAt, items[j].CreatedAt)
+	})
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"items": items,
+		"total": len(items),
+	})
 }
 
-// fetchDetailedResults performs the DownloadRequest dance for either a Backup or
-// a Restore (selected by kind) and returns the parsed results. The
-// DownloadRequest is best-effort cleaned up on exit so we don't accumulate
-// stale CRs over time.
-//
-// Why insecureSkipVerify on the HTTP client: in-cluster BSLs (MinIO, MAYbe
-// self-signed S3 gateways) typically use HTTP or self-signed TLS. The
-// presigned URL Velero returns is signed against the BSL endpoint, not a
-// public certificate authority. A future hardening pass (v0.8) will resolve
-// the BSL's `caCert` and trust it explicitly; for now the URL is short-lived
-// (~10 min) and only reachable from within the cluster.
-func fetchDetailedResults(ctx context.Context, name string, kind velerov1.DownloadTargetKind) (*VeleroRestoreResults, error) {
-	cl, err := k8s.GetRuntimeClient()
+func computeRestoreStale(item restoreResultItem) bool {
+	phase := strings.ToLower(strings.TrimSpace(item.Phase))
+	if phase == "partiallyfailed" || phase == "failedvalidation" || phase == "failed" {
+		return true
+	}
+	if item.Errors > 0 {
+		return true
+	}
+	completedAt := strings.TrimSpace(item.CompletedAt)
+	startedAt := strings.TrimSpace(item.StartedAt)
+	base := completedAt
+	if base == "" {
+		base = startedAt
+	}
+	if base == "" {
+		base = item.CreatedAt
+	}
+	if base == "" {
+		return false
+	}
+	parsed, err := time.Parse(time.RFC3339, base)
 	if err != nil {
-		return nil, fmt.Errorf("k8s client: %w", err)
+		return false
 	}
+	return time.Since(parsed) > 7*24*time.Hour
+}
 
-	// Per-request unique name (DownloadRequest names must be DNS-1123).
-	// Truncate name so the prefix + timestamp fits in 253 chars.
-	prefix := name
-	if len(prefix) > 200 {
-		prefix = prefix[:200]
+func parseBoolQuery(r *http.Request, key string) bool {
+	raw := strings.TrimSpace(r.URL.Query().Get(key))
+	if raw == "" {
+		return false
 	}
-	drName := fmt.Sprintf("%s-supkube-%d", prefix, time.Now().UnixNano())
-
-	dr := &velerov1.DownloadRequest{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      drName,
-			Namespace: velerons.Namespace(),
-			Labels: map[string]string{
-				"supkube.io/managed-by": "supkube",
-			},
-		},
-		Spec: velerov1.DownloadRequestSpec{
-			Target: velerov1.DownloadTarget{
-				Kind: kind,
-				Name: name,
-			},
-		},
-	}
-	if err := cl.Create(ctx, dr); err != nil {
-		return nil, fmt.Errorf("create DownloadRequest: %w", err)
-	}
-	// Best-effort cleanup; if we leak one, the velero gc-controller will
-	// expire it after ~10 minutes.
-	defer func() {
-		_ = cl.Delete(context.Background(), &velerov1.DownloadRequest{
-			ObjectMeta: metav1.ObjectMeta{Name: drName, Namespace: velerons.Namespace()},
-		})
-	}()
-
-	// Poll for downloadURL. Velero usually fills this within 1-2s.
-	deadline := time.Now().Add(20 * time.Second)
-	var downloadURL string
-	for time.Now().Before(deadline) {
-		cur := &velerov1.DownloadRequest{}
-		if err := cl.Get(ctx, client.ObjectKey{Name: drName, Namespace: velerons.Namespace()}, cur); err != nil {
-			if apierrors.IsNotFound(err) {
-				// shouldn't happen this fast — wait & retry
-				time.Sleep(500 * time.Millisecond)
-				continue
-			}
-			return nil, fmt.Errorf("get DownloadRequest: %w", err)
-		}
-		if cur.Status.DownloadURL != "" {
-			downloadURL = cur.Status.DownloadURL
-			break
-		}
-		time.Sleep(500 * time.Millisecond)
-	}
-	if downloadURL == "" {
-		return nil, fmt.Errorf("timed out after 20s waiting for DownloadRequest.status.downloadURL — %s results.gz may not exist yet", kind)
-	}
-
-	// Download + gunzip + decode.
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, downloadURL, nil)
+	v, err := strconv.ParseBool(raw)
 	if err != nil {
-		return nil, fmt.Errorf("build HTTP request: %w", err)
+		return false
 	}
-	httpClient := &http.Client{
-		Timeout: 15 * time.Second,
-		Transport: &http.Transport{
-			// See comment on this function for the trust rationale.
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		},
+	return v
+}
+
+func stringValue(m map[string]any, key string) string {
+	if m == nil {
+		return ""
 	}
-	resp, err := httpClient.Do(req)
+	v, ok := m[key]
+	if !ok || v == nil {
+		return ""
+	}
+	s, _ := v.(string)
+	return s
+}
+
+func nestedStringValue(m map[string]any, key string) string {
+	if m == nil {
+		return ""
+	}
+	v, ok := m[key]
+	if !ok || v == nil {
+		return ""
+	}
+	s, _ := v.(string)
+	return s
+}
+
+func intValue(m map[string]any, key string) int {
+	if m == nil {
+		return 0
+	}
+	v, ok := m[key]
+	if !ok || v == nil {
+		return 0
+	}
+	switch n := v.(type) {
+	case float64:
+		return int(n)
+	case int:
+		return n
+	case int32:
+		return int(n)
+	case int64:
+		return int(n)
+	case string:
+		i, _ := strconv.Atoi(n)
+		return i
+	default:
+		return 0
+	}
+}
+
+func humanizeAge(ts string) string {
+	if strings.TrimSpace(ts) == "" {
+		return ""
+	}
+	t, err := time.Parse(time.RFC3339, ts)
 	if err != nil {
-		return nil, fmt.Errorf("GET downloadURL: %w", err)
+		return ""
 	}
-	defer resp.Body.Close()
+	d := time.Since(t)
+	if d < time.Minute {
+		return "just now"
+	}
+	if d < time.Hour {
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	}
+	if d < 24*time.Hour {
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	}
+	return fmt.Sprintf("%dd", int(d.Hours()/24))
+}
 
-	if resp.StatusCode >= 400 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return nil, fmt.Errorf("BSL returned HTTP %d: %s", resp.StatusCode, string(body))
+func sortTimeDesc(a, b string) bool {
+	ta, errA := time.Parse(time.RFC3339, a)
+	tb, errB := time.Parse(time.RFC3339, b)
+	if errA != nil && errB != nil {
+		return a > b
 	}
+	if errA != nil {
+		return false
+	}
+	if errB != nil {
+		return true
+	}
+	return ta.After(tb)
+}
 
-	gr, err := gzip.NewReader(resp.Body)
-	if err != nil {
-		// Some BSLs (or proxies) decompress on the way out, so try raw JSON
-		// as a fallback before giving up.
-		raw, rerr := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-		if rerr != nil {
-			return nil, fmt.Errorf("gunzip: %w (and fallback read failed: %v)", err, rerr)
-		}
-		var out VeleroRestoreResults
-		if jerr := json.Unmarshal(raw, &out); jerr != nil {
-			return nil, fmt.Errorf("gunzip failed (%v) and body is not raw JSON (%v)", err, jerr)
-		}
-		return &out, nil
-	}
-	defer gr.Close()
+func writeJSONError(w http.ResponseWriter, status int, message string) {
+	writeJSON(w, status, map[string]any{
+		"error": message,
+	})
+}
 
-	var out VeleroRestoreResults
-	if err := json.NewDecoder(gr).Decode(&out); err != nil {
-		return nil, fmt.Errorf("decode results JSON: %w", err)
-	}
-	return &out, nil
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
 }

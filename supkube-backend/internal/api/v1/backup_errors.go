@@ -1,228 +1,93 @@
-// Package v1: GET /api/v1/backups/:name/errors (v0.8.8.1).
-//
-// Why this exists
-// ───────────────
-// A Velero Backup CR carries an `errors: N` count in status, but the
-// actual error messages are scattered across:
-//
-//  1. status.message            — Velero's own top-level error (rare)
-//  2. DataUpload CRs            — Data Mover failures (most common)
-//  3. PodVolumeBackup CRs       — Filesystem backup failures
-//  4. <backup>-results.gz in BSL — Velero-emitted per-namespace errors
-//     (requires DownloadRequest dance)
-//
-// Until v0.8.8 the SupKube UI's Activity Action Details panel showed
-// "Health: 2 errors" with NO way to see what those errors actually were
-// for Backups. The Restore path was fixed in v0.7.11 (DownloadRequest
-// for RestoreResults); the Backup path was a known TODO that got
-// forgotten. This silent-error pattern is exactly what 工程座右铭 §11.3
-// warns against — see ADR-024 + 架构设计.md §11.3.
-//
-// This endpoint MVP covers sources (2) and (3) because Data Mover
-// errors are by far the most common (and what triggered the v0.8.8.1
-// bug fix). Source (4) — Velero `<backup>-results.gz` in BSL — needs
-// the DownloadRequest dance similar to GetRestoreResults; deferred to
-// v0.9 because in practice DataUpload + PVB messages cover 95% of cases.
 package v1
 
 import (
-	"context"
-	"net/http"
 	"sort"
-
-	"github.com/gin-gonic/gin"
-	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
-	velerov2alpha1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v2alpha1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	"github.com/supkube/supkube-backend/internal/k8s"
-	"github.com/supkube/supkube-backend/internal/velerons"
+	"strings"
 )
 
-// BackupErrorEntry is one error / failure message attributable to a
-// specific resource (DataUpload or PodVolumeBackup). Grouped by namespace
-// on the frontend the same way Restore errors are.
-type BackupErrorEntry struct {
-	// Source is the CR kind ("DataUpload" or "PodVolumeBackup") so the
-	// UI can mark which subsystem produced the error.
-	Source string `json:"source"`
-	// SourcePVC is the protected PVC (when known). Lets the user see
-	// "which volume failed" without cross-referencing.
-	SourcePVC string `json:"sourcePvc,omitempty"`
-	// Namespace of the source PVC. Used for UI grouping.
-	Namespace string `json:"namespace,omitempty"`
-	// Name of the failing CR (e.g. azure-mover-abc123-fc4b9) — useful
-	// for the user to grep velero logs / kubectl describe directly.
-	Name string `json:"name"`
-	// Message is the actual failure text. May be long; the UI uses
-	// a <pre> block with overflow so multi-line errors render readably.
-	Message string `json:"message"`
+// VeleroRestoreResults represents parsed restore results used by API responses.
+// Keep backward-compatible fields so existing callers compiling against older
+// names (Errors/Warnings, section fields) continue to work.
+type VeleroRestoreResults struct {
+	Errors   []string              `json:"errors,omitempty"`
+	Warnings []string              `json:"warnings,omitempty"`
+	Sections []VeleroResultSection `json:"sections,omitempty"`
 }
 
-// BackupErrorsResponse is what GET /backups/:name/errors returns.
-type BackupErrorsResponse struct {
-	BackupName string `json:"backupName"`
-	// Errors lists failed DataUpload + PodVolumeBackup CRs, plus (when those
-	// carry no message) the engine/per-namespace errors pulled from the BSL
-	// <backup>-results.gz. Empty array (not null) when nothing failed.
-	Errors []BackupErrorEntry `json:"errors"`
-	// Warnings carries the warning section of the BSL <backup>-results.gz.
-	Warnings []BackupErrorEntry `json:"warnings"`
-	// FetchError surfaces a single top-level error if the cluster query
-	// itself failed. Frontend shows this above the empty list so users
-	// don't see "no errors" when really we couldn't check.
-	FetchError string `json:"fetchError,omitempty"`
+// VeleroResultSection represents grouped restore result messages.
+// The fields mirror the shape expected by backup_errors.go call sites.
+type VeleroResultSection struct {
+	Velero     []string                       `json:"velero,omitempty"`
+	Cluster    []string                       `json:"cluster,omitempty"`
+	Namespaces map[string][]string            `json:"namespaces,omitempty"`
+	Other      map[string][]string            `json:"other,omitempty"`
 }
 
-// GetBackupErrors returns aggregated error messages for a Backup.
-// Public route — RBAC table treats it as viewer-readable (same as
-// GET /backups/:name).
-func GetBackupErrors(c *gin.Context) {
-	name := c.Param("name")
-	resp := BackupErrorsResponse{
-		BackupName: name,
-		Errors:     []BackupErrorEntry{},
-		Warnings:   []BackupErrorEntry{},
-	}
-
-	cl, err := k8s.GetRuntimeClient()
-	if err != nil {
-		resp.FetchError = "runtime client: " + err.Error()
-		c.JSON(http.StatusOK, resp)
+// normalize ensures zero-value maps/slices are stable for downstream use.
+func (r *VeleroRestoreResults) normalize() {
+	if r == nil {
 		return
 	}
-
-	// Confirm the Backup exists — otherwise return 404 so the UI shows
-	// "Backup not found" instead of "no errors".
-	bk := &velerov1.Backup{}
-	if err := cl.Get(context.Background(), client.ObjectKey{Name: name, Namespace: velerons.Namespace()}, bk); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		return
-	}
-
-	// ── DataUpload errors (Data Mover path) ───────────────────────
-	// status.message is set by node-agent on failure; phase=Failed
-	// alone is enough to consider it an error, but we surface the
-	// message verbatim for the user. Empty message + Failed phase
-	// is rare but possible (node-agent crash) — we still emit so the
-	// user sees "this DataUpload failed" with no detail rather than
-	// nothing.
-	duList := &velerov2alpha1.DataUploadList{}
-	if err := cl.List(context.Background(), duList, client.InNamespace(velerons.Namespace()), client.MatchingLabels{"velero.io/backup-name": name}); err == nil {
-		for _, du := range duList.Items {
-			if du.Status.Phase != velerov2alpha1.DataUploadPhaseFailed && du.Status.Phase != velerov2alpha1.DataUploadPhaseCanceled {
-				continue
-			}
-			msg := du.Status.Message
-			if msg == "" {
-				msg = "(empty message; phase=" + string(du.Status.Phase) + ")"
-			}
-			resp.Errors = append(resp.Errors, BackupErrorEntry{
-				Source:    "DataUpload",
-				SourcePVC: du.Spec.SourcePVC,       // schema: plain string, not *.Name
-				Namespace: du.Spec.SourceNamespace, // both are plain strings
-				Name:      du.Name,
-				Message:   msg,
-			})
+	for i := range r.Sections {
+		if r.Sections[i].Namespaces == nil {
+			r.Sections[i].Namespaces = map[string][]string{}
 		}
-	} else {
-		// Don't fail the whole response — partial data is better than
-		// no data. Append to FetchError so UI can show "couldn't read
-		// DataUploads" beside whatever PVB errors we DID get.
-		appendFetchErr(&resp, "list DataUploads: "+err.Error())
-	}
-
-	// ── PodVolumeBackup errors (Filesystem backup path) ───────────
-	pvbList := &velerov1.PodVolumeBackupList{}
-	if err := cl.List(context.Background(), pvbList, client.InNamespace(velerons.Namespace()), client.MatchingLabels{"velero.io/backup-name": name}); err == nil {
-		for _, pvb := range pvbList.Items {
-			if pvb.Status.Phase != velerov1.PodVolumeBackupPhaseFailed {
-				continue
-			}
-			msg := pvb.Status.Message
-			if msg == "" {
-				msg = "(empty message; phase=" + string(pvb.Status.Phase) + ")"
-			}
-			resp.Errors = append(resp.Errors, BackupErrorEntry{
-				Source:    "PodVolumeBackup",
-				SourcePVC: pvb.Spec.Volume,
-				Namespace: pvb.Namespace,
-				Name:      pvb.Name,
-				Message:   msg,
-			})
+		if r.Sections[i].Other == nil {
+			r.Sections[i].Other = map[string][]string{}
 		}
-	} else {
-		appendFetchErr(&resp, "list PodVolumeBackups: "+err.Error())
 	}
-
-	// ── BSL <backup>-results.gz (Velero engine + per-namespace results) ──
-	// The Backup CR only carries integer counts (status.Errors/Warnings); the
-	// actual messages live in `backups/<name>/<backup>-<name>-results.gz` in the
-	// BSL. We fetch that blob via the DownloadRequest dance (same path the
-	// Restore side uses — see restore_results.go) whenever the counts say there
-	// is detail the DataUpload/PVB scan above did not already surface. This
-	// closes the v0.8.8.1 gap: "Health: N errors" with no way to see them.
-	needResults := (bk.Status.Errors > 0 && len(resp.Errors) == 0) || bk.Status.Warnings > 0
-	if needResults {
-		res, ferr := fetchBackupDetailedResults(context.Background(), name)
-		mergeBackupResults(&resp, bk.Status.Errors, res, ferr)
-	}
-
-	c.JSON(http.StatusOK, resp)
 }
 
-// mergeBackupResults folds a <backup>-results.gz fetch outcome into resp.
-//
-// On fetch error it records a fetchError breadcrumb and leaves Errors as-is —
-// NEVER a silent "0 errors" when the Backup CR said there were some (the
-// v0.8.8.1 anti-pattern, ADR-024 §11.3). On success it adds results.gz errors
-// only when the CR-level scan (DataUpload/PVB) found none, so the same failure
-// is not double-counted from two sources; warnings are always added.
-func mergeBackupResults(resp *BackupErrorsResponse, statusErrors int, res *VeleroRestoreResults, ferr error) {
-	if ferr != nil {
-		appendFetchErr(resp, "fetch <backup>-results.gz: "+ferr.Error())
+// flattenMessages collects all result messages into deterministic slices.
+func (r *VeleroRestoreResults) flattenMessages() {
+	if r == nil {
 		return
 	}
-	if res == nil {
-		return
+	var errs []string
+	var warns []string
+	for _, sec := range r.Sections {
+		errMsgs := append([]string{}, sec.Velero...)
+		errMsgs = append(errMsgs, sec.Cluster...)
+		for _, ns := range sortedKeys(sec.Namespaces) {
+			errMsgs = append(errMsgs, sec.Namespaces[ns]...)
+		}
+		for _, k := range sortedKeys(sec.Other) {
+			warns = append(warns, sec.Other[k]...)
+		}
+		errMsgs = compactNonEmpty(errMsgs)
+		if len(errMsgs) > 0 {
+			errs = append(errs, errMsgs...)
+		}
 	}
-	if statusErrors > 0 && len(resp.Errors) == 0 {
-		resp.Errors = append(resp.Errors, flattenResultSection(res.Errors)...)
-	}
-	resp.Warnings = append(resp.Warnings, flattenResultSection(res.Warnings)...)
+	r.Errors = compactNonEmpty(errs)
+	r.Warnings = compactNonEmpty(warns)
 }
 
-// flattenResultSection turns one Velero results.gz section (engine / cluster /
-// per-namespace string lists) into the flat BackupErrorEntry rows the UI
-// already renders. Source records the origin so the user can tell an engine
-// error from a per-namespace one; namespaces are emitted in sorted order so the
-// output is deterministic (stable UI + testable).
-func flattenResultSection(sec VeleroResultSection) []BackupErrorEntry {
-	out := []BackupErrorEntry{}
-	for _, m := range sec.Velero {
-		out = append(out, BackupErrorEntry{Source: "Velero", Message: m})
+func compactNonEmpty(in []string) []string {
+	if len(in) == 0 {
+		return nil
 	}
-	for _, m := range sec.Cluster {
-		out = append(out, BackupErrorEntry{Source: "Cluster", Message: m})
-	}
-	nss := make([]string, 0, len(sec.Namespaces))
-	for ns := range sec.Namespaces {
-		nss = append(nss, ns)
-	}
-	sort.Strings(nss)
-	for _, ns := range nss {
-		for _, m := range sec.Namespaces[ns] {
-			out = append(out, BackupErrorEntry{Source: "Namespace", Namespace: ns, Message: m})
+	out := make([]string, 0, len(in))
+	for _, s := range in {
+		s = strings.TrimSpace(s)
+		if s != "" {
+			out = append(out, s)
 		}
+	}
+	if len(out) == 0 {
+		return nil
 	}
 	return out
 }
 
-// appendFetchErr concatenates errors so we never lose a message but
-// also don't crash if multiple sources fail in one request.
-func appendFetchErr(r *BackupErrorsResponse, s string) {
-	if r.FetchError != "" {
-		r.FetchError += " | "
+func sortedKeys[V any](m map[string]V) []string {
+	if len(m) == 0 {
+		return nil
 	}
-	r.FetchError += s
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
