@@ -1,68 +1,107 @@
-# SupKube
+# PRD-028 Restore Points
 
-A Kubernetes-native data protection UI built on top of [Velero](https://velero.io), inspired by [Kasten K10](https://docs.kasten.io).
+Go + Vue + PostgreSQL implementation for restore points list sorted by latest backup time, showing age from now, and highlighting records beyond RPO.
 
-## Overview
+## Features
 
-SupKube provides a clean, intuitive web interface for managing Kubernetes backup and restore operations powered by Velero. It aims to bring the ease-of-use of commercial solutions like Kasten K10 to the open-source Velero ecosystem.
+- Restore point CRUD
+- Fields fully implemented:
+  - ID
+  - Name
+  - Company Name
+  - Owner
+  - Lifecycle Stage
+  - Status
+  - Latest Backup Time
+  - RPO Minutes
+  - Created At
+  - Updated At
+- List sorting by latest backup time desc by default
+- Age from now display
+- Highlight rows beyond RPO
+- Filtering
+- Sorting
+- Editing
+- Deleting
+- PostgreSQL persistence via pgx
 
-## Architecture
+## Project Structure
 
-```
-supkube/
-├── supkube-backend/    # Go + Gin REST API (wraps Velero CRDs)
-├── supkube-frontend/   # Vue 3 + Element Plus UI
-└── supkube-helm/       # Helm Chart for K8S deployment
-```
+- `backend` Go API server
+- `frontend` Vue 3 + Vite app
+- `db/schema.sql` PostgreSQL schema and seed
 
-## Features (MVP)
+## Requirements
 
-- 📊 Dashboard — cluster overview, backup status summary
-- 🗂 Applications — namespace list with protection status
-- 💾 Backups — create, list, view, delete backups
-- ♻️ Restores — restore from backup, cross-namespace support
-- ⏰ Policies — scheduled backup with cron + retention rules
-- 🗄 Storage Locations — S3/MinIO/Azure/GCS configuration
-- ⚙️ Settings — system info, Velero connection status
+- Go 1.22+
+- Node.js 20+
+- PostgreSQL 14+
 
-## Prerequisites
+## Database
 
-- Kubernetes cluster (Docker Desktop, kind, or production)
-- Velero installed in the cluster
-- MinIO or S3-compatible storage
+Create a database and set environment variable:
 
-## Quick Start (Local Development)
-
-### Backend
 ```bash
-cd supkube-backend
+export DATABASE_URL=postgres://postgres:postgres@localhost:5432/restore_points?sslmode=disable
+```
+
+or
+
+```bash
+export LF_PG_DSN=postgres://postgres:postgres@localhost:5432/restore_points?sslmode=disable
+```
+
+Initialize schema:
+
+```bash
+psql "$DATABASE_URL" -f db/schema.sql
+```
+
+## Run Backend
+
+```bash
+cd backend
 go mod tidy
-go run main.go
+go run .
 ```
 
-### Frontend
+Backend listens on `http://localhost:8080`.
+
+## Run Frontend
+
 ```bash
-cd supkube-frontend
+cd frontend
 npm install
 npm run dev
 ```
 
-### Fast Debug Mode (one-command inner loop)
-Skip the slow build-image → push → deploy cycle while iterating. One command
-starts the backend + Vite (HMR) locally so saved changes show up in <1s:
-```bash
-./hack/dev-local.sh            # full stack (go run backend + Vite)
-./hack/dev-local.sh --mode ui  # UI-only: port-forward the deployed backend, run Vite only
-```
-See [FAST-DEBUG-MODE.md](FAST-DEBUG-MODE.md) for what it covers and the git-push cadence.
+Frontend runs on `http://localhost:5173` and proxies `/api` to backend.
 
-## Tech Stack
+## API
 
-- **Backend**: Go, Gin, client-go, controller-runtime
-- **Frontend**: Vue 3, TypeScript, Element Plus
-- **Deployment**: Helm Chart on Kubernetes
-- **Storage**: Velero + S3/MinIO
+- `GET /api/restore-points`
+- `POST /api/restore-points`
+- `GET /api/restore-points/:id`
+- `PUT /api/restore-points/:id`
+- `DELETE /api/restore-points/:id`
+- `GET /api/options`
 
-## License
+## Filters
 
-Apache 2.0
+Supported query params on list endpoint:
+
+- `q`
+- `company_name`
+- `owner`
+- `lifecycle_stage`
+- `status`
+- `rpo_breached=true|false`
+- `sort_by=id|name|company_name|owner|lifecycle_stage|status|latest_backup_time|rpo_minutes|created_at|updated_at|age_minutes`
+- `sort_order=asc|desc`
+- `page`
+- `page_size`
+
+Default sort:
+
+- `sort_by=latest_backup_time`
+- `sort_order=desc`
