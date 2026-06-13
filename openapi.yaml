@@ -244,13 +244,27 @@ paths:
       tags: [restores]
       operationId: listRestores
       summary: 还原列表
+      description: |
+        支持通过可选查询参数 `phase` 按 restore phase 精确过滤；未传或传空字符串时表示不过滤。
       x-min-role: viewer
+      parameters:
+        - name: phase
+          in: query
+          required: false
+          description: restore phase 精确过滤；值需与后端返回的 restore `phase` 字段完全一致，未传或为空表示不过滤。
+          schema:
+            type: string
       responses:
         "200":
-          description: OK
+          description: OK（可按 restore phase 过滤返回结果）
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ListResponse" }
+              example:
+                items:
+                  - name: restore-sample
+                    phase: Completed
+                total: 1
     post:
       tags: [restores]
       operationId: createRestore

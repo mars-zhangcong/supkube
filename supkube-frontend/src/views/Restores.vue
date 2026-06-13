@@ -10,12 +10,12 @@
 
     <el-card>
       <div class="toolbar-row">
-        <el-select v-model="phaseFilter" clearable style="width: 220px" :placeholder="t('restores.phaseFilter')">
-          <el-option :label="t('restores.allPhases')" value="" />
+        <el-select v-model="selectedPhase" clearable style="width: 220px" :placeholder="t('restores.filters.phase')">
+          <el-option :label="t('restores.filters.phaseAll')" value="" />
           <el-option v-for="phase in phaseFilterOptions" :key="phase" :label="normalizePhase(phase)" :value="phase" />
         </el-select>
       </div>
-      <el-table :data="filteredRestores" style="width: 100%" v-loading="loading">
+      <el-table :data="restores" style="width: 100%" v-loading="loading">
         <el-table-column prop="metadata.name" label="Name" sortable />
         <el-table-column prop="spec.backupName" label="From Backup" />
         <el-table-column label="Included Namespaces">
@@ -218,7 +218,7 @@ const loadingResources = ref(false)
 const namespaces = ref([])
 const loading = ref(false)
 const creating = ref(false)
-const phaseFilter = ref('')
+const selectedPhase = ref('')
 const showCreateDialog = ref(false)
 const showResultsDrawer = ref(false)
 const resultsRestoreName = ref('')
@@ -243,10 +243,6 @@ const phaseFilterOptions = computed(() => {
   return Array.from(phases)
 })
 
-const filteredRestores = computed(() => {
-  if (!phaseFilter.value) return restores.value
-  return restores.value.filter((restore) => (restore?.status?.phase || '') === phaseFilter.value)
-})
 
 const viewResults = async (row) => {
   const name = row?.metadata?.name
@@ -302,7 +298,7 @@ const removeMapping = (idx) => {
 const fetchRestores = async () => {
   loading.value = true
   try {
-    const res = await getRestores()
+    const res = await getRestores({ phase: selectedPhase.value || '' })
     restores.value = res.data.items || []
   } catch (e) {
     ElMessage.error('Failed to load restores')
@@ -391,6 +387,10 @@ const handleCreate = async () => {
 // Watch for backup selection to load resource preview
 watch(() => createForm.value.backupName, (newVal) => {
   fetchResourcePreview(newVal)
+})
+
+watch(selectedPhase, () => {
+  fetchRestores()
 })
 
 // v0.7.11: flatten the Velero results structure into labeled groups for
