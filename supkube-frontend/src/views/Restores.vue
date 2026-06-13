@@ -10,10 +10,22 @@
 
     <el-card>
       <div class="toolbar-row">
-        <el-select v-model="phaseFilter" clearable style="width: 220px" :placeholder="t('restores.phaseFilter')">
-          <el-option :label="t('restores.allPhases')" value="" />
-          <el-option v-for="phase in phaseFilterOptions" :key="phase" :label="normalizePhase(phase)" :value="phase" />
-        </el-select>
+        <el-form inline>
+          <el-form-item :label="t('restores.pageSize')">
+            <el-select v-model="pageSize" style="width: 120px" @change="fetchRestores">
+              <el-option :label="t('restores.pageSizeAll')" value="all" />
+              <el-option label="10" value="10" />
+              <el-option label="20" value="20" />
+              <el-option label="50" value="50" />
+            </el-select>
+          </el-form-item>
+          <el-form-item>
+            <el-select v-model="phaseFilter" clearable style="width: 220px" :placeholder="t('restores.phaseFilter')">
+              <el-option :label="t('restores.allPhases')" value="" />
+              <el-option v-for="phase in phaseFilterOptions" :key="phase" :label="normalizePhase(phase)" :value="phase" />
+            </el-select>
+          </el-form-item>
+        </el-form>
       </div>
       <el-table :data="filteredRestores" style="width: 100%" v-loading="loading">
         <el-table-column prop="metadata.name" label="Name" sortable />
@@ -219,6 +231,7 @@ const namespaces = ref([])
 const loading = ref(false)
 const creating = ref(false)
 const phaseFilter = ref('')
+const pageSize = ref('all')
 const showCreateDialog = ref(false)
 const showResultsDrawer = ref(false)
 const resultsRestoreName = ref('')
@@ -302,7 +315,8 @@ const removeMapping = (idx) => {
 const fetchRestores = async () => {
   loading.value = true
   try {
-    const res = await getRestores()
+    const limit = pageSize.value === 'all' ? undefined : Number(pageSize.value)
+    const res = await getRestores(Number.isInteger(limit) && limit > 0 ? { limit } : undefined)
     restores.value = res.data.items || []
   } catch (e) {
     ElMessage.error('Failed to load restores')
@@ -462,6 +476,15 @@ onUnmounted(() => {
   display: flex;
   justify-content: flex-end;
   margin-bottom: 12px;
+}
+.toolbar-row :deep(.el-form) {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.toolbar-row :deep(.el-form-item) {
+  margin-bottom: 0;
 }
 .ns-mapping-row {
   display: flex;
