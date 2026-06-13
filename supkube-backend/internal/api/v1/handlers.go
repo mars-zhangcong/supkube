@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -630,7 +631,13 @@ func ListRestores(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"items": restoreList.Items, "total": len(restoreList.Items)})
+	items := restoreList.Items
+	if rawLimit := c.Query("limit"); rawLimit != "" {
+		if limit, err := strconv.Atoi(rawLimit); err == nil && limit > 0 && limit < len(items) {
+			items = items[:limit]
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"items": items, "total": len(items)})
 }
 
 // CreateRestore creates a new Velero restore (v0.7.10 — Kasten-style flow).
