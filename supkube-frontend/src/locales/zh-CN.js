@@ -254,7 +254,9 @@ export default {
   restores: {
     title: '恢复',
     fromBackup: '来源备份',
-    create: '创建恢复'
+    create: '创建恢复',
+    refresh: '刷新',
+    exportCsv: '导出 CSV'
   },
   // v0.8.6 备份详情新版"备份组成"面板
   backupDetail: {
