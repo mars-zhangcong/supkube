@@ -146,7 +146,14 @@ export const deleteTransformSet = (name) => api.delete(`/transform-sets/${name}`
 export const applyConflictFixes = (data) => api.post('/transform-sets/apply-conflict-fixes', data)
 
 // Restores (legacy — kept for backward compat during v0.8 transition)
-export const getRestores = () => api.get('/restores')
+export const getRestores = (namespace, options = {}) => {
+  const params = {}
+  const phase = options?.phase
+  if (phase && phase !== 'all') {
+    params.phase = phase
+  }
+  return api.get('/restores', { params })
+}
 export const getRestore = (name) => api.get(`/restores/${name}`)
 export const createRestore = (data) => api.post('/restores', data)
 // v0.7.12: Pre-flight conflict detection before restore. Body: { backupName,

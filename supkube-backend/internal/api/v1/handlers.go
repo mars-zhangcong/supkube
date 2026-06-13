@@ -630,7 +630,18 @@ func ListRestores(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"items": restoreList.Items, "total": len(restoreList.Items)})
+	phase := c.Request.URL.Query().Get("phase")
+	items := restoreList.Items
+	if phase != "" {
+		filtered := make([]velerov1.Restore, 0, len(restoreList.Items))
+		for _, item := range restoreList.Items {
+			if string(item.Status.Phase) == phase {
+				filtered = append(filtered, item)
+			}
+		}
+		items = filtered
+	}
+	c.JSON(http.StatusOK, gin.H{"items": items, "total": len(items)})
 }
 
 // CreateRestore creates a new Velero restore (v0.7.10 — Kasten-style flow).

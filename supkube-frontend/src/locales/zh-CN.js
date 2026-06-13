@@ -256,7 +256,9 @@ export default {
     fromBackup: '来源备份',
     create: '创建恢复',
     phaseFilter: '按状态筛选',
-    allPhases: '全部状态'
+    allPhases: '全部状态',
+    restorePhaseFilter: '按状态筛选',
+    restorePhaseAll: '全部状态'
   },
   // v0.8.6 备份详情新版"备份组成"面板
   backupDetail: {
