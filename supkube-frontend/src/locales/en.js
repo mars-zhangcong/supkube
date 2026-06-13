@@ -274,7 +274,9 @@ export default {
   restores: {
     title: 'Restores',
     fromBackup: 'From Backup',
-    create: 'Create Restore'
+    create: 'Create Restore',
+    phaseFilter: 'Filter by status',
+    allPhases: 'All statuses'
   },
   // PRD-002 v1.3 atomic Transforms — Velero ResourceModifier rule
   // bundles. The rule editor that used to live in TransformSets.vue

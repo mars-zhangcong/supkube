@@ -9,7 +9,13 @@
     </div>
 
     <el-card>
-      <el-table :data="restores" style="width: 100%" v-loading="loading">
+      <div class="toolbar-row">
+        <el-select v-model="phaseFilter" clearable style="width: 220px" :placeholder="t('restores.phaseFilter')">
+          <el-option :label="t('restores.allPhases')" value="" />
+          <el-option v-for="phase in phaseFilterOptions" :key="phase" :label="normalizePhase(phase)" :value="phase" />
+        </el-select>
+      </div>
+      <el-table :data="filteredRestores" style="width: 100%" v-loading="loading">
         <el-table-column prop="metadata.name" label="Name" sortable />
         <el-table-column prop="spec.backupName" label="From Backup" />
         <el-table-column label="Included Namespaces">
@@ -194,7 +200,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
@@ -212,6 +218,7 @@ const loadingResources = ref(false)
 const namespaces = ref([])
 const loading = ref(false)
 const creating = ref(false)
+const phaseFilter = ref('')
 const showCreateDialog = ref(false)
 const showResultsDrawer = ref(false)
 const resultsRestoreName = ref('')
@@ -225,6 +232,20 @@ const createForm = ref({
   includedNamespaces: [],
   namespaceMappings: [],
   restorePVs: true
+})
+
+const phaseFilterOptions = computed(() => {
+  const phases = new Set()
+  restores.value.forEach((restore) => {
+    const phase = restore?.status?.phase
+    if (phase) phases.add(phase)
+  })
+  return Array.from(phases)
+})
+
+const filteredRestores = computed(() => {
+  if (!phaseFilter.value) return restores.value
+  return restores.value.filter((restore) => (restore?.status?.phase || '') === phaseFilter.value)
 })
 
 const viewResults = async (row) => {
@@ -436,6 +457,11 @@ onUnmounted(() => {
 }
 .page-header h3 {
   margin: 0;
+}
+.toolbar-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
 }
 .ns-mapping-row {
   display: flex;
