@@ -52,6 +52,7 @@ export default {
     edit: '编辑',
     view: '查看',
     restore: '恢复',
+    restorePhaseAll: '全部阶段',
     validate: '校验',
     verify: '验证',
     details: '详情',

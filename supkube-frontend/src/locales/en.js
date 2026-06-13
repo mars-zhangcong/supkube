@@ -58,6 +58,7 @@ export default {
     edit: 'Edit',
     view: 'View',
     restore: 'Restore',
+    restorePhaseAll: 'All phases',
     validate: 'Validate',
     verify: 'Verify',
     details: 'Details',
