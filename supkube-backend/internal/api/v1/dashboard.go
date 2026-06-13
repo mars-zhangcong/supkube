@@ -40,6 +40,7 @@ type BackupSummaryInfo struct {
 	Completed  int `json:"completed"`
 	Failed     int `json:"failed"`
 	InProgress int `json:"inProgress"`
+	Deleting   int `json:"deleting"`
 }
 
 type RecentBackupInfo struct {
@@ -99,6 +100,9 @@ func GetDashboardSummary(c *gin.Context) {
 
 	summary.BackupSummary.Total = len(backupList.Items)
 	for _, b := range backupList.Items {
+		if b.DeletionTimestamp != nil {
+			summary.BackupSummary.Deleting++
+		}
 		switch b.Status.Phase {
 		case velerov1.BackupPhaseCompleted:
 			summary.BackupSummary.Completed++
