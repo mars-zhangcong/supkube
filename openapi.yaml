@@ -154,6 +154,13 @@ paths:
       operationId: listBackups
       summary: 备份列表
       x-min-role: viewer
+      parameters:
+        - name: phase
+          in: query
+          required: false
+          description: 按备份 phase 精确筛选
+          schema:
+            type: string
       responses:
         "200":
           description: OK

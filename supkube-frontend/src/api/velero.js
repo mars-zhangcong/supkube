@@ -93,7 +93,11 @@ export const getBackupAdvisor = () => api.get('/backup-advisor')
 export const getBackupAdvisorForNamespace = (namespace) => api.get(`/backup-advisor/${namespace}`)
 
 // Backups
-export const getBackups = () => api.get('/backups')
+export const getBackups = (params = {}) => {
+  const query = {}
+  if (params?.phase) query.phase = params.phase
+  return api.get('/backups', Object.keys(query).length ? { params: query } : undefined)
+}
 export const getBackup = (name) => api.get(`/backups/${name}`)
 export const getBackupResources = (name) => api.get(`/backups/${name}/resources`)
 export const getBackupArtifacts = (name) => api.get(`/backups/${name}/artifacts`)

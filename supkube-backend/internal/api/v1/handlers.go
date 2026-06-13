@@ -129,6 +129,7 @@ func ListBackups(c *gin.Context) {
 	}
 	backupList := &velerov1.BackupList{}
 	namespace := c.DefaultQuery("namespace", velerons.Namespace())
+	phase := c.Query("phase")
 	if err := cl.List(context.Background(), backupList, client.InNamespace(namespace)); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -152,6 +153,9 @@ func ListBackups(c *gin.Context) {
 	items := make([]map[string]interface{}, 0, len(backupList.Items))
 	for i := range backupList.Items {
 		b := &backupList.Items[i]
+		if phase != "" && string(b.Status.Phase) != phase {
+			continue
+		}
 		meta := SupKubeBackupMeta{
 			DataPath: classifyDataPath(b),
 		}

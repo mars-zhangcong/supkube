@@ -58,6 +58,10 @@
       <el-input v-model="nameFilter" :placeholder="t('restorePoints.filterPlaceholder')" clearable class="filter-name">
         <template #prefix><el-icon><Search /></el-icon></template>
       </el-input>
+      <el-select v-model="phaseFilter" clearable class="filter-phase" @change="handlePhaseChange">
+        <el-option label="All Phases" value="" />
+        <el-option v-for="phase in availablePhases" :key="phase" :label="phase" :value="phase" />
+      </el-select>
       <span class="filter-spacer"></span>
       <span class="filter-summary" v-html="viewingHtml"></span>
       <!-- v0.8.5 step 3: Disable mutating actions if user lacks role. -->
@@ -375,6 +379,7 @@ const nameFilter = ref('')
 // pre-applies this chip, scoping the list to RPs from that policy
 // (both halves of a dual pair).
 const policyFilter = ref('')
+const phaseFilter = ref('')
 // v0.7.13: namespace chip filter (deep-linked from Applications → Restore).
 // Distinct from the free-text nameFilter so both can be active at once and
 // the chip is removable as a discrete unit.
@@ -667,10 +672,20 @@ const matchesPolicy = (row, policyName) => {
   return false
 }
 
+const availablePhases = computed(() => {
+  const values = new Set()
+  for (const row of backups.value) {
+    const phase = row?.status?.phase
+    if (phase) values.add(phase)
+  }
+  return Array.from(values).sort((a, b) => a.localeCompare(b))
+})
+
 const filteredBackups = computed(() => {
   const name = nameFilter.value.trim().toLowerCase()
   const ns = nsFilter.value.trim()
   const policy = policyFilter.value.trim()
+  const phase = phaseFilter.value.trim()
   return backups.value.filter((row) => {
     // v0.8.10: typeFilter now matches typePill().key (snapshot / exported /
     // imported / metadata / unknown). Source filter merged into Type.
@@ -679,6 +694,7 @@ const filteredBackups = computed(() => {
     }
     // v0.8.10.1: Policy chip filter — same dimensional pattern as ns chip.
     if (policy && !matchesPolicy(row, policy)) return false
+    if (phase && (row.status?.phase || '') !== phase) return false
     // v0.7.13 chip filter: exact-namespace match. Backup must include the
     // namespace in its spec.includedNamespaces (or it backed up everything
     // and the ns lives in formatNamespace()'s output).
@@ -724,6 +740,7 @@ const clearChip = (key) => {
 const clearAllChips = () => {
   nsFilter.value = ''
   policyFilter.value = ''
+  phaseFilter.value = ''
   typeFilter.value = 'all'
   nameFilter.value = ''
   restoreIntentActive.value = false
@@ -769,10 +786,14 @@ function setLocalFingerprint(items) {
   currentClusterFingerprint.value = best
 }
 
+const handlePhaseChange = () => {
+  fetchBackups()
+}
+
 const fetchBackups = async () => {
   loading.value = true
   try {
-    const res = await getBackups()
+    const res = await getBackups({ phase: phaseFilter.value || undefined })
     const items = res.data.items || []
     // Newest first by default — matches user expectation that the most
     // recent restore point is what you usually want to look at. Stable
@@ -1162,6 +1183,7 @@ onUnmounted(() => {
 }
 .filter-type { width: 180px; }
 .filter-name { width: 280px; }
+.filter-phase { width: 180px; }
 .filter-spacer { flex: 1; }
 .filter-summary {
   color: #606266;
