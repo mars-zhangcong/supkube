@@ -93,7 +93,34 @@ export const getBackupAdvisor = () => api.get('/backup-advisor')
 export const getBackupAdvisorForNamespace = (namespace) => api.get(`/backup-advisor/${namespace}`)
 
 // Backups
-export const getBackups = () => api.get('/backups')
+const BACKUP_SUCCESS_STATES = new Set(['Completed'])
+const BACKUP_FAILED_STATES = new Set(['Failed', 'PartiallyFailed', 'FailedValidation'])
+
+export const classifyBackupStatus = (status) => {
+  if (BACKUP_SUCCESS_STATES.has(status)) return 'success'
+  if (BACKUP_FAILED_STATES.has(status)) return 'failed'
+  return null
+}
+
+export const listBackups = async (params = {}) => {
+  const response = await api.get('/backups', { params })
+  const data = response?.data
+  const items = Array.isArray(data)
+    ? data
+    : Array.isArray(data?.items)
+      ? data.items
+      : []
+  return {
+    ...response,
+    data: {
+      ...(data && typeof data === 'object' && !Array.isArray(data) ? data : {}),
+      items,
+      total: typeof data?.total === 'number' ? data.total : items.length,
+    },
+  }
+}
+
+export const getBackups = () => listBackups()
 export const getBackup = (name) => api.get(`/backups/${name}`)
 export const getBackupResources = (name) => api.get(`/backups/${name}/resources`)
 export const getBackupArtifacts = (name) => api.get(`/backups/${name}/artifacts`)

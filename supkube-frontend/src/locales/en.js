@@ -169,6 +169,14 @@ export default {
     snapshotFailed: 'Snapshot failed: {msg}',
     snapshotProtectedNs: 'Snapshot of protected namespace is not allowed (kube-system / velero / supkube).'
   },
+  backups: {
+    stats: {
+      title: 'Backup Statistics',
+      total: 'Total',
+      success: 'Success',
+      failed: 'Failed'
+    }
+  },
   restorePoints: {
     title: 'Restore Points',
     desc: 'View and manage all Restore Points created in this cluster',

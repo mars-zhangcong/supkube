@@ -45,6 +45,24 @@
       </button>
     </div>
 
+    <div class="backup-stats" v-if="backupStats.total > 0">
+      <div class="backup-stats-title">{{ t('backups.stats.title') }}</div>
+      <div class="backup-stats-cards">
+        <div class="backup-stat-card">
+          <div class="backup-stat-label">{{ t('backups.stats.total') }}</div>
+          <div class="backup-stat-value">{{ backupStats.total }}</div>
+        </div>
+        <div class="backup-stat-card is-success">
+          <div class="backup-stat-label">{{ t('backups.stats.success') }}</div>
+          <div class="backup-stat-value">{{ backupStats.success }}</div>
+        </div>
+        <div class="backup-stat-card is-failed">
+          <div class="backup-stat-label">{{ t('backups.stats.failed') }}</div>
+          <div class="backup-stat-value">{{ backupStats.failed }}</div>
+        </div>
+      </div>
+    </div>
+
     <!-- Filter / search / bulk toolbar -->
     <div class="filter-toolbar">
       <!-- v0.8.10 简化：Type 列三态互斥（Snapshot / Exported / Imported）取代旧的
@@ -699,6 +717,18 @@ const filteredBackups = computed(() => {
   })
 })
 
+// PRD-034: stats aggregate is based on the fetched list itself so the cards
+// reflect the current dataset regardless of local table filters.
+const backupStats = computed(() => {
+  return backups.value.reduce((acc, row) => {
+    acc.total += 1
+    const key = statusChipKey(row?.status?.phase)
+    if (key === 'success') acc.success += 1
+    else if (key === 'error' || key === 'warning') acc.failed += 1
+    return acc
+  }, { total: 0, success: 0, failed: 0 })
+})
+
 // v0.7.13 chip system — keyed list of dimensional filters currently active.
 // Each chip is { key, value, label }; clearChip(key) removes that one.
 const activeChips = computed(() => {
@@ -1153,6 +1183,48 @@ onUnmounted(() => {
   cursor: not-allowed;
 }
 
+/* PRD-034: backup stats summary strip */
+.backup-stats {
+  margin-bottom: 14px;
+}
+.backup-stats-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sk-text);
+  margin-bottom: 8px;
+}
+.backup-stats-cards {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.backup-stat-card {
+  min-width: 120px;
+  padding: 12px 14px;
+  border: 1px solid #e4e7ed;
+  border-radius: 8px;
+  background: #ffffff;
+}
+.backup-stat-card.is-success {
+  border-color: #d9f0d0;
+  background: #f0f9eb;
+}
+.backup-stat-card.is-failed {
+  border-color: #f5c2c7;
+  background: #fef0f0;
+}
+.backup-stat-label {
+  font-size: 12px;
+  color: #909399;
+  margin-bottom: 4px;
+}
+.backup-stat-value {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--sk-text);
+  line-height: 1.2;
+}
+
 /* Filter toolbar */
 .filter-toolbar {
   display: flex;
@@ -1396,6 +1468,21 @@ onUnmounted(() => {
 .clear-filters-link:hover { text-decoration: underline; }
 
 /* Dark mode */
+:deep(html.dark) .backup-stats-title { color: var(--sk-text); }
+:deep(html.dark) .backup-stat-card {
+  background: #1f2026;
+  border-color: #3a3d46;
+}
+:deep(html.dark) .backup-stat-card.is-success {
+  background: rgba(103, 194, 58, 0.12);
+  border-color: rgba(103, 194, 58, 0.28);
+}
+:deep(html.dark) .backup-stat-card.is-failed {
+  background: rgba(245, 108, 108, 0.12);
+  border-color: rgba(245, 108, 108, 0.28);
+}
+:deep(html.dark) .backup-stat-label { color: #a8abb2; }
+
 :deep(html.dark) .intent-banner {
   background: linear-gradient(90deg, #1e1b4b 0%, #1f2026 100%);
   border-color: #3730a3;
