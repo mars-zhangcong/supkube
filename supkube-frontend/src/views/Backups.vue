@@ -76,6 +76,14 @@
       <el-input v-model="nameFilter" :placeholder="t('restorePoints.filterPlaceholder')" clearable class="filter-name">
         <template #prefix><el-icon><Search /></el-icon></template>
       </el-input>
+      <el-select v-model="phaseFilter" class="filter-phase">
+        <el-option
+          v-for="option in phaseFilterOptions"
+          :key="option.value"
+          :label="option.label"
+          :value="option.value"
+        />
+      </el-select>
       <span class="filter-spacer"></span>
       <span class="filter-summary" v-html="viewingHtml"></span>
       <!-- v0.8.5 step 3: Disable mutating actions if user lacks role. -->
@@ -389,6 +397,7 @@ const showCreateDialog = ref(false)
 // The pre-v0.8.10 sourceFilter has been folded into Type (Imported wins).
 const typeFilter = ref('all')
 const nameFilter = ref('')
+const phaseFilter = ref('')
 // v0.8.10.1: deep-link from Policies page. /backups?policy=<name>
 // pre-applies this chip, scoping the list to RPs from that policy
 // (both halves of a dual pair).
@@ -658,6 +667,22 @@ const statusChipKey = (phase) => {
   return 'muted'
 }
 
+const normalizeBackupPhase = (phase) => normalizePhase(phase || '')
+
+const allPhases = computed(() => {
+  const phases = new Set()
+  backups.value.forEach((row) => {
+    const normalized = normalizeBackupPhase(row?.status?.phase)
+    if (normalized) phases.add(normalized)
+  })
+  return Array.from(phases)
+})
+
+const phaseFilterOptions = computed(() => [
+  { label: t('backups.allPhases'), value: '' },
+  ...allPhases.value.map((phase) => ({ label: phase, value: phase }))
+])
+
 // Restore Point row primarily represents a namespace's protected state at a
 // point in time. Show the most informative namespace label; * = all.
 const formatNamespace = (row) => {
@@ -689,12 +714,14 @@ const filteredBackups = computed(() => {
   const name = nameFilter.value.trim().toLowerCase()
   const ns = nsFilter.value.trim()
   const policy = policyFilter.value.trim()
+  const phase = phaseFilter.value.trim()
   return backups.value.filter((row) => {
     // v0.8.10: typeFilter now matches typePill().key (snapshot / exported /
     // imported / metadata / unknown). Source filter merged into Type.
     if (typeFilter.value !== 'all' && typePill(row).key !== typeFilter.value) {
       return false
     }
+    if (phase && normalizeBackupPhase(row?.status?.phase) !== phase) return false
     // v0.8.10.1: Policy chip filter — same dimensional pattern as ns chip.
     if (policy && !matchesPolicy(row, policy)) return false
     // v0.7.13 chip filter: exact-namespace match. Backup must include the
@@ -755,6 +782,7 @@ const clearAllChips = () => {
   nsFilter.value = ''
   policyFilter.value = ''
   typeFilter.value = 'all'
+  phaseFilter.value = ''
   nameFilter.value = ''
   restoreIntentActive.value = false
   router.replace({ path: '/backups', query: {} })
@@ -1234,6 +1262,7 @@ onUnmounted(() => {
 }
 .filter-type { width: 180px; }
 .filter-name { width: 280px; }
+.filter-phase { width: 180px; }
 .filter-spacer { flex: 1; }
 .filter-summary {
   color: #606266;

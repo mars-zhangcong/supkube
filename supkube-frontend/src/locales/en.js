@@ -170,6 +170,8 @@ export default {
     snapshotProtectedNs: 'Snapshot of protected namespace is not allowed (kube-system / velero / supkube).'
   },
   backups: {
+    phaseFilter: 'Filter by status',
+    allPhases: 'All statuses',
     stats: {
       title: 'Backup Statistics',
       total: 'Total',
