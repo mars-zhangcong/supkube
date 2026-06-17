@@ -1,0 +1,65 @@
+groups:
+  - name: supkube-recommended-alerts
+    rules:
+      - alert: SupkubeBackupConsecutiveFailures
+        expr: supkube_backup_consecutive_failures > 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: SupKube backup has consecutive failures
+          description: Backup {{ $labels.namespace }}/{{ $labels.name }} has {{ $value }} consecutive failed runs.
+
+      - alert: SupkubeBackupRPOSLOExceeded
+        expr: time() - supkube_backup_last_success_timestamp_seconds > 86400
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: SupKube backup RPO threshold exceeded
+          description: Backup {{ $labels.namespace }}/{{ $labels.name }} has not reported a successful run within the last 24 hours.
+
+      - alert: SupkubeBackupNoSuccessfulRun
+        expr: supkube_backup_last_success_timestamp_seconds == 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: SupKube backup has no successful run
+          description: Backup {{ $labels.namespace }}/{{ $labels.name }} has not reported any successful run yet.
+
+      - alert: SupkubeBSLUnavailable
+        expr: supkube_bsl_info == 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: SupKube backup storage location unavailable
+          description: Backup storage location {{ $labels.namespace }}/{{ $labels.name }} is unavailable.
+
+      - alert: SupkubeFingerprintValidationFailed
+        expr: supkube_fingerprint_validation_info == 0
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: SupKube integrity validation failed
+          description: Fingerprint validation is failing for {{ $labels.namespace }}/{{ $labels.name }}.
+
+      - alert: SupkubeBackupStuckWithoutCompletion
+        expr: (time() - supkube_backup_last_success_timestamp_seconds > 86400) and on (namespace, name) (supkube_backup_info == 1)
+        for: 6h
+        labels:
+          severity: warning
+        annotations:
+          summary: SupKube backup may be stuck without completion
+          description: Backup {{ $labels.namespace }}/{{ $labels.name }} has not completed successfully for an extended period while the backup object still exists.
+
+      - alert: SupkubeTopology321ComplianceDegraded
+        expr: supkube_topology_321_score < 1
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: SupKube 3-2-1-1-0 compliance degraded
+          description: Backup {{ $labels.namespace }}/{{ $labels.name }} is below the expected 3-2-1-1-0 topology compliance score.
