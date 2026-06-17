@@ -262,6 +262,8 @@ export default {
   },
   // v0.8.6 备份详情新版"备份组成"面板
   backups: {
+    phaseFilter: '按状态筛选',
+    allPhases: '全部状态',
     stats: {
       title: '备份统计',
       total: '总数',
