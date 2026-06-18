@@ -20,12 +20,12 @@ import (
 type ActionType string
 
 const (
-	ActionBackup            ActionType = "Backup"
-	ActionRestore           ActionType = "Restore"
-	ActionDeleteBackup      ActionType = "DeleteBackup"
+	ActionBackup              ActionType = "Backup"
+	ActionRestore             ActionType = "Restore"
+	ActionDeleteBackup        ActionType = "DeleteBackup"
 	ActionForceStripFinalizer ActionType = "ForceStripFinalizer" // 原 ForceDeleteBackup,PRD-008 §4.5 改名
-	ActionOrphanCleanup     ActionType = "OrphanCleanup"
-	ActionTTLPrune          ActionType = "ActivityTTLPrune" // TTL 清理本身也写审计(PRD-008 §4.x)
+	ActionOrphanCleanup       ActionType = "OrphanCleanup"
+	ActionTTLPrune            ActionType = "ActivityTTLPrune" // TTL 清理本身也写审计(PRD-008 §4.x)
 )
 
 // Phase 是 Task 生命周期阶段(PRD-008 §4.2 删除 Task 5 阶段;不同 ActionType 阶段集可不同)。
@@ -54,18 +54,18 @@ const (
 // ActivityEvent 是审计事件流的一条记录(PRD-008 §4.1 数据模型)。
 // 持久化为 append-only;PrevHash/Hash 构成 hash-chain(D2 不可篡改),由 AuditStore 在 Append 时维护。
 type ActivityEvent struct {
-	ID          string            `json:"id"`                    // ULID(单调、含时间,天然倒序)
-	TaskID      string            `json:"task_id"`               // 一个 Task 的多条阶段事件共享
-	ClusterID   string            `json:"cluster_id"`            // 目标集群
-	ActionType  ActionType        `json:"action_type"`           //
-	Phase       Phase             `json:"phase"`                 // 本条记录的阶段
-	ResourceRef string            `json:"resource_ref"`          // 如 backup/rp-123
-	Triggered   Trigger           `json:"triggered"`             // user/cron/api/system
-	ErrorCode   string            `json:"error_code,omitempty"`  // ERR_*(遵循 ADR-035),失败时填
-	Metadata    map[string]string `json:"metadata,omitempty"`    // ns/by/... 扩展位
-	Timestamp   time.Time         `json:"ts"`                    // 事件时刻(UTC)
-	PrevHash    string            `json:"prev_hash"`             // 上一条的 Hash(链首为空)
-	Hash        string            `json:"hash"`                  // 本条内容的 hash(见 ComputeHash)
+	ID          string            `json:"id"`                   // ULID(单调、含时间,天然倒序)
+	TaskID      string            `json:"task_id"`              // 一个 Task 的多条阶段事件共享
+	ClusterID   string            `json:"cluster_id"`           // 目标集群
+	ActionType  ActionType        `json:"action_type"`          //
+	Phase       Phase             `json:"phase"`                // 本条记录的阶段
+	ResourceRef string            `json:"resource_ref"`         // 如 backup/rp-123
+	Triggered   Trigger           `json:"triggered"`            // user/cron/api/system
+	ErrorCode   string            `json:"error_code,omitempty"` // ERR_*(遵循 ADR-035),失败时填
+	Metadata    map[string]string `json:"metadata,omitempty"`   // ns/by/... 扩展位
+	Timestamp   time.Time         `json:"ts"`                   // 事件时刻(UTC)
+	PrevHash    string            `json:"prev_hash"`            // 上一条的 Hash(链首为空)
+	Hash        string            `json:"hash"`                 // 本条内容的 hash(见 ComputeHash)
 }
 
 var idCounter uint32
@@ -103,10 +103,10 @@ type ListOpts struct {
 //   - List 倒序(最近优先),按 opt 过滤;
 //   - 写为 append-only(不改历史),TTL 仅靠 PruneBefore 删旧。
 type AuditStore interface {
-	Append(ctx context.Context, e *ActivityEvent) error              // 入流(填 PrevHash/Hash 后落库)
-	List(ctx context.Context, opt ListOpts) ([]ActivityEvent, error) // 倒序 + 过滤
-	Get(ctx context.Context, id string) (*ActivityEvent, error)      // 取单条
-	PruneBefore(ctx context.Context, cutoff time.Time) (int, error)  // TTL:删 ts<cutoff,返回删除条数
+	Append(ctx context.Context, e *ActivityEvent) error                    // 入流(填 PrevHash/Hash 后落库)
+	List(ctx context.Context, opt ListOpts) ([]ActivityEvent, error)       // 倒序 + 过滤
+	Get(ctx context.Context, id string) (*ActivityEvent, error)            // 取单条
+	PruneBefore(ctx context.Context, cutoff time.Time) (int, error)        // TTL:删 ts<cutoff,返回删除条数
 	VerifyChain(ctx context.Context) (ok bool, brokenAt string, err error) // D2:校验 hash-chain 连续
 	Close() error
 }

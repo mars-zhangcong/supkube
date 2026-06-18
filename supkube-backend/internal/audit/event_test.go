@@ -10,7 +10,7 @@ func sample(id, prev string) ActivityEvent {
 		ID: id, TaskID: "task-1", ClusterID: "clu-1",
 		ActionType: ActionDeleteBackup, Phase: PhaseSubmitted,
 		ResourceRef: "backup/rp-1", Triggered: TriggerUser,
-		Metadata: map[string]string{"ns": "prod"},
+		Metadata:  map[string]string{"ns": "prod"},
 		Timestamp: time.Unix(1000, 0).UTC(), PrevHash: prev,
 	}
 }

@@ -16,8 +16,8 @@ import (
 	"time"
 
 	badger "github.com/dgraph-io/badger/v4"
-	_ "modernc.org/sqlite"
 	bolt "go.etcd.io/bbolt"
+	_ "modernc.org/sqlite"
 )
 
 const N = 10000
@@ -25,27 +25,27 @@ const listK = 100
 
 // ActivityEvent 对齐 PRD-008 §4.1 数据模型 + hash-chain(D2 不可篡改)。
 type ActivityEvent struct {
-	ID         string            `json:"id"` // ULID(此处用 seq 代,顺序等价)
-	TaskID     string            `json:"task_id"`
-	ClusterID  string            `json:"cluster_id"`
-	ActionType string            `json:"action_type"`
-	Phase      string            `json:"phase"`
-	ResourceRef string           `json:"resource_ref"`
-	Triggered  string            `json:"triggered"`
-	ErrorCode  string            `json:"error_code,omitempty"`
-	Metadata   map[string]string `json:"metadata,omitempty"`
-	Timestamp  time.Time         `json:"ts"`
-	PrevHash   string            `json:"prev_hash"`
-	Hash       string            `json:"hash"`
+	ID          string            `json:"id"` // ULID(此处用 seq 代,顺序等价)
+	TaskID      string            `json:"task_id"`
+	ClusterID   string            `json:"cluster_id"`
+	ActionType  string            `json:"action_type"`
+	Phase       string            `json:"phase"`
+	ResourceRef string            `json:"resource_ref"`
+	Triggered   string            `json:"triggered"`
+	ErrorCode   string            `json:"error_code,omitempty"`
+	Metadata    map[string]string `json:"metadata,omitempty"`
+	Timestamp   time.Time         `json:"ts"`
+	PrevHash    string            `json:"prev_hash"`
+	Hash        string            `json:"hash"`
 }
 
 func mkEvent(i int, prev string) ([]byte, string) {
 	e := ActivityEvent{
 		ID: fmt.Sprintf("%016d", i), TaskID: fmt.Sprintf("task-%d", i%500),
 		ClusterID: fmt.Sprintf("clu-%d", i%20), ActionType: "DeleteBackup",
-		Phase: []string{"Submitted", "DBR-Created", "BSL-Cleanup", "VSC-Cleanup", "CR-Removed", "Completed"}[i%6],
+		Phase:       []string{"Submitted", "DBR-Created", "BSL-Cleanup", "VSC-Cleanup", "CR-Removed", "Completed"}[i%6],
 		ResourceRef: fmt.Sprintf("backup/rp-%d", i), Triggered: "user",
-		Metadata: map[string]string{"ns": "prod", "by": "zack@jumborca.net"},
+		Metadata:  map[string]string{"ns": "prod", "by": "zack@jumborca.net"},
 		Timestamp: time.Unix(0, int64(i)*1000), PrevHash: prev,
 	}
 	// hash-chain:sha256(prevHash + 事件去 Hash 字段的规范字节)。
@@ -72,10 +72,10 @@ func dirSize(p string) int64 {
 }
 
 type result struct {
-	name           string
-	appendMS       float64
-	listMS         float64
-	sizeMB         float64
+	name     string
+	appendMS float64
+	listMS   float64
+	sizeMB   float64
 }
 
 func benchBolt(dir string) result {
@@ -193,7 +193,13 @@ func main() {
 
 func ms(d time.Duration) float64 { return float64(d.Microseconds()) / 1000 }
 func mb(b int64) float64         { return float64(b) / 1024 / 1024 }
-func fileSize(p string) int64    { fi, err := os.Stat(p); if err != nil { return 0 }; return fi.Size() }
+func fileSize(p string) int64 {
+	fi, err := os.Stat(p)
+	if err != nil {
+		return 0
+	}
+	return fi.Size()
+}
 func fileLike(dir, name string) int64 {
 	p := filepath.Join(dir, name)
 	if fi, err := os.Stat(p); err == nil {

@@ -72,8 +72,8 @@ type Inflight struct {
 // (Completed/CR-Removed/Failed)的 taskID。纯函数,可单测。
 func InflightDeletes(events []audit.ActivityEvent) []Inflight {
 	type agg struct {
-		backup            string
-		hasDBR, terminal  bool
+		backup           string
+		hasDBR, terminal bool
 	}
 	m := map[string]*agg{}
 	order := []string{} // 保稳定输出序(便于测试)
