@@ -15,6 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/supkube/supkube-backend/internal/audit"
 	"github.com/supkube/supkube-backend/internal/auth"
 	"github.com/supkube/supkube-backend/internal/gc"
 	"github.com/supkube/supkube-backend/internal/k8s"
@@ -489,6 +490,12 @@ func DeleteBackup(c *gin.Context) {
 		return
 	}
 
+	// PRD-008: 删除 Task 化 —— 同 taskID 串起本次删除的多阶段审计事件(best-effort,审计关也不影响删除)。
+	// 本 handler 同步只能确证 Submitted + DBR-Created;后续 BSL/VSC/CR-Removed 由 DBR 异步级联完成,
+	// 待 DBR informer(Phase 2b)续写。taskID 回传前端,供 Activity 流深链。
+	taskID := audit.NewID()
+	audit.EmitDeleteTask(context.Background(), taskID, name, audit.ActionDeleteBackup, audit.PhaseSubmitted, "", nil)
+
 	// DBR name: <backup>-<ts>. Velero auto-cleans DBRs after processing;
 	// the unique suffix lets us re-trigger a delete if a prior one stalled.
 	dbrName := fmt.Sprintf("%s-delete-%s", name, time.Now().UTC().Format("20060102150405"))
@@ -506,9 +513,13 @@ func DeleteBackup(c *gin.Context) {
 		},
 	}
 	if err := cl.Create(context.Background(), dbr); err != nil {
+		audit.EmitDeleteTask(context.Background(), taskID, name, audit.ActionDeleteBackup, audit.PhaseFailed,
+			"ERR_DBR_CREATE", map[string]string{"err": err.Error()})
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create DeleteBackupRequest: " + err.Error()})
 		return
 	}
+	audit.EmitDeleteTask(context.Background(), taskID, name, audit.ActionDeleteBackup, audit.PhaseDBRCreated,
+		"", map[string]string{"dbr": dbrName})
 	// v0.8.8: schedule a deferred orphan-GC scan ~60s from now. Velero's
 	// DBR controller cleans most things but leaks Data Mover retained
 	// VSC/VS. The debounced timer in gc.TriggerSoon coalesces rapid
@@ -522,6 +533,7 @@ func DeleteBackup(c *gin.Context) {
 		"message":             "Delete in progress (cascade); orphan cleanup scheduled ~60s",
 		"deleteBackupRequest": dbrName,
 		"backupName":          name,
+		"taskId":              taskID, // PRD-008:Activity 流深链
 	})
 }
 
@@ -573,6 +585,11 @@ func ForceDeleteBackup(c *gin.Context) {
 		return
 	}
 
+	// PRD-008 §4.5:Force Strip Finalizer 是同步全程,可如实落完整审计链(Submitted→CR-Removed→Completed),
+	// bypassed 记入 metadata(D2 不可篡改地留存"绕过了什么")。taskID 串起本次操作 + 回传深链。
+	taskID := audit.NewID()
+	audit.EmitDeleteTask(context.Background(), taskID, name, audit.ActionForceStripFinalizer, audit.PhaseSubmitted, "", nil)
+
 	hadFinalizers := append([]string{}, backup.Finalizers...)
 	bypassed := []string{}
 
@@ -582,6 +599,8 @@ func ForceDeleteBackup(c *gin.Context) {
 		patch := client.MergeFrom(backup.DeepCopy())
 		backup.Finalizers = []string{}
 		if err := cl.Patch(context.Background(), backup, patch); err != nil {
+			audit.EmitDeleteTask(context.Background(), taskID, name, audit.ActionForceStripFinalizer, audit.PhaseFailed,
+				"ERR_STRIP_FINALIZER", map[string]string{"err": err.Error()})
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error":         "failed to strip finalizers: " + err.Error(),
 				"hadFinalizers": hadFinalizers,
@@ -593,6 +612,8 @@ func ForceDeleteBackup(c *gin.Context) {
 
 	// Step 2: direct delete. NO DBR — that's the path we just abandoned.
 	if err := cl.Delete(context.Background(), backup); err != nil && !apierrors.IsNotFound(err) {
+		audit.EmitDeleteTask(context.Background(), taskID, name, audit.ActionForceStripFinalizer, audit.PhaseFailed,
+			"ERR_FORCE_DELETE", map[string]string{"err": err.Error(), "strippedFinalizers": strings.Join(hadFinalizers, ",")})
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":              "failed to delete Backup after stripping finalizers: " + err.Error(),
 			"strippedFinalizers": hadFinalizers,
@@ -600,6 +621,8 @@ func ForceDeleteBackup(c *gin.Context) {
 		return
 	}
 	bypassed = append(bypassed, "DeleteBackupRequest cascade (BSL tarball NOT removed)")
+	audit.EmitDeleteTask(context.Background(), taskID, name, audit.ActionForceStripFinalizer, audit.PhaseCRRemoved,
+		"", map[string]string{"bypassed": strings.Join(bypassed, "; ")})
 
 	// Step 3: schedule orphan GC so the cloud snapshot side doesn't leak.
 	// Per D-11 the orphan-VSC/cloud-snapshot trap is the real billing risk.
@@ -608,11 +631,15 @@ func ForceDeleteBackup(c *gin.Context) {
 		gc.TriggerSoon(context.Background(), cl, k8sCli)
 	}
 
+	audit.EmitDeleteTask(context.Background(), taskID, name, audit.ActionForceStripFinalizer, audit.PhaseCompleted,
+		"", map[string]string{"orphanGcScheduled": fmt.Sprintf("%t", kerr == nil)})
+
 	c.JSON(http.StatusOK, gin.H{
 		"message":           "Backup force-deleted. Review 'bypassed' — those side effects were skipped.",
 		"backupName":        name,
 		"bypassed":          bypassed,
 		"orphanGcScheduled": kerr == nil,
+		"taskId":            taskID, // PRD-008:Activity 流深链
 		"warning":           "BSL tarball not removed by force-delete. If you want the storage reclaimed, also remove the BSL object directly or wait for retention policy.",
 	})
 }

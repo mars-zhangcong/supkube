@@ -37,6 +37,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/supkube/supkube-backend/internal/audit"
 	"github.com/supkube/supkube-backend/internal/k8s"
 	"github.com/supkube/supkube-backend/internal/velerons"
 )
@@ -238,6 +239,18 @@ func ListActions(c *gin.Context) {
 		}
 		for i := range restoreList.Items {
 			actions = append(actions, restoreToAction(&restoreList.Items[i]))
+		}
+	}
+
+	// PRD-008 §1.1 union:CR 已删但审计流有记录的,从审计补一张卡(CR 死后卡片仍在)。
+	// best-effort + 有界:审计关(store==nil)则退化为纯 CR 视图,与改造前行为一致。
+	if store := audit.Default(); store != nil && (typeFilter == "" || typeFilter == ActionTypeBackup) {
+		live := make(map[string]bool, len(actions))
+		for _, a := range actions {
+			live[a.RawKind+"/"+a.RawName] = true
+		}
+		if hist, herr := store.List(context.Background(), audit.ListOpts{Limit: 500}); herr == nil {
+			actions = append(actions, auditHistoryActions(hist, live)...)
 		}
 	}
 
@@ -737,6 +750,50 @@ func computeDuration(start, end *time.Time) int {
 		return 0
 	}
 	return int(d.Seconds())
+}
+
+// auditHistoryActions 从审计事件流(已倒序)为"CR 已删"的删除 Task 合成历史卡片(PRD-008 union)。
+// 每个 backup 仅取最近一条删除类事件;活 CR 仍在(live)则跳过(union 只补"死"的,不与实时卡重复)。
+func auditHistoryActions(events []audit.ActivityEvent, live map[string]bool) []Action {
+	seen := map[string]bool{}
+	var out []Action
+	for i := range events {
+		e := events[i]
+		if e.ActionType != audit.ActionDeleteBackup && e.ActionType != audit.ActionForceStripFinalizer {
+			continue // 本期只补删除类 Task
+		}
+		name := strings.TrimPrefix(e.ResourceRef, "backup/")
+		if name == "" || seen[name] {
+			continue // 已为该 backup 取过最近一条
+		}
+		seen[name] = true
+		if live["Backup/"+name] {
+			continue // 活 CR 仍在,实时卡已展示
+		}
+		ts := e.Timestamp
+		out = append(out, Action{
+			ID:        name,
+			Type:      ActionTypeBackup,
+			Status:    auditPhaseToStatus(e.Phase),
+			StartTime: &ts,
+			RawKind:   "Backup",
+			RawName:   name,
+			Origin:    "audit-history", // 标记:来自审计流(CR 已删,卡片存活)
+		})
+	}
+	return out
+}
+
+// auditPhaseToStatus 把删除 Task 审计阶段映射成 Action 状态(沿用 UI 现有枚举,不新增)。
+func auditPhaseToStatus(ph audit.Phase) string {
+	switch ph {
+	case audit.PhaseCompleted, audit.PhaseCRRemoved:
+		return ActionStatusCompleted
+	case audit.PhaseFailed:
+		return ActionStatusFailed
+	default:
+		return ActionStatusRunning // Submitted/DBR-Created 等中间态:删除仍在进行
+	}
 }
 
 func computeActionStats(actions []Action) ActionStats {
