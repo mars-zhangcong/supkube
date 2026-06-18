@@ -11,6 +11,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"sync/atomic"
 	"time"
 )
 
@@ -64,6 +66,15 @@ type ActivityEvent struct {
 	Timestamp   time.Time         `json:"ts"`                    // 事件时刻(UTC)
 	PrevHash    string            `json:"prev_hash"`             // 上一条的 Hash(链首为空)
 	Hash        string            `json:"hash"`                  // 本条内容的 hash(见 ComputeHash)
+}
+
+var idCounter uint32
+
+// NewID 生成一个【字典序=时间序】的唯一 id(ULID 同序语义,无外部依赖):
+// 16 hex 的 UTC unix-nano + 8 hex 进程内自增计数(同纳秒去重)。链顺序的权威是 store 的自增 seq,
+// 本 id 仅作业务唯一键,故计数器进程内复位不影响链完整性。
+func NewID() string {
+	return fmt.Sprintf("%016X%08X", uint64(time.Now().UTC().UnixNano()), atomic.AddUint32(&idCounter, 1))
 }
 
 // ComputeHash 计算本事件的 hash-chain 值:sha256(prevHash + 事件去 Hash 字段的规范化 JSON)。
