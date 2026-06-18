@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	v1 "github.com/supkube/supkube-backend/internal/api/v1"
 	"github.com/supkube/supkube-backend/internal/audit"
+	"github.com/supkube/supkube-backend/internal/auditwatch"
 	"github.com/supkube/supkube-backend/internal/auth"
 	"github.com/supkube/supkube-backend/internal/clusterhealth"
 	"github.com/supkube/supkube-backend/internal/csi"
@@ -258,6 +259,15 @@ func Run() error {
 			audit.SetDefault(store)
 			audit.StartTTLReaper(context.Background(), store, audit.DefaultRetention, 24*time.Hour)
 			log.Printf("[audit] Activity 持久层就绪: %s (保留 %s)", dbPath, audit.DefaultRetention)
+			// PRD-008 Phase 2b:异步删除(DBR 级联)的终态补写——Backup CR 消失即判完成。
+			go func() {
+				cli, cerr := k8s.GetRuntimeClient()
+				if cerr != nil {
+					log.Printf("[auditwatch] runtime client 不可用,删除终态补写禁用: %v", cerr)
+					return
+				}
+				auditwatch.Run(context.Background(), cli)
+			}()
 		}
 	}
 
