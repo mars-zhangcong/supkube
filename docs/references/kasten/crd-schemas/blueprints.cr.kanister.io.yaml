@@ -1,0 +1,159 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  creationTimestamp: "2026-05-23T07:21:03Z"
+  generation: 1
+  name: blueprints.cr.kanister.io
+  resourceVersion: "274109"
+  uid: c97e0837-450e-4ce0-9c01-d5e935acd2f9
+spec:
+  conversion:
+    strategy: None
+  group: cr.kanister.io
+  names:
+    kind: Blueprint
+    listKind: BlueprintList
+    plural: blueprints
+    singular: blueprint
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        properties:
+          actions:
+            additionalProperties:
+              properties:
+                configMapNames:
+                  items:
+                    type: string
+                  type: array
+                deferPhase:
+                  properties:
+                    args:
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                    func:
+                      type: string
+                    name:
+                      type: string
+                    objects:
+                      additionalProperties:
+                        properties:
+                          apiVersion:
+                            description: API version of the referent.
+                            type: string
+                          group:
+                            description: API Group of the referent.
+                            type: string
+                          kind:
+                            description: 'Kind of the referent. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds'
+                            type: string
+                          name:
+                            description: 'Name of the referent. More info: http://kubernetes.io/docs/user-guide/identifiers#names'
+                            type: string
+                          namespace:
+                            description: 'Namespace of the referent. More info: http://kubernetes.io/docs/user-guide/namespaces'
+                            type: string
+                          resource:
+                            description: Resource name of the referent.
+                            type: string
+                        type: object
+                      type: object
+                  type: object
+                inputArtifactNames:
+                  items:
+                    type: string
+                  type: array
+                kind:
+                  type: string
+                name:
+                  type: string
+                outputArtifacts:
+                  additionalProperties:
+                    properties:
+                      keyValue:
+                        additionalProperties:
+                          type: string
+                        type: object
+                      kopiaSnapshot:
+                        type: string
+                        x-kubernetes-preserve-unknown-fields: true
+                    type: object
+                  type: object
+                phases:
+                  items:
+                    properties:
+                      args:
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                      func:
+                        type: string
+                      name:
+                        type: string
+                      objects:
+                        additionalProperties:
+                          properties:
+                            apiVersion:
+                              description: API version of the referent.
+                              type: string
+                            group:
+                              description: API Group of the referent.
+                              type: string
+                            kind:
+                              description: 'Kind of the referent. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds'
+                              type: string
+                            name:
+                              description: 'Name of the referent. More info: http://kubernetes.io/docs/user-guide/identifiers#names'
+                              type: string
+                            namespace:
+                              description: 'Namespace of the referent. More info:
+                                http://kubernetes.io/docs/user-guide/namespaces'
+                              type: string
+                            resource:
+                              description: Resource name of the referent.
+                              type: string
+                          type: object
+                        type: object
+                    type: object
+                  type: array
+                secretNames:
+                  items:
+                    type: string
+                  type: array
+              type: object
+            type: object
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+        type: object
+    served: true
+    storage: true
+status:
+  acceptedNames:
+    kind: Blueprint
+    listKind: BlueprintList
+    plural: blueprints
+    singular: blueprint
+  conditions:
+  - lastTransitionTime: "2026-05-23T07:21:03Z"
+    message: no conflicts found
+    reason: NoConflicts
+    status: "True"
+    type: NamesAccepted
+  - lastTransitionTime: "2026-05-23T07:21:03Z"
+    message: the initial names have been accepted
+    reason: InitialNamesAccepted
+    status: "True"
+    type: Established
+  storedVersions:
+  - v1alpha1

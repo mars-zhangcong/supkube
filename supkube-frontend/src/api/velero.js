@@ -93,7 +93,34 @@ export const getBackupAdvisor = () => api.get('/backup-advisor')
 export const getBackupAdvisorForNamespace = (namespace) => api.get(`/backup-advisor/${namespace}`)
 
 // Backups
-export const getBackups = () => api.get('/backups')
+const BACKUP_SUCCESS_STATES = new Set(['Completed'])
+const BACKUP_FAILED_STATES = new Set(['Failed', 'PartiallyFailed', 'FailedValidation'])
+
+export const classifyBackupStatus = (status) => {
+  if (BACKUP_SUCCESS_STATES.has(status)) return 'success'
+  if (BACKUP_FAILED_STATES.has(status)) return 'failed'
+  return null
+}
+
+export const listBackups = async (params = {}) => {
+  const response = await api.get('/backups', { params })
+  const data = response?.data
+  const items = Array.isArray(data)
+    ? data
+    : Array.isArray(data?.items)
+      ? data.items
+      : []
+  return {
+    ...response,
+    data: {
+      ...(data && typeof data === 'object' && !Array.isArray(data) ? data : {}),
+      items,
+      total: typeof data?.total === 'number' ? data.total : items.length,
+    },
+  }
+}
+
+export const getBackups = () => listBackups()
 export const getBackup = (name) => api.get(`/backups/${name}`)
 export const getBackupResources = (name) => api.get(`/backups/${name}/resources`)
 export const getBackupArtifacts = (name) => api.get(`/backups/${name}/artifacts`)
@@ -146,7 +173,11 @@ export const deleteTransformSet = (name) => api.delete(`/transform-sets/${name}`
 export const applyConflictFixes = (data) => api.post('/transform-sets/apply-conflict-fixes', data)
 
 // Restores (legacy — kept for backward compat during v0.8 transition)
-export const getRestores = () => api.get('/restores')
+export const getRestores = (params = {}) => {
+  const limit = Number(params?.limit)
+  const query = Number.isInteger(limit) && limit > 0 ? { limit } : undefined
+  return api.get('/restores', query ? { params: query } : undefined)
+}
 export const getRestore = (name) => api.get(`/restores/${name}`)
 export const createRestore = (data) => api.post('/restores', data)
 // v0.7.12: Pre-flight conflict detection before restore. Body: { backupName,

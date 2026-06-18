@@ -36,3 +36,14 @@ CD/
 # .tgz payloads (which can be 10s of MB each). hack/publish-release.sh
 # re-runs `helm dep update` before packaging.
 supkube-helm/*/charts/*.tgz
+
+# MS Office 临时/锁文件：打开 .xlsx/.docx/.pptx 时生成的 `~$` 前缀文件，
+# 进程持有期间存在、关闭即删，绝不入库（会误提交一个"幽灵"文件）。
+# 注意：只挡锁文件，不挡 .xlsx 本体（功能梳理表等是交付物，要留）。
+~$*
+
+# 编译产物 / 临时二进制：go build 出来的 ad-hoc 测试二进制，非源码。
+# 例：DRFlow 干跑测试产物 supkube-backend/drflowdrytest。
+drflowdrytest
+*.test
+supkube-backend/**/*drytest

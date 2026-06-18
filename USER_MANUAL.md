@@ -38,7 +38,7 @@
 20. [双策略：Snapshot + Export 模型](#20-双策略snapshot--export-模型v089-引入--v0810-改进)
 21. [kubectl 速查 + label / annotation 契约](#21-kubectl-速查--label--annotation-契约v08102)
 22. [灾备演练 / DR Playbook](#22-灾备演练--dr-playbookv090-multi-cluster-manager)
-23. [Helm 安装参考](#23-helm-安装参考v091-install-reference)
+23. [Helm 安装与配置完全参考（Advanced Install Options）](#23-helm-安装与配置完全参考advanced-install-optionsv091)
 24. [Import Policy（跨集群持续 DR）](#24-import-policy跨集群持续-drv09113)
 25. [数据韧性评分（Resilience Score）解读](#25-数据韧性评分resilience-score解读)
 
@@ -2386,128 +2386,695 @@ kubectl get cluster.supkube.io -n supkube -o yaml > clusters.yaml
 
 ---
 
-## 23. Helm 安装参考（v0.9.1+ Install Reference）
+## 23. Helm 安装与配置完全参考（Advanced Install Options）（v0.9.1+）
 
-> SupKube 的 Helm chart 暴露了一套覆盖**部署形态 / 认证 / 网络 / 制品来源 / 子组件开关**的 values。
-> 本节是单一来源，对照 Kasten K10 [advanced install options](https://docs.kasten.io/latest/install/advanced/) 的对应位置。
+> **本章是 SupKube Helm chart 所有可配参数的单一权威来源**，对标 Veeam Kasten K10 的 [Advanced Install Options](https://docs.kasten.io/latest/install/advanced/) 文档结构。
+> 如果你只需要快速跑起来，见 §5.2 基础安装。本章回答的是：每个参数**是什么、默认值是多少、什么时候需要改**。
+> 参数真值来源：`supkube-helm/supkube/values.yaml`（chart v0.9.1-alpha.9）。
 
-### 23.1 最小可运行命令
+---
+
+### 23.1 安装前必答三连
+
+在任何安装之前，这三个问题必须先回答清楚，否则安装要么直接 fail，要么跑起来但无法登录。
+
+#### 问题 1：EULA 和 License
 
 ```bash
-helm repo add supkube https://charts.supkube.com/
-helm repo update
+# 最小必填组合（不填 eula.accept=true → helm install 立即 fail，有明确报错提示）
 helm install supkube supkube/supkube --devel \
   --namespace supkube --create-namespace \
   --set eula.accept=true \
-  --set velero.enabled=true
+  --set eula.email=ops@example.com \
+  --set eula.company="Example Inc" \
+  --set license.key=""          # 空 = 社区免费版，当前 alpha 无验证
 ```
 
-`--devel` 是因为目前所有公开版本都是 `0.9.x-alpha.N` pre-release，正式版（无 `-alpha` 后缀）发出来后可去掉。
+| values 路径 | 类型 | 默认 | fail-fast？ | 说明 |
+|---|---|---|---|---|
+| `eula.accept` | bool | `false` | **是** — 不为 `true` 直接 `helm install` 报错 | 和 Kasten K10 同款关卡。接受后写入 `cm/supkube-eula`，运维和审计都能查。 |
+| `eula.email` | string | `""` | 否 | 运维 / 续约联系邮箱，写入 `cm/supkube-eula`。推荐填，支持联系时能找到人。 |
+| `eula.company` | string | `""` | 否 | 公司 / 团队名，同上。 |
+| `license.key` | string | `""` | 否（当前 alpha 任意字符串均通过） | 社区版留空；有 license key 时填入。v0.9.1+ License Manager 上线后会校验签名，届时无效 key 会降级到社区功能集。 |
 
-### 23.2 装之前先跑一次 Preflight
+#### 问题 2：Community 版 vs Licensed 版
+
+| 版本 | license.key | 开放功能 |
+|---|---|---|
+| 社区免费版 | `""` (空) | 备份/恢复/策略/UI/BSL/VSL/RBAC/审计 全部功能 |
+| Licensed 版 | 有效 key（v0.9.1+）| 追加：多集群管理、SLA 报告、企业支持 SLA |
+
+当前 alpha 阶段无功能区分，key 内容不影响功能集。
+
+#### 问题 3：UI 暴露方式
+
+在 `helm install` 时用 `service.frontend.type` 或 `ingress.enabled` 指定，之后随时可用 `helm upgrade` 改。选择影响 `auth.dex.publicURL` 的填法（见 §23.5）。详见 §23.4 的 4 种模式表。
+
+---
+
+### 23.2 安装前 Preflight 检查
 
 ```bash
 curl -fsSL https://charts.supkube.com/preflight.sh | bash
 ```
 
-预检 10 项：K8s 版本 / kubectl 连通 / Helm 版本 / cluster-admin 权限 / StorageClass / CSI snapshot CRDs / snapshot-controller / VolumeSnapshotClass / 已有 Velero / 节点资源。返回 0 = 可以装，1 = 有 FAIL 项必须先修。
+预检 10 项：K8s 版本（≥ 1.24）/ kubectl 连通 / Helm 版本（≥ 3.0）/ cluster-admin 权限 / 默认 StorageClass / CSI snapshot CRDs / snapshot-controller / VolumeSnapshotClass / 是否已有 Velero / 节点可调度资源。
 
-### 23.3 EULA 与 License（必填）
+- 返回 `0` → 可以安装
+- 返回 `1` → 有 FAIL 项，必须先修复
 
-| values 路径 | 类型 | 默认 | 说明 |
-|---|---|---|---|
-| `eula.accept` | bool | `false` | **必须显式设为 `true`**——否则 `helm install` 在 template render 阶段直接 fail，并打印需要加的参数提示。这是和 Kasten 一致的安装关卡。 |
-| `eula.email` | string | `""` | 运维 / 续约联系邮箱。会写进 `cm/supkube-eula` 与 Settings → About。 |
-| `eula.company` | string | `""` | 公司 / 团队名。同上。 |
-| `license.key` | string | `""` | License Key。**当前 alpha 阶段任意字符串都通过**，空 = 社区免费版。v0.9.1+ License Manager 上线后会做签名校验。 |
+---
 
-实际安装命令：
-```bash
-helm install supkube supkube/supkube --devel ... \
-  --set eula.accept=true \
-  --set eula.email=ops@yourco.com \
-  --set eula.company="Your Company Ltd" \
-  --set license.key=YOUR-KEY-OR-EMPTY
+### 23.3 镜像与 Airgap
+
+#### SupKube 自身镜像
+
+所有镜像都是 multi-arch manifest list（amd64 + arm64）。默认从 `supkube.azurecr.io` 公开匿名拉取，无需 imagePullSecrets。
+
+| values 路径 | 默认 | 说明 |
+|---|---|---|
+| `backend.image.repository` | `supkube.azurecr.io/backend` | backend 镜像仓库 |
+| `backend.image.tag` | `0.9.1.9-alpha` | backend 版本 tag（与 `Chart.appVersion` 一致）|
+| `backend.image.pullPolicy` | `IfNotPresent` | 镜像拉取策略 |
+| `frontend.image.repository` | `supkube.azurecr.io/frontend` | frontend 镜像仓库 |
+| `frontend.image.tag` | `0.9.1.9-alpha` | frontend 版本 tag |
+| `frontend.image.pullPolicy` | `IfNotPresent` | 镜像拉取策略 |
+| `auth.dex.image.repository` | `dexidp/dex` | 内嵌 Dex 镜像（Docker Hub）|
+| `auth.dex.image.tag` | `v2.39.1` | Dex 版本 |
+| `localStore.image.repository` | `quay.io/minio/minio` | MinIO 镜像（可选组件）|
+| `localStore.image.tag` | `RELEASE.2025-04-22T22-12-26Z` | MinIO 版本 |
+
+#### 全局 Airgap Override（`global.airgapped.repository`）
+
+当集群无法访问公共 registry 时，把所有 SupKube chart 自管镜像重写到内网 mirror：
+
+```yaml
+# values.airgap.yaml（§24 详述的 overlay 文件）
+global:
+  airgapped:
+    repository: harbor.internal.corp/supkube-mirror
 ```
 
-### 23.4 镜像来源与 airgap
+重写规则（由 `_helpers.tpl` 的 `supkube.image.fullname` 执行）：
 
-| values 路径 | 类型 | 默认 | 说明 |
-|---|---|---|---|
-| `image.registry` | string | `""` | 全局镜像 registry 前缀。**空 = 直接从 `supkube.azurecr.io` 公开匿名拉**。设为 `harbor.internal.corp/supkube-mirror` 则所有镜像（backend/frontend/dex/minio/velero）都从这里拉。Airgap 客户必填。 |
-| `backend.image.tag` / `frontend.image.tag` | string | 与 `appVersion` 一致 | 单独覆写某个组件的 tag（hotfix 场景）。 |
-| `backend.image.pullPolicy` | string | `IfNotPresent` | 同上。 |
+```
+原始：supkube.azurecr.io/backend:0.9.1.9-alpha
+重写：harbor.internal.corp/supkube-mirror/backend:0.9.1.9-alpha
+```
 
-镜像架构: SupKube 镜像是 multi-arch manifest list（amd64 + arm64），K8s 节点自动按 CPU arch 挑变种，**客户安装命令零参数即可适配 AWS Graviton / Apple Silicon docker-desktop 等 ARM 集群**。
+即：`<global.airgapped.repository>/<镜像名最后一段>:<tag>`
 
-### 23.5 认证模式
-
-| values 路径 | 类型 | 默认 | 说明 |
-|---|---|---|---|
-| `auth.enabled` | bool | `true` | 开启 OIDC 登录流程。设 `false` 进入"demo 模式"（每个请求都是 admin，仅适合本地试用）。 |
-| `auth.dex.enabled` | bool | `true` | 启用内置 Dex（自带 connector 配置）。和外部 IdP 接 OIDC 时改 `false`。 |
-| `auth.oidc.issuerURL` | string | `""` | 外部 OIDC issuer。例：`https://customer-keycloak.example.com/realms/main`。当 `dex.enabled=false` 时必填。 |
-| `auth.oidc.clientID` / `clientSecret` | string | `""` | 上面 IdP 给我们这个 client 的凭据。 |
-| `auth.rbac.enabled` | bool | `false` | 开启 group/user → role 映射。生产强烈建议开。 |
-| `auth.rbac.defaultRole` | string | `"viewer"` | 未匹配任何 binding 的用户的默认角色。 |
-| `auth.rbac.bindings` | array | `[]` | RBAC 绑定列表，详见 §12。 |
-| `auth.staticTokens.enabled` | bool | `false` | API token（给 CI/CD/Terraform 用）。详见 §14。 |
-| `auth.basicAuth.enabled` | bool | `false` | Basic Auth（适合内网 proxy 已认证转发场景）。 |
-
-对应 Kasten 的 `auth.openshift.*` / `auth.oidc.*` 系列——我们用 Dex 中间层统一抽象，外部 IdP 兼容度更广。
-
-### 23.6 网络 / Ingress / TLS
-
-| values 路径 | 类型 | 默认 | 说明 |
-|---|---|---|---|
-| `service.frontend.type` | string | `NodePort` | 前端 SVC 类型。LoadBalancer / ClusterIP 可选。 |
-| `service.frontend.nodePort` | int | `30888` | NodePort 端口。生产推荐改 Ingress。 |
-| `ingress.enabled` | bool | `false` | 启用 Ingress（对应 Kasten 的 `ingress.create`）。 |
-| `ingress.className` | string | `""` | IngressClass 名（nginx / traefik / istio）。 |
-| `ingress.hosts[].host` | string | `supkube.local` | 域名。 |
-| `ingress.annotations` | map | `{}` | cert-manager / 自定义 annotation 注入位置。 |
-
-### 23.7 子组件开关
-
-| values 路径 | 类型 | 默认 | 说明 |
-|---|---|---|---|
-| `velero.enabled` | bool | `true` | 自动安装 Velero v1.18 subchart。**和 Kasten 最大的差别**——Kasten 让你自己装 Velero，我们 bundle。客户已有 Velero 时设 `false`。 |
-| `velero.configuration.features` | string | `EnableCSI` | Velero feature flags。`EnableCSI` 是 CSI snapshot 必需。 |
-| `velero.initContainers` | array | csi/aws/azure 三件套 | 默认装 CSI 插件 + AWS S3 + Azure Blob 插件。GCP 客户加 `velero-plugin-for-gcp`。 |
-| `localStore.enabled` | bool | `false` | 在集群内起 MinIO 作为 Local BSL（实现 3-2-1-1-0 的 "1 immutable copy"）。多节点 + 默认 SC 时推荐开。 |
-| `localStore.size` | string | `100Gi` | MinIO PVC 容量。 |
-| `localStore.objectLock.enabled` | bool | `true` | S3 Object Lock（WORM 不可变）。 |
-| `localStore.objectLock.mode` | string | `governance` | `governance`（admin 可解锁）/ `compliance`（即使 root 也不可删）。 |
-| `localStore.bucket` | string | `supkube-local` | MinIO bucket 名。第一次装完别改。 |
-
-### 23.8 资源限制
-
-| values 路径 | 默认 |
-|---|---|
-| `backend.resources.requests.{cpu,memory}` | `100m / 128Mi` |
-| `backend.resources.limits.{cpu,memory}` | `500m / 256Mi` |
-| `frontend.resources.requests.{cpu,memory}` | `50m / 64Mi` |
-| `frontend.resources.limits.{cpu,memory}` | `200m / 128Mi` |
-
-大集群（>200 namespace）建议 backend limit 拉到 `2000m / 1Gi`。
-
-### 23.9 完整安装样板
-
-**生产推荐配置**：
+**Velero subchart 注意事项（必读）**：Helm subchart 不继承父 chart 的 `global.*` image 字段。Airgap 安装时**必须额外**传入 Velero 及每个插件的镜像：
 
 ```bash
-helm install supkube supkube/supkube --version 0.9.0-alpha.4 --devel \
+helm install supkube supkube/supkube --devel \
+  --namespace supkube --create-namespace \
+  --set eula.accept=true \
+  --set global.airgapped.repository=harbor.internal.corp/supkube-mirror \
+  \
+  # Velero 主镜像
+  --set velero.image.repository=harbor.internal.corp/supkube-mirror/velero \
+  --set velero.image.tag=v1.18.0 \
+  \
+  # AWS 插件
+  --set 'velero.initContainers[0].image=harbor.internal.corp/supkube-mirror/velero-plugin-for-aws:v1.14.1' \
+  \
+  # Azure 插件
+  --set 'velero.initContainers[1].image=harbor.internal.corp/supkube-mirror/velero-plugin-for-microsoft-azure:v1.14.1'
+```
+
+推荐做法：把上述所有 `--set` 收敛到 `values.airgap.yaml` overlay 文件，再用 `-f values.airgap.yaml` 引用。详见 §24 Airgap Overlay Pattern。
+
+---
+
+### 23.4 暴露 UI 的 4 种模式
+
+> 这是 Day-0 运维决策（PRD-014）。选一种模式，安装完成后终端会打印对应的访问步骤（NOTES.txt）。随时可用 `helm upgrade` 切换。
+
+| 模式 | 适用场景 | 访问方式 | 关键参数 |
+|---|---|---|---|
+| **NodePort**（默认） | docker-desktop / on-prem，节点 IP 在内网可达 | `http://<node-ip>:30888/` | `service.frontend.type=NodePort`（默认无需设）|
+| **LoadBalancer** | 公有云 AKS/GKE/EKS，需要公网 IP | `http://<EXTERNAL-IP>/`（IP 是动态的）| `service.frontend.type=LoadBalancer` |
+| **ClusterIP** | 安全敏感 / 气隙 / 按需访问 | `kubectl port-forward svc/supkube-frontend 8080:80 -n supkube` 后 `http://localhost:8080` | `service.frontend.type=ClusterIP` |
+| **Ingress** | 生产：域名 + TLS | `https://<your-host>/` | `ingress.enabled=true` + `ingress.hosts[0].host=...` |
+
+```bash
+# NodePort — 默认，不需要任何额外参数
+helm install supkube supkube/supkube --devel \
+  --namespace supkube --create-namespace \
+  --set eula.accept=true
+# 访问：http://<节点 IP>:30888/
+
+# LoadBalancer — 公有云
+helm install supkube supkube/supkube --devel \
+  --namespace supkube --create-namespace \
+  --set eula.accept=true \
+  --set service.frontend.type=LoadBalancer
+kubectl -n supkube get svc supkube-frontend -w   # 等 EXTERNAL-IP
+
+# ClusterIP — 安全/气隙
+helm install supkube supkube/supkube --devel \
+  --namespace supkube --create-namespace \
+  --set eula.accept=true \
+  --set service.frontend.type=ClusterIP
+kubectl -n supkube port-forward svc/supkube-frontend 8080:80
+
+# Ingress — 生产域名（需自备 ingress controller + cert-manager）
+helm install supkube supkube/supkube --devel \
+  --namespace supkube --create-namespace \
+  --set eula.accept=true \
+  --set ingress.enabled=true \
+  --set ingress.className=nginx \
+  --set ingress.hosts[0].host=supkube.example.com \
+  --set ingress.hosts[0].paths[0].path=/ \
+  --set ingress.hosts[0].paths[0].pathType=Prefix \
+  --set 'ingress.annotations.cert-manager\.io/cluster-issuer=letsencrypt-prod'
+```
+
+**重要陷阱**：
+- 公有云节点没有公网 IP → NodePort 在 AKS/GKE/EKS 上**对外不可达**，必须用 LoadBalancer 或 Ingress（这是 2026-05-26 Mars demo 失联事件的根因）。
+- LoadBalancer 的公网 IP 是动态的，删/重建 Service 会换 IP。固定地址用云厂商注解（AKS 示例：`service.beta.kubernetes.io/azure-pip-name=<name>`）。
+- 启用 Dex 登录时，`auth.dex.publicURL` 必须与你选的暴露方式一致（见 §23.5）。
+
+完整参数表：
+
+| values 路径 | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| `service.frontend.type` | string | `NodePort` | `NodePort` / `LoadBalancer` / `ClusterIP` |
+| `service.frontend.port` | int | `80` | Service 端口（内部）|
+| `service.frontend.nodePort` | int | `30888` | NodePort 端口（仅 type=NodePort 生效）|
+| `service.backend.type` | string | `ClusterIP` | backend 一般不对外暴露 |
+| `service.backend.port` | int | `8080` | backend Service 端口 |
+| `ingress.enabled` | bool | `false` | 启用 Ingress 资源 |
+| `ingress.className` | string | `""` | IngressClass（nginx / traefik / istio 等）|
+| `ingress.annotations` | map | `{}` | cert-manager / 自定义 annotation 注入点 |
+| `ingress.hosts[].host` | string | `supkube.local` | 域名 |
+| `ingress.hosts[].paths[].path` | string | `/` | 路径前缀 |
+| `ingress.hosts[].paths[].pathType` | string | `Prefix` | `Prefix` / `Exact` / `ImplementationSpecific` |
+
+另见 §5.5（已有操作示例）。
+
+---
+
+### 23.5 认证（Dex）3 种模式 + RBAC + 非 OIDC
+
+SupKube 的认证层由内嵌 Dex 提供，支持三种部署模式：
+
+```
+模式 1（演示/内网）：嵌入 Dex + 静态密码
+模式 2（生产）：嵌入 Dex + 外部 IdP connector（Keycloak/Okta/AzureAD/GitHub）
+模式 3（有自建 IdP）：禁用 Dex，SupKube 直接对接外部 OIDC Issuer
+```
+
+#### 模式选择参数
+
+| values 路径 | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| `auth.enabled` | bool | `true` | 总开关。`false` = demo 模式，每个请求都是 admin，**绝不用于生产** |
+| `auth.dex.enabled` | bool | `true` | 启用内嵌 Dex。模式 3 时设 `false` |
+| `auth.oidc.issuerURL` | string | `""` | 模式 3 专用：外部 OIDC Issuer URL（如 `https://keycloak.example.com/realms/main`）。`dex.enabled=false` 时必填 |
+| `auth.oidc.clientID` | string | `supkube` | OIDC client ID |
+| `auth.oidc.clientSecret` | string | `""` | OIDC client secret（模式 3 时填）|
+| `auth.oidc.clientSecretRef.name` | string | `""` | 用 K8s Secret 注入 client secret（推荐，避免明文进 values.yaml）|
+| `auth.oidc.usernameClaim` | string | `email` | token 里的 username claim 名 |
+| `auth.oidc.groupsClaim` | string | `groups` | token 里的 groups claim 名 |
+| `auth.oidc.scopes` | list | `[openid, profile, email, groups, offline_access]` | 请求的 OIDC scopes |
+
+#### 嵌入 Dex 关键参数（模式 1 和 2 专用）
+
+| values 路径 | 类型 | 默认 | fail-fast？ | 说明 |
+|---|---|---|---|---|
+| `auth.dex.publicURL` | string | `""` | **是** — `dex.enabled=true` 且 `publicURL` 为空时 `helm install` fail，见 `dex-check.yaml` | 浏览器访问 SupKube 的**外部 URL**（含协议和端口）。不要用 cluster-internal 地址。示例：`http://localhost:30888`（NodePort 本地）/ `https://supkube.example.com`（Ingress 生产）。必须与你在 §23.4 选的暴露方式完全一致，否则 Dex 回调后浏览器跳错地址。 |
+| `auth.dex.issuer` | string | `""` | 否（推荐留空） | 留空 = 自动派生为 `<publicURL>/dex`。只有 Dex 暴露在不同 host/path 时才需要手动填。 |
+| `auth.dex.clientSecret` | string | `supkube-demo-secret` | 否 | SupKube 后端与自己 Dex 通信的 client secret。演示用默认值即可；生产建议 override。 |
+| `auth.dex.image.tag` | string | `v2.39.1` | 否 | Dex 版本 |
+| `auth.dex.idTokenExpiry` | string | `8h` | 否 | ID Token 有效期。Go duration 格式（`h/m/s`，不支持 `d`）|
+| `auth.dex.refreshTokenInactivity` | string | `24h` | 否 | Refresh token 不活跃过期时间 |
+| `auth.dex.refreshTokenLifetime` | string | `168h` | 否 | Refresh token 最长寿命（168h = 7 天）|
+| `auth.dex.dexProxyPath` | string | `/dex` | 否 | 前端 nginx 反代 Dex 的 path 前缀，**不要改** |
+
+#### 静态密码（模式 1，演示用）
+
+```yaml
+auth:
+  dex:
+    staticPasswords:
+      - email: "admin@supkube.local"
+        username: "admin"
+        userID: "08a8684b-db88-4b73-90a9-3cd1661f5466"
+        hash: "$2a$10$v6mNFWflT1XN6WlnTlyTiebVRG4HGthIkGLNOJjJsCG9lCNyGUStK"
+        # bcrypt hash of "admin" — 生成新 hash：
+        # htpasswd -bnBC 10 "" your-pw | tr -d ':\n' | sed 's/$2y/$2a/'
+```
+
+#### IdP Connectors（模式 2，生产）
+
+四大 IdP 详细配置见 §11。connector 凭据**绝不明文进 values.yaml**，用 `envFromSecrets` + `$VAR` 占位：
+
+```yaml
+auth:
+  dex:
+    envFromSecrets:
+      - secretName: supkube-oauth      # kubectl create secret generic supkube-oauth ...
+    connectors:
+      - type: oidc
+        id: keycloak
+        name: "Login with Keycloak"
+        config:
+          issuer: https://keycloak.example.com/realms/master
+          clientID: supkube
+          clientSecret: "$KEYCLOAK_CLIENT_SECRET"   # Dex 在加载时自动展开 $VAR
+          redirectURI: https://supkube.example.com/dex/callback
+          scopes: [openid, profile, email, groups]
+          getUserInfo: true
+```
+
+| values 路径 | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| `auth.dex.connectors` | list | `[]` | 空 = 仅静态密码（演示模式）|
+| `auth.dex.envFromSecrets` | list | `[]` | 把整个 K8s Secret 加载为 Dex 容器 env var（最常用）|
+| `auth.dex.env` | list | `[]` | 单个 env var，精细控制（`valueFrom.secretKeyRef`）|
+
+Secret 内容更新不会自动重启 Dex，需手动 `kubectl rollout restart deploy/supkube-dex -n supkube`。
+
+#### RBAC（3 角色权限模型）
+
+| values 路径 | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| `auth.rbac.enabled` | bool | `false` | 生产**强烈建议**开启。`false` = 所有已认证用户都是 admin |
+| `auth.rbac.defaultRole` | string | `viewer` | 未命中任何 binding 的用户兜底角色。`""` = 拒绝一切 |
+| `auth.rbac.bindings` | list | `[]` | 角色绑定列表（见 §12 详细语义）|
+
+```yaml
+auth:
+  rbac:
+    enabled: true
+    defaultRole: viewer
+    bindings:
+      - group: platform-admins        # OIDC groups claim 里的值
+        role: admin
+      - group: app-team-postgres
+        role: editor
+        namespaces: [postgres-prod, postgres-staging]
+      - user: admin@supkube.local     # 静态 Dex 用户直接按 email 绑定
+        role: admin
+```
+
+#### API Token（CI/CD 场景）
+
+```yaml
+auth:
+  staticTokens:
+    enabled: false
+    tokens:
+      - name: github-actions-prod
+        hash: <sha256-of-plaintext>   # echo -n "$PLAIN" | sha256sum
+        role: editor
+        namespaces: [shop-prod]
+```
+
+| values 路径 | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| `auth.staticTokens.enabled` | bool | `false` | 开启 API Token 认证 |
+| `auth.staticTokens.tokens` | list | `[]` | Token 列表，每项含 `name / hash / role / namespaces` |
+
+详见 §14。
+
+#### Basic Auth（htpasswd，内网代理场景）
+
+```yaml
+auth:
+  basic:
+    enabled: false
+    secretName: supkube-htpasswd    # kubectl create secret generic supkube-htpasswd --from-file=htpasswd
+```
+
+| values 路径 | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| `auth.basic.enabled` | bool | `false` | 开启 Basic Auth |
+| `auth.basic.secretName` | string | `""` | 含 `htpasswd` key 的 K8s Secret 名。只接受 bcrypt 条目 |
+
+详见 §14。
+
+---
+
+### 23.6 资源与调度
+
+#### 副本数
+
+| values 路径 | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| `replicaCount` | int | `1` | SupKube backend + frontend 的副本数。当前单 Pod 即可满足大多数集群。多 Pod 需要 Redis 做 session 共享（v0.10 计划）|
+
+#### 资源请求 / 限制
+
+| values 路径 | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| `backend.resources.requests.cpu` | string | `100m` | |
+| `backend.resources.requests.memory` | string | `128Mi` | |
+| `backend.resources.limits.cpu` | string | `500m` | |
+| `backend.resources.limits.memory` | string | `256Mi` | 大集群（>200 namespace）建议改到 `1Gi` |
+| `frontend.resources.requests.cpu` | string | `50m` | |
+| `frontend.resources.requests.memory` | string | `64Mi` | |
+| `frontend.resources.limits.cpu` | string | `200m` | |
+| `frontend.resources.limits.memory` | string | `128Mi` | |
+
+```bash
+# 大集群调整示例
+helm upgrade supkube supkube/supkube -n supkube --reuse-values \
+  --set backend.resources.limits.cpu=2000m \
+  --set backend.resources.limits.memory=1Gi
+```
+
+#### 调度（Node Selector / Affinity / Tolerations）
+
+当前 values.yaml 未暴露 `nodeSelector` / `affinity` / `tolerations` 字段（计划 v0.9.2 加入）。如需临时固定节点，可通过 Helm `--post-renderer` 或 ArgoCD `patch` 在 Deployment 层面注入。
+
+---
+
+### 23.7 Velero（捆绑 subchart）
+
+SupKube 把 Velero v1.18（chart 12.0.1）作为 subchart 捆绑，首次安装**不需要单独装 Velero**。已有 Velero 的集群设 `velero.enabled=false` 跳过。
+
+| values 路径 | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| `velero.enabled` | bool | `true` | `false` = 跳过 Velero subchart，复用集群已有 Velero |
+| `velero.configuration.features` | string | `EnableCSI` | Velero feature flags。`EnableCSI` 是 L1/L2 CSI 快照的前提，**不要删除** |
+| `velero.configuration.backupSyncPeriod` | string | `60s` | BSL 扫描周期。默认 60s；ImportPolicy（§24）叠加独立 poll，保持 60s 即可 |
+| `velero.configuration.fsBackupTimeout` | string | `4h` | Filesystem 备份超时。大 PVC 场景（>100 GiB）防超时 |
+| `velero.snapshotsEnabled` | bool | `true` | CSI 快照开关 |
+| `velero.deployNodeAgent` | bool | `true` | node-agent DaemonSet（Filesystem 备份 + Data Mover 必需）。关掉则 L2 Export / Filesystem 路径完全失效 |
+| `velero.installCRDs` | bool | `true` | 安装 Velero CRDs。已手动装过 CRDs 的集群设 `false` |
+| `velero.configuration.backupStorageLocation` | list | `[]` | 默认 BSL（留空，通过 UI 配置）|
+| `velero.configuration.volumeSnapshotLocation` | list | `[]` | 默认 VSL（留空）|
+
+#### Velero 插件
+
+默认预装两个插件：
+
+```yaml
+velero:
+  initContainers:
+    - name: velero-plugin-for-aws       # S3-compatible（AWS + MinIO + Ceph RADOS）
+      image: velero/velero-plugin-for-aws:v1.14.1
+      volumeMounts:
+        - mountPath: /target
+          name: plugins
+    - name: velero-plugin-for-microsoft-azure
+      image: velero/velero-plugin-for-microsoft-azure:v1.14.1
+      volumeMounts:
+        - mountPath: /target
+          name: plugins
+```
+
+**为什么没有 `velero-plugin-for-csi`**：Velero v1.14+ 已将 CSI 插件内置，独立加载 `velero-plugin-for-csi` 会导致 CrashLoopBackOff（重复注册 controller）。CSI snapshot 通过 `configuration.features=EnableCSI` 开启即可，**不要手动加 csi 插件**（2026-05-28 AKS demo 撞上此坑，教训深刻）。
+
+需要 GCP 支持时追加：
+
+```bash
+--set 'velero.initContainers[2].name=velero-plugin-for-gcp' \
+--set 'velero.initContainers[2].image=velero/velero-plugin-for-gcp:v1.14.1' \
+--set 'velero.initContainers[2].volumeMounts[0].mountPath=/target' \
+--set 'velero.initContainers[2].volumeMounts[0].name=plugins'
+```
+
+---
+
+### 23.8 本地备份库（MinIO）与 WORM 不可变
+
+SupKube 可在集群内起一个 MinIO 作为 Local BSL（3-2-1-1-0 里的"1 份本地"）。**默认关闭**，需要 Local BSL 时显式开启。
+
+```bash
+helm upgrade supkube supkube/supkube -n supkube --reuse-values \
+  --set localStore.enabled=true \
+  --set localStore.size=200Gi \
+  --set localStore.storageClass=managed-csi   # AKS 示例
+```
+
+| values 路径 | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| `localStore.enabled` | bool | `false` | 启用集群内 MinIO |
+| `localStore.image.repository` | string | `quay.io/minio/minio` | MinIO 镜像（airgap 时需 override）|
+| `localStore.image.tag` | string | `RELEASE.2025-04-22T22-12-26Z` | MinIO 版本 |
+| `localStore.size` | string | `100Gi` | MinIO PVC 容量。典型规模（5-10 ns，日备份，30 天保留）= 100 Gi 够用。更大集群按 `namespace数 × 日均变化量 × 保留天数 × 1.3` 估算 |
+| `localStore.storageClass` | string | `""` | MinIO PVC 的 StorageClass。空 = 集群默认。AKS 推荐 `managed-csi` / `managed-csi-premium`，EKS 推荐 `gp3` |
+| `localStore.bucket` | string | `supkube-local` | MinIO bucket 名。**第一次装完不要改**，改了已有备份的 BSL 路径就找不到了 |
+| `localStore.rootUser` | string | `""` | MinIO root 用户名。留空 = install Job 自动随机生成并写入 K8s Secret |
+| `localStore.rootPassword` | string | `""` | MinIO root 密码。留空同上 |
+| `localStore.service.type` | string | `ClusterIP` | MinIO Service 类型。保持 ClusterIP（Velero 走 in-cluster DNS 访问），不要对外暴露 |
+| `localStore.service.apiPort` | int | `9000` | MinIO S3 API 端口 |
+| `localStore.service.consolePort` | int | `9001` | MinIO Web Console 端口 |
+| `localStore.resources.requests.cpu` | string | `100m` | |
+| `localStore.resources.requests.memory` | string | `256Mi` | |
+| `localStore.resources.limits.cpu` | string | `1000m` | |
+| `localStore.resources.limits.memory` | string | `1Gi` | |
+
+#### Object Lock（WORM 不可变）
+
+Object Lock 开启后，备份对象在保留期内**无法被删除**——即使 cluster-admin 执行 `mc rm` 也会被 MinIO 拒绝。这是 3-2-1-1-0 里"**1** 份隔离/不可变副本"的实现。
+
+| values 路径 | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| `localStore.objectLock.enabled` | bool | `true` | 启用 S3 Object Lock（WORM）|
+| `localStore.objectLock.mode` | string | `governance` | **governance**：有 `s3:BypassGovernanceRetention` 权限的管理员可以解锁（推荐默认，方便处理错误保留策略）。**compliance**：即使 MinIO root 账户也无法提前删除，保留到期才解锁（合规审计要求最严时用）。 |
+
+**何时用哪种模式**：
+
+- 默认用 `governance`：操作灵活，能应对配置失误和紧急清理
+- 受 FINRA / HIPAA / SOC 2 等强制要求的场景用 `compliance`——升级前务必确认业务保留期正确，否则备份会被锁死到期满
+
+---
+
+### 23.9 跨集群信任（Fingerprint Shared Secret）
+
+SupKube 通过 HMAC-SHA256 对 Velero Backup CR 进行签名，目标集群的 Import Policy 在拉取备份时校验签名，防止外部集群向共享 BSL 注入恶意备份。
+
+| values 路径 | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| `fingerprint.sharedSecret` | string | `""` | 32 字节 base64 HMAC 密钥。**跨集群信任时所有参与集群必须配同一个值**。空 = chart 自动生成，`lookup` 模板保证升级时不变，但每个集群生成的值不同（单集群内自洽，跨集群无法互信）|
+
+**单集群场景**（默认）：留空即可，无需任何操作。
+
+**跨集群场景**（Import Policy 的前提）：
+
+```bash
+# 1. 在管理工作站生成一次
+SECRET=$(openssl rand -base64 32)
+echo "Shared secret: $SECRET"   # 妥善保存到密钥管理系统
+
+# 2. 所有参与集群 helm install/upgrade 时加相同的 --set
+helm upgrade --install supkube supkube/supkube \
+  --namespace supkube --create-namespace \
+  --set eula.accept=true \
+  --set "fingerprint.sharedSecret=$SECRET"
+# 在每个集群重复这条命令，使用同一个 $SECRET 值
+```
+
+详见 §24 Import Policy 和指纹校验的排查方法。
+
+---
+
+### 23.10 KubeBlocks UI 插件（kbAddon）
+
+> **状态**：随 PR #38 并行交付，当前默认 `disabled`。
+
+`kbAddon` 是 SupKube Helm chart 内的一个可选插件，提供 KubeBlocks 数据库运维控制台。它以**独立 Pod + Service** 的形式部署，复用 SupKube 的 Dex 认证层（无需单独配 IdP）。
+
+```yaml
+kbAddon:
+  enabled: false                          # 默认关闭；--set kbAddon.enabled=true 开启
+  backend:
+    image:
+      repository: supkube.azurecr.io/kbui-backend
+      tag: latest
+    port: 8082
+    authzMode: strict                     # strict（生产）| permissive（仅本地/内网 demo）
+  frontend:
+    image:
+      repository: supkube.azurecr.io/kbui-frontend
+      tag: latest
+    port: 80
+```
+
+| values 路径 | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| `kbAddon.enabled` | bool | `false` | 启用 KubeBlocks UI 插件 |
+| `kbAddon.backend.image.repository` | string | `supkube.azurecr.io/kbui-backend` | KB UI 后端镜像（独立产品仓 `kubeblocks-ui`）|
+| `kbAddon.backend.image.tag` | string | `latest` | KB UI 后端版本 |
+| `kbAddon.backend.port` | int | `8082` | KB UI 后端端口 |
+| `kbAddon.backend.authzMode` | string | `strict` | 鉴权模式。`strict` = fail-closed（生产必须用）；`permissive` = 所有已认证用户均可操作，**仅限本地/内网 demo，绝不用于生产** |
+| `kbAddon.frontend.image.repository` | string | `supkube.azurecr.io/kbui-frontend` | KB UI 前端镜像 |
+| `kbAddon.frontend.image.tag` | string | `latest` | KB UI 前端版本 |
+| `kbAddon.frontend.port` | int | `80` | KB UI 前端端口 |
+
+**认证与授权说明**：
+
+- kbAddon 复用 SupKube 的 Dex OIDC 层，登录页与 SupKube 共用，无需单独配 IdP。
+- `authzMode=strict`：当前身份层 fail-closed，每个操作校验调用方 token 的 role；per-namespace 细粒度 RBAC 为**桩（stub）**，完整实现待 PRD-018 交付。
+- `authzMode=permissive`：跳过 namespace 级授权检查，所有已认证用户均可对任意 KubeBlocks 集群执行操作。**严禁在生产或互联网可达环境中使用**。
+- 镜像来自独立产品仓 `kubeblocks-ui`，不在 `supkube.azurecr.io/backend` 仓库里。
+
+```bash
+# 开启 KubeBlocks UI 插件
+helm upgrade supkube supkube/supkube -n supkube --reuse-values \
+  --set kbAddon.enabled=true
+
+# airgap 环境还需 mirror kbAddon 镜像
+helm upgrade supkube supkube/supkube -n supkube --reuse-values \
+  --set kbAddon.enabled=true \
+  --set kbAddon.backend.image.repository=harbor.internal.corp/supkube-mirror/kbui-backend \
+  --set kbAddon.frontend.image.repository=harbor.internal.corp/supkube-mirror/kbui-frontend
+```
+
+---
+
+### 23.11 其他 Chart 级配置
+
+| values 路径 | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| `replicaCount` | int | `1` | backend + frontend Pod 副本数（HA 模式 v0.10 支持）|
+| `config.veleroNamespace` | string | `""` | Velero 所在命名空间。空 = 自动解析（`velero.enabled=true` 时跟随 release namespace；`velero.enabled=false` 时默认 `velero`）。只有外部 Velero 装在非标 ns 时才需要手动填 |
+| `config.logLevel` | string | `info` | backend 日志级别（`debug` / `info` / `warn` / `error`）|
+
+---
+
+### 23.12 完整 Helm Values 速查表
+
+> 所有参数一览。粗体参数是生产必检项。
+
+| 参数 | 默认值 | 说明 |
+|---|---|---|
+| **`eula.accept`** | `false` | **必须设为 `true`，否则 fail-fast** |
+| `eula.email` | `""` | 运维联系邮箱 |
+| `eula.company` | `""` | 公司名 |
+| `license.key` | `""` | License key（空 = 社区版）|
+| **`fingerprint.sharedSecret`** | `""` | 跨集群 HMAC 密钥（跨集群必填）|
+| `global.airgapped.repository` | `""` | 全局 airgap mirror（设后重写所有 SupKube 镜像）|
+| `replicaCount` | `1` | Pod 副本数 |
+| `backend.image.repository` | `supkube.azurecr.io/backend` | backend 镜像仓库 |
+| `backend.image.tag` | `0.9.1.9-alpha` | backend 镜像 tag |
+| `backend.image.pullPolicy` | `IfNotPresent` | backend 拉取策略 |
+| `backend.port` | `8080` | backend 容器端口 |
+| `backend.resources.requests.cpu` | `100m` | backend CPU request |
+| `backend.resources.requests.memory` | `128Mi` | backend 内存 request |
+| `backend.resources.limits.cpu` | `500m` | backend CPU limit |
+| `backend.resources.limits.memory` | `256Mi` | backend 内存 limit |
+| `frontend.image.repository` | `supkube.azurecr.io/frontend` | frontend 镜像仓库 |
+| `frontend.image.tag` | `0.9.1.9-alpha` | frontend 镜像 tag |
+| `frontend.image.pullPolicy` | `IfNotPresent` | frontend 拉取策略 |
+| `frontend.port` | `80` | frontend 容器端口 |
+| `frontend.resources.requests.cpu` | `50m` | frontend CPU request |
+| `frontend.resources.requests.memory` | `64Mi` | frontend 内存 request |
+| `frontend.resources.limits.cpu` | `200m` | frontend CPU limit |
+| `frontend.resources.limits.memory` | `128Mi` | frontend 内存 limit |
+| `service.backend.type` | `ClusterIP` | backend Service 类型 |
+| `service.backend.port` | `8080` | backend Service 端口 |
+| **`service.frontend.type`** | `NodePort` | 前端暴露方式（NodePort/LoadBalancer/ClusterIP）|
+| `service.frontend.port` | `80` | 前端 Service 端口 |
+| `service.frontend.nodePort` | `30888` | NodePort 端口（type=NodePort 生效）|
+| `ingress.enabled` | `false` | 启用 Ingress |
+| `ingress.className` | `""` | IngressClass（nginx/traefik/istio）|
+| `ingress.annotations` | `{}` | Ingress annotations（cert-manager 等）|
+| `ingress.hosts[0].host` | `supkube.local` | Ingress 域名 |
+| `config.veleroNamespace` | `""` | Velero 命名空间（空=自动解析）|
+| `config.logLevel` | `info` | backend 日志级别 |
+| `auth.enabled` | `true` | 总认证开关（`false`=demo 模式）|
+| **`auth.dex.enabled`** | `true` | 内嵌 Dex 开关 |
+| **`auth.dex.publicURL`** | `""` | **dex.enabled=true 时 fail-fast，必须填浏览器访问 URL** |
+| `auth.dex.issuer` | `""` | Dex Issuer URL（空=自动派生 `<publicURL>/dex`）|
+| `auth.dex.clientSecret` | `supkube-demo-secret` | Dex client secret（生产建议 override）|
+| `auth.dex.image.repository` | `dexidp/dex` | Dex 镜像 |
+| `auth.dex.image.tag` | `v2.39.1` | Dex 版本 |
+| `auth.dex.idTokenExpiry` | `8h` | ID token 有效期 |
+| `auth.dex.refreshTokenInactivity` | `24h` | Refresh token 不活跃过期 |
+| `auth.dex.refreshTokenLifetime` | `168h` | Refresh token 最长寿命 |
+| `auth.dex.staticPasswords` | `[admin@supkube.local]` | 静态密码列表（演示用）|
+| `auth.dex.connectors` | `[]` | IdP connector 列表（详见 §11）|
+| `auth.dex.envFromSecrets` | `[]` | 从 K8s Secret 注入 Dex env var |
+| `auth.dex.env` | `[]` | 单个 env var 注入 |
+| `auth.dex.dexProxyPath` | `/dex` | Dex 代理路径前缀（不要改）|
+| `auth.oidc.issuerURL` | `""` | 外部 OIDC issuer（`dex.enabled=false` 时必填）|
+| `auth.oidc.clientID` | `supkube` | OIDC client ID |
+| `auth.oidc.clientSecret` | `""` | OIDC client secret |
+| `auth.oidc.clientSecretRef.name` | `""` | 从 Secret 引用 client secret |
+| `auth.oidc.clientSecretRef.key` | `client-secret` | Secret key 名 |
+| `auth.oidc.usernameClaim` | `email` | username claim 名 |
+| `auth.oidc.groupsClaim` | `groups` | groups claim 名 |
+| `auth.oidc.scopes` | `[openid,profile,email,groups,offline_access]` | OIDC scopes |
+| `auth.rbac.enabled` | `false` | RBAC 开关（生产强烈建议开）|
+| `auth.rbac.defaultRole` | `viewer` | 未命中 binding 的默认角色 |
+| `auth.rbac.bindings` | `[]` | RBAC 绑定列表 |
+| `auth.staticTokens.enabled` | `false` | API Token 开关 |
+| `auth.staticTokens.tokens` | `[]` | Token 列表 |
+| `auth.basic.enabled` | `false` | Basic Auth 开关 |
+| `auth.basic.secretName` | `""` | htpasswd Secret 名 |
+| `velero.enabled` | `true` | Velero subchart 开关 |
+| `velero.configuration.features` | `EnableCSI` | Velero feature flags |
+| `velero.configuration.backupSyncPeriod` | `60s` | BSL 扫描周期 |
+| `velero.configuration.fsBackupTimeout` | `4h` | Filesystem 备份超时 |
+| `velero.snapshotsEnabled` | `true` | 快照总开关 |
+| `velero.deployNodeAgent` | `true` | node-agent DaemonSet（L2 必需）|
+| `velero.installCRDs` | `true` | 安装 Velero CRDs |
+| `velero.initContainers` | `[aws, azure plugins]` | Velero 插件初始容器列表 |
+| `localStore.enabled` | `false` | 集群内 MinIO 开关 |
+| `localStore.image.repository` | `quay.io/minio/minio` | MinIO 镜像 |
+| `localStore.image.tag` | `RELEASE.2025-04-22T22-12-26Z` | MinIO 版本 |
+| `localStore.size` | `100Gi` | MinIO PVC 容量 |
+| `localStore.storageClass` | `""` | MinIO PVC StorageClass（空=集群默认）|
+| `localStore.objectLock.enabled` | `true` | S3 Object Lock（WORM）|
+| `localStore.objectLock.mode` | `governance` | `governance` / `compliance` |
+| `localStore.bucket` | `supkube-local` | MinIO bucket 名（勿改）|
+| `localStore.rootUser` | `""` | MinIO root 用户（空=自动生成）|
+| `localStore.rootPassword` | `""` | MinIO root 密码（空=自动生成）|
+| `localStore.service.type` | `ClusterIP` | MinIO Service 类型 |
+| `localStore.service.apiPort` | `9000` | MinIO S3 API 端口 |
+| `localStore.service.consolePort` | `9001` | MinIO Console 端口 |
+| `localStore.resources.requests.cpu` | `100m` | MinIO CPU request |
+| `localStore.resources.requests.memory` | `256Mi` | MinIO 内存 request |
+| `localStore.resources.limits.cpu` | `1000m` | MinIO CPU limit |
+| `localStore.resources.limits.memory` | `1Gi` | MinIO 内存 limit |
+| `kbAddon.enabled` | `false` | KubeBlocks UI 插件开关 |
+| `kbAddon.backend.image.repository` | `supkube.azurecr.io/kbui-backend` | KB UI 后端镜像 |
+| `kbAddon.backend.image.tag` | `latest` | KB UI 后端 tag |
+| `kbAddon.backend.port` | `8082` | KB UI 后端端口 |
+| `kbAddon.backend.authzMode` | `strict` | `strict`（生产）/ `permissive`（仅 demo）|
+| `kbAddon.frontend.image.repository` | `supkube.azurecr.io/kbui-frontend` | KB UI 前端镜像 |
+| `kbAddon.frontend.image.tag` | `latest` | KB UI 前端 tag |
+| `kbAddon.frontend.port` | `80` | KB UI 前端端口 |
+
+---
+
+### 23.13 完整安装样板
+
+#### 样板 A：本地开发（docker-desktop，最简）
+
+```bash
+helm install supkube supkube/supkube --devel \
+  --namespace supkube --create-namespace \
+  --set eula.accept=true \
+  --set auth.dex.publicURL=http://localhost:30888
+# 访问：http://localhost:30888（需把节点 IP 替换成实际地址）
+# 默认账号：admin@supkube.local / admin
+```
+
+#### 样板 B：公有云生产（AKS/GKE/EKS，Ingress + 认证 + RBAC）
+
+```bash
+helm install supkube supkube/supkube --devel \
   --namespace supkube --create-namespace \
   --set eula.accept=true \
   --set eula.email=ops@example.com \
   --set eula.company="Example Inc" \
   \
-  --set velero.enabled=true \
-  --set localStore.enabled=true \
+  --set service.frontend.type=LoadBalancer \
+  --set auth.dex.publicURL=https://supkube.example.com \
   \
-  --set auth.enabled=true \
   --set auth.rbac.enabled=true \
   --set auth.rbac.defaultRole=viewer \
+  \
+  --set velero.enabled=true \
+  --set localStore.enabled=true \
+  --set localStore.storageClass=managed-csi \
   \
   --set ingress.enabled=true \
   --set ingress.className=nginx \
@@ -2516,32 +3083,71 @@ helm install supkube supkube/supkube --version 0.9.0-alpha.4 --devel \
   --set ingress.hosts[0].paths[0].pathType=Prefix
 ```
 
-**Airgap 配置**（把所有公网拉换成内网 mirror）：
+#### 样板 C：Airgap（全内网 mirror，详见 §24）
+
 ```bash
-helm install supkube supkube/supkube --version 0.9.0-alpha.4 --devel \
+helm install supkube supkube/supkube --devel \
   --namespace supkube --create-namespace \
   --set eula.accept=true \
-  --set image.registry=harbor.internal.corp/supkube-mirror \
+  --set auth.dex.publicURL=https://supkube.internal.corp \
+  --set global.airgapped.repository=harbor.internal.corp/supkube-mirror \
   --set velero.image.repository=harbor.internal.corp/supkube-mirror/velero \
-  ...
+  --set velero.image.tag=v1.18.0 \
+  --set 'velero.initContainers[0].image=harbor.internal.corp/supkube-mirror/velero-plugin-for-aws:v1.14.1' \
+  --set 'velero.initContainers[1].image=harbor.internal.corp/supkube-mirror/velero-plugin-for-microsoft-azure:v1.14.1'
+# 还需 mirror dex / minio 镜像，全量示例见 §24 values.airgap.yaml
 ```
 
-**已有 Velero 的客户**：
+#### 样板 D：已有 Velero，不重装
+
 ```bash
-helm install supkube supkube/supkube --version 0.9.0-alpha.4 --devel \
+helm install supkube supkube/supkube --devel \
   --namespace supkube --create-namespace \
   --set eula.accept=true \
-  --set velero.enabled=false \      # ← 不重装 Velero，复用现有
-  --set config.veleroNamespace=velero   # ← 指向现有 Velero 所在 ns
+  --set auth.dex.publicURL=http://localhost:30888 \
+  --set velero.enabled=false \
+  --set config.veleroNamespace=velero    # 若已有 Velero 在非标 ns，填实际 ns
 ```
 
-### 23.10 安装后验证
+#### 样板 E：跨集群 DR（两集群需共享 fingerprint.sharedSecret）
 
 ```bash
-kubectl -n supkube get pods                 # 三个 pod 应都 Running
-kubectl -n supkube get cm supkube-eula -o yaml   # 看 EULA 记录
-helm -n supkube list                        # 看 chart 版本和 status
-curl -sk https://supkube.example.com/api/v1/status   # /status 返回 backend version
+# 生成一次密钥（管理工作站）
+SECRET=$(openssl rand -base64 32)
+
+# 在 Cluster A 和 Cluster B 分别执行（$SECRET 相同）
+helm upgrade --install supkube supkube/supkube --devel \
+  --namespace supkube --create-namespace \
+  --set eula.accept=true \
+  --set auth.dex.publicURL=https://supkube-a.example.com \   # 各集群填自己的 URL
+  --set "fingerprint.sharedSecret=$SECRET"
+```
+
+---
+
+### 23.14 安装后验证
+
+```bash
+# Pod 状态（backend / frontend / dex 三个 Pod 应全部 Running）
+kubectl -n supkube get pods
+
+# EULA 记录（确认已接受）
+kubectl -n supkube get cm supkube-eula -o yaml
+
+# Chart 状态
+helm -n supkube list
+
+# backend 版本接口
+curl -sk https://supkube.example.com/api/v1/status
+
+# 验证 Dex 启动并注册了 connector
+kubectl -n supkube logs deploy/supkube-dex | grep "config connector:"
+
+# 验证 backend 收到了正确的 OIDC 配置
+kubectl -n supkube exec deploy/supkube-backend -- printenv AUTH_PROVIDERS_JSON
+
+# node-agent 是否就绪（L2 备份必需）
+kubectl -n supkube get daemonset velero-node-agent
 ```
 
 ---

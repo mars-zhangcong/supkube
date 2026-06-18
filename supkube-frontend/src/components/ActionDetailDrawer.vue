@@ -226,8 +226,8 @@
         <div v-else-if="backupErrors && backupErrors.errors && backupErrors.errors.length > 0">
           <div v-for="(entry, i) in backupErrors.errors" :key="`be-${i}`" class="sk-msg-group">
             <div class="sk-msg-group-label sk-caption">
-              {{ entry.source }} · {{ entry.namespace || '—' }}/{{ entry.sourcePvc || '?' }}
-              <span class="sk-msg-entry-name">{{ entry.name }}</span>
+              {{ entry.source }}<template v-if="entry.namespace || entry.sourcePvc"> · {{ entry.namespace || '—' }}/{{ entry.sourcePvc || '?' }}</template>
+              <span v-if="entry.name" class="sk-msg-entry-name">{{ entry.name }}</span>
             </div>
             <pre class="sk-msg-block sk-msg-err">{{ entry.message }}</pre>
           </div>
@@ -238,6 +238,22 @@
         </div>
         <div v-if="backupErrors?.fetchError && backupErrors?.errors?.length > 0" class="sk-msg-block sk-msg-warn sk-body" style="margin-top:8px">
           {{ backupErrors.fetchError }}
+        </div>
+      </section>
+
+      <!-- ════ Section: WARNINGS — Backup-side (BSL <backup>-results.gz) ════ -->
+      <section v-if="action.type === 'Backup' && action.warnings > 0" class="sk-section">
+        <div class="sk-h3">{{ t('activity.detail.warningsHeader', { n: action.warnings }) }}</div>
+        <div v-if="backupErrorsLoading" class="sk-loading sk-caption">
+          <el-icon class="spin"><Loading /></el-icon> {{ t('activity.detail.loadingDetail') }}
+        </div>
+        <div v-else-if="backupErrors && backupErrors.warnings && backupErrors.warnings.length > 0">
+          <div v-for="(entry, i) in backupErrors.warnings" :key="`bw-${i}`" class="sk-msg-group">
+            <div class="sk-msg-group-label sk-caption">
+              {{ entry.source }}<template v-if="entry.namespace"> · {{ entry.namespace }}</template>
+            </div>
+            <pre class="sk-msg-block sk-msg-warn">{{ entry.message }}</pre>
+          </div>
         </div>
       </section>
 

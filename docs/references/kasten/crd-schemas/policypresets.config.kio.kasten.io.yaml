@@ -1,0 +1,445 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  creationTimestamp: "2026-05-23T07:21:14Z"
+  generation: 1
+  name: policypresets.config.kio.kasten.io
+  resourceVersion: "274327"
+  uid: a0baf79a-6974-4128-b322-9250cd4480ab
+spec:
+  conversion:
+    strategy: None
+  group: config.kio.kasten.io
+  names:
+    kind: PolicyPreset
+    listKind: PolicyPresetList
+    plural: policypresets
+    singular: policypreset
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.validation
+      name: Status
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: PolicyPreset is the Schema for the policy presets API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: PolicyPresetSpec defines the desired state of PolicyPreset
+            properties:
+              backup:
+                description: Backup settings
+                properties:
+                  actionPodSpec:
+                    description: ActionPodSpec reference to ActionPodSpec CR which
+                      will be used for pods created during the operation.
+                    properties:
+                      name:
+                        description: Name of the referenced object
+                        type: string
+                      namespace:
+                        description: |-
+                          Namespace where the object is located. If it is empty, it should be
+                          interpreted as the same namespace of the referencing object, and not
+                          `default` by default.
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  backupWindow:
+                    description: Backup window
+                    properties:
+                      end:
+                        description: TimeOfDay has time of the day
+                        properties:
+                          hour:
+                            format: int32
+                            type: integer
+                          minute:
+                            format: int32
+                            type: integer
+                        required:
+                        - hour
+                        - minute
+                        type: object
+                      start:
+                        description: TimeOfDay has time of the day
+                        properties:
+                          hour:
+                            format: int32
+                            type: integer
+                          minute:
+                            format: int32
+                            type: integer
+                        required:
+                        - hour
+                        - minute
+                        type: object
+                    required:
+                    - end
+                    - start
+                    type: object
+                  enableStaggering:
+                    description: Stagger start times
+                    type: boolean
+                  frequency:
+                    description: Execution frequency
+                    type: string
+                  imageRepoProfile:
+                    description: Location profile for images reference
+                    properties:
+                      name:
+                        description: Name of the referenced object
+                        type: string
+                      namespace:
+                        description: |-
+                          Namespace where the object is located. If it is empty, it should be
+                          interpreted as the same namespace of the referencing object, and not
+                          `default` by default.
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  profile:
+                    description: Location profile reference
+                    properties:
+                      name:
+                        description: Name of the referenced object
+                        type: string
+                      namespace:
+                        description: |-
+                          Namespace where the object is located. If it is empty, it should be
+                          interpreted as the same namespace of the referencing object, and not
+                          `default` by default.
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  retention:
+                    description: Snapshots retention settings
+                    properties:
+                      daily:
+                        format: int64
+                        type: integer
+                      hourly:
+                        format: int64
+                        type: integer
+                      monthly:
+                        format: int64
+                        type: integer
+                      table:
+                        description: |-
+                          TimeTable is a collection of entries for a (retention) schedule
+                          Equivalent swagger model: TimeTable
+                        items:
+                          description: |-
+                            TimeTableEntry Entry / row in a time table containing a retention count and a
+                            crontab specification for when the action should occur
+                            Equivalent swagger model: TimeTableEntry
+                          properties:
+                            count:
+                              description: Number of artifacts to retain for this
+                                Entry
+                              format: int64
+                              type: integer
+                            crontab:
+                              description: |-
+                                crontab entry (line) specifying when the action should occur.
+                                See `man crontab` and https://en.wikipedia.org/wiki/Cron#CRON_expression
+                              type: string
+                          type: object
+                        type: array
+                      weekly:
+                        format: int64
+                        type: integer
+                      yearly:
+                        format: int64
+                        type: integer
+                    type: object
+                  subFrequency:
+                    description: Execution frequency modifier
+                    properties:
+                      days:
+                        items:
+                          format: int32
+                          type: integer
+                        type: array
+                      hours:
+                        items:
+                          format: int32
+                          type: integer
+                        type: array
+                      minutes:
+                        items:
+                          format: int32
+                          type: integer
+                        type: array
+                      months:
+                        items:
+                          format: int32
+                          type: integer
+                        type: array
+                      weekdays:
+                        items:
+                          format: int32
+                          type: integer
+                        type: array
+                    type: object
+                required:
+                - frequency
+                - retention
+                type: object
+              comment:
+                description: User-defined description for this policy preset
+                type: string
+              export:
+                description: Export settings
+                properties:
+                  actionPodSpec:
+                    description: ActionPodSpec reference to ActionPodSpec CR which
+                      will be used for pods created during the operation.
+                    properties:
+                      name:
+                        description: Name of the referenced object
+                        type: string
+                      namespace:
+                        description: |-
+                          Namespace where the object is located. If it is empty, it should be
+                          interpreted as the same namespace of the referencing object, and not
+                          `default` by default.
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  blockModeProfile:
+                    description: |-
+                      BlockModeProfile is a reference to a profile that supports block based backup
+                      (it should only be used when the infrastructure also supports block based backup)
+                    properties:
+                      name:
+                        description: Name of the referenced object
+                        type: string
+                      namespace:
+                        description: |-
+                          Namespace where the object is located. If it is empty, it should be
+                          interpreted as the same namespace of the referencing object, and not
+                          `default` by default.
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  exportData:
+                    description: Exported snapshots portability settings
+                    properties:
+                      enabled:
+                        description: |-
+                          Default backup portability setting.  Applicable to all storage classes
+                          unless overridden by settings in Overrides (below).
+                        type: boolean
+                      exporterStorageClassName:
+                        description: |-
+                          ExporterStorageClassName is an optional field used to specify the
+                          default storage class used to export data for volumes. Applicable to
+                          all volumes unless overridden by settings in Overrides (below).
+                        type: string
+                      overrides:
+                        description: |-
+                          Overrides is a slice of storage-specific backup portability settings.
+                          Setting here overrides the default setting above.
+                        items:
+                          description: StorageOverride overrides export portability
+                            setting when exporting a volume.
+                          properties:
+                            enabled:
+                              description: |-
+                                Enabled, if set to true, calls for the contents of the volume snapshot
+                                to be serialized into a Location. If so, then its contents may be
+                                imported into any storage system.
+                              type: boolean
+                            exporterStorageClassName:
+                              description: |-
+                                ExporterStorageClassName is an optional field used to specify the name
+                                of the storage class used to export data for volumes that were created
+                                with the storage class specified in `StorageClassName`
+                              type: string
+                            storageClassName:
+                              description: |-
+                                StorageClassName is used to match against a volume's storage class. Any
+                                volumes with that storage class will use this StorageOverride.
+                              type: string
+                          required:
+                          - enabled
+                          - storageClassName
+                          type: object
+                        type: array
+                    required:
+                    - enabled
+                    type: object
+                  frequency:
+                    description: Export frequency
+                    type: string
+                  profile:
+                    description: Location profile reference
+                    properties:
+                      name:
+                        description: Name of the referenced object
+                        type: string
+                      namespace:
+                        description: |-
+                          Namespace where the object is located. If it is empty, it should be
+                          interpreted as the same namespace of the referencing object, and not
+                          `default` by default.
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  retention:
+                    description: Exported snapshots retention settings
+                    properties:
+                      daily:
+                        format: int64
+                        type: integer
+                      hourly:
+                        format: int64
+                        type: integer
+                      monthly:
+                        format: int64
+                        type: integer
+                      table:
+                        description: |-
+                          TimeTable is a collection of entries for a (retention) schedule
+                          Equivalent swagger model: TimeTable
+                        items:
+                          description: |-
+                            TimeTableEntry Entry / row in a time table containing a retention count and a
+                            crontab specification for when the action should occur
+                            Equivalent swagger model: TimeTableEntry
+                          properties:
+                            count:
+                              description: Number of artifacts to retain for this
+                                Entry
+                              format: int64
+                              type: integer
+                            crontab:
+                              description: |-
+                                crontab entry (line) specifying when the action should occur.
+                                See `man crontab` and https://en.wikipedia.org/wiki/Cron#CRON_expression
+                              type: string
+                          type: object
+                        type: array
+                      weekly:
+                        format: int64
+                        type: integer
+                      yearly:
+                        format: int64
+                        type: integer
+                    type: object
+                  volumeSnapshots:
+                    description: |-
+                      VolumeSnapshots reference provider-specific snapshot and export settings
+                      (present only when supported provider is in use)
+                    properties:
+                      awsEbs:
+                        description: AWS EBS specific volume snapshot settings.
+                        properties:
+                          destinationAccount:
+                            description: Volume snapshot copy destination account.
+                            type: string
+                          regions:
+                            description: List of regions to copy snapshots to.
+                            items:
+                              type: string
+                            type: array
+                        type: object
+                      azure:
+                        description: Azure specific volume snapshot settings.
+                        properties:
+                          regions:
+                            description: List of regions to copy snapshots to.
+                            items:
+                              type: string
+                            type: array
+                          resourceGroup:
+                            description: ResourceGroup of the snapshots destination
+                            type: string
+                        type: object
+                    type: object
+                required:
+                - exportData
+                - profile
+                type: object
+            type: object
+          status:
+            description: PolicyPresetStatus defines the observed state of PolicyPreset
+            properties:
+              error:
+                description: List of errors with validation
+                items:
+                  type: string
+                type: array
+              lastValidatedAt:
+                description: LastValidatedAt is the time the controller last validated
+                  the object
+                format: date-time
+                type: string
+              observedGeneration:
+                description: Object generation last observed by the controller
+                format: int64
+                type: integer
+              type:
+                description: Preset type
+                type: string
+              validation:
+                description: Validation status
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: PolicyPreset
+    listKind: PolicyPresetList
+    plural: policypresets
+    singular: policypreset
+  conditions:
+  - lastTransitionTime: "2026-05-23T07:21:14Z"
+    message: no conflicts found
+    reason: NoConflicts
+    status: "True"
+    type: NamesAccepted
+  - lastTransitionTime: "2026-05-23T07:21:14Z"
+    message: the initial names have been accepted
+    reason: InitialNamesAccepted
+    status: "True"
+    type: Established
+  storedVersions:
+  - v1alpha1

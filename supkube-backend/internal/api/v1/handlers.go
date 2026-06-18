@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -128,6 +129,7 @@ func ListBackups(c *gin.Context) {
 		return
 	}
 	backupList := &velerov1.BackupList{}
+	phaseFilter := c.Query("phase")
 	namespace := c.DefaultQuery("namespace", velerons.Namespace())
 	if err := cl.List(context.Background(), backupList, client.InNamespace(namespace)); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -152,6 +154,9 @@ func ListBackups(c *gin.Context) {
 	items := make([]map[string]interface{}, 0, len(backupList.Items))
 	for i := range backupList.Items {
 		b := &backupList.Items[i]
+		if phaseFilter != "" && string(b.Status.Phase) != phaseFilter {
+			continue
+		}
 		meta := SupKubeBackupMeta{
 			DataPath: classifyDataPath(b),
 		}
@@ -657,7 +662,13 @@ func ListRestores(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"items": restoreList.Items, "total": len(restoreList.Items)})
+	items := restoreList.Items
+	if rawLimit := c.Query("limit"); rawLimit != "" {
+		if limit, err := strconv.Atoi(rawLimit); err == nil && limit > 0 && limit < len(items) {
+			items = items[:limit]
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"items": items, "total": len(items)})
 }
 
 // CreateRestore creates a new Velero restore (v0.7.10 — Kasten-style flow).

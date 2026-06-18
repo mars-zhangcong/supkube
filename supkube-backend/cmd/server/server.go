@@ -19,6 +19,7 @@ import (
 	"github.com/supkube/supkube-backend/internal/gc"
 	"github.com/supkube/supkube-backend/internal/importpolicy"
 	"github.com/supkube/supkube-backend/internal/k8s"
+	"github.com/supkube/supkube-backend/internal/metrics"
 	"github.com/supkube/supkube-backend/internal/policypair"
 	"github.com/supkube/supkube-backend/internal/velerons"
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
@@ -271,6 +272,17 @@ func Run() error {
 		}
 	}
 
+	// #59 WI-024: /metrics 根引擎暴露所需的 client + 集群名(供下方 r.GET("/metrics") 路由)。
+	runtimeCli, err := k8s.GetRuntimeClient()
+	if err != nil {
+		log.Printf("[metrics] runtime client unavailable; /metrics will expose partial data: %v", err)
+	}
+	k8sCli, err := k8s.GetClient()
+	if err != nil {
+		log.Printf("[metrics] kubernetes client unavailable; /metrics will expose partial data: %v", err)
+	}
+	_, clusterName := fingerprint.ResolveClusterIdentity(context.Background(), k8sCli)
+
 	r := gin.Default()
 
 	// CORS middleware
@@ -286,6 +298,8 @@ func Run() error {
 	})
 
 	// API v1 routes
+	r.GET("/metrics", gin.WrapH(metrics.NewHandler(runtimeCli, k8sCli, clusterName)))
+
 	api := r.Group("/api/v1")
 	// Middleware order matters:
 	//

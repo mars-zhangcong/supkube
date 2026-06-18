@@ -1,0 +1,365 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  creationTimestamp: "2026-05-23T07:21:09Z"
+  generation: 1
+  name: blueprintbindings.config.kio.kasten.io
+  resourceVersion: "274207"
+  uid: 56f1f22b-dde8-4175-8522-a731fb928183
+spec:
+  conversion:
+    strategy: None
+  group: config.kio.kasten.io
+  names:
+    kind: BlueprintBinding
+    listKind: BlueprintBindingList
+    plural: blueprintbindings
+    shortNames:
+    - bpbinding
+    singular: blueprintbinding
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.disabled
+      name: Disabled
+      type: boolean
+    - jsonPath: .status.validation
+      name: Status
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - jsonPath: .spec.blueprint.name
+      name: Blueprint
+      priority: 1
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: BlueprintBinding is the Schema for the blueprint bindings API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: Defines the desired state of BlueprintBinding
+            properties:
+              blueprintRef:
+                description: Reference to a blueprint to bind
+                properties:
+                  name:
+                    description: Name of the referenced object
+                    type: string
+                  namespace:
+                    description: |-
+                      Namespace where the object is located. If it is empty, it should be
+                      interpreted as the same namespace of the referencing object, and not
+                      `default` by default.
+                    type: string
+                required:
+                - name
+                type: object
+              disabled:
+                description: A blueprint binding will not take effect while this field
+                  is set to true
+                type: boolean
+              resources:
+                description: A resource selector
+                properties:
+                  matchAll:
+                    description: A set of resource requirements. A resource must meet
+                      all of them to match the resource selector
+                    items:
+                      description: |-
+                        A resource requirement is a "oneOf" struct to hold resource constraints.
+                        Only one of the fields must be set at any given time
+                      properties:
+                        annotations:
+                          description: Annotations selector
+                          properties:
+                            key:
+                              description: key is the label key that the selector
+                                applies to.
+                              type: string
+                            operator:
+                              description: |-
+                                operator represents a key's relationship to a set of values.
+                                Valid operators are In, NotIn, Exists and DoesNotExist.
+                              type: string
+                            values:
+                              description: |-
+                                values is an array of string values. If the operator is In or NotIn,
+                                the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                the values array must be empty. This array is replaced during a strategic
+                                merge patch.
+                              items:
+                                type: string
+                              type: array
+                              x-kubernetes-list-type: atomic
+                          required:
+                          - key
+                          - operator
+                          type: object
+                        labels:
+                          description: Labels selector
+                          properties:
+                            key:
+                              description: key is the label key that the selector
+                                applies to.
+                              type: string
+                            operator:
+                              description: |-
+                                operator represents a key's relationship to a set of values.
+                                Valid operators are In, NotIn, Exists and DoesNotExist.
+                              type: string
+                            values:
+                              description: |-
+                                values is an array of string values. If the operator is In or NotIn,
+                                the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                the values array must be empty. This array is replaced during a strategic
+                                merge patch.
+                              items:
+                                type: string
+                              type: array
+                              x-kubernetes-list-type: atomic
+                          required:
+                          - key
+                          - operator
+                          type: object
+                        namespace:
+                          description: Namespace selector
+                          properties:
+                            operator:
+                              description: |-
+                                Operator represents a resource namespace's relationship to a value.
+                                Valid operators are In, NotIn, Exists and DoesNotExist
+                              type: string
+                            values:
+                              description: |-
+                                An array of string values representing the desired namespace names.
+                                If the operator is Exists or DoesNotExist, the values must be empty
+                                (it is useful for checks whether the resource is namespaced or not)
+                              items:
+                                type: string
+                              type: array
+                          required:
+                          - operator
+                          type: object
+                        type:
+                          description: Type selector
+                          properties:
+                            operator:
+                              description: |-
+                                Operator represents a resource type's relationship to a value.
+                                Valid operators are In and NotIn
+                              type: string
+                            values:
+                              description: An array of the desired GVRN values
+                              items:
+                                description: Group, Version, Resource and Name
+                                properties:
+                                  group:
+                                    type: string
+                                  name:
+                                    default: ""
+                                    description: |-
+                                      Name of the referent.
+                                      This field is effectively required, but due to backwards compatibility is
+                                      allowed to be empty. Instances of this type with an empty value here are
+                                      almost certainly wrong.
+                                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                    type: string
+                                  resource:
+                                    type: string
+                                  version:
+                                    type: string
+                                type: object
+                                x-kubernetes-map-type: atomic
+                              type: array
+                          required:
+                          - operator
+                          - values
+                          type: object
+                      type: object
+                    type: array
+                  matchAny:
+                    description: A set of resource requirements. A resource must meet
+                      at least one of them to match the resource selector
+                    items:
+                      description: |-
+                        A resource requirement is a "oneOf" struct to hold resource constraints.
+                        Only one of the fields must be set at any given time
+                      properties:
+                        annotations:
+                          description: Annotations selector
+                          properties:
+                            key:
+                              description: key is the label key that the selector
+                                applies to.
+                              type: string
+                            operator:
+                              description: |-
+                                operator represents a key's relationship to a set of values.
+                                Valid operators are In, NotIn, Exists and DoesNotExist.
+                              type: string
+                            values:
+                              description: |-
+                                values is an array of string values. If the operator is In or NotIn,
+                                the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                the values array must be empty. This array is replaced during a strategic
+                                merge patch.
+                              items:
+                                type: string
+                              type: array
+                              x-kubernetes-list-type: atomic
+                          required:
+                          - key
+                          - operator
+                          type: object
+                        labels:
+                          description: Labels selector
+                          properties:
+                            key:
+                              description: key is the label key that the selector
+                                applies to.
+                              type: string
+                            operator:
+                              description: |-
+                                operator represents a key's relationship to a set of values.
+                                Valid operators are In, NotIn, Exists and DoesNotExist.
+                              type: string
+                            values:
+                              description: |-
+                                values is an array of string values. If the operator is In or NotIn,
+                                the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                the values array must be empty. This array is replaced during a strategic
+                                merge patch.
+                              items:
+                                type: string
+                              type: array
+                              x-kubernetes-list-type: atomic
+                          required:
+                          - key
+                          - operator
+                          type: object
+                        namespace:
+                          description: Namespace selector
+                          properties:
+                            operator:
+                              description: |-
+                                Operator represents a resource namespace's relationship to a value.
+                                Valid operators are In, NotIn, Exists and DoesNotExist
+                              type: string
+                            values:
+                              description: |-
+                                An array of string values representing the desired namespace names.
+                                If the operator is Exists or DoesNotExist, the values must be empty
+                                (it is useful for checks whether the resource is namespaced or not)
+                              items:
+                                type: string
+                              type: array
+                          required:
+                          - operator
+                          type: object
+                        type:
+                          description: Type selector
+                          properties:
+                            operator:
+                              description: |-
+                                Operator represents a resource type's relationship to a value.
+                                Valid operators are In and NotIn
+                              type: string
+                            values:
+                              description: An array of the desired GVRN values
+                              items:
+                                description: Group, Version, Resource and Name
+                                properties:
+                                  group:
+                                    type: string
+                                  name:
+                                    default: ""
+                                    description: |-
+                                      Name of the referent.
+                                      This field is effectively required, but due to backwards compatibility is
+                                      allowed to be empty. Instances of this type with an empty value here are
+                                      almost certainly wrong.
+                                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                    type: string
+                                  resource:
+                                    type: string
+                                  version:
+                                    type: string
+                                type: object
+                                x-kubernetes-map-type: atomic
+                              type: array
+                          required:
+                          - operator
+                          - values
+                          type: object
+                      type: object
+                    type: array
+                type: object
+            required:
+            - blueprintRef
+            - resources
+            type: object
+          status:
+            description: Defines the observed state of BlueprintBinding
+            properties:
+              error:
+                description: List of errors with validation
+                items:
+                  type: string
+                type: array
+              observedGeneration:
+                description: Object generation last observed by the controller
+                format: int64
+                type: integer
+              validation:
+                description: Validation status
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: BlueprintBinding
+    listKind: BlueprintBindingList
+    plural: blueprintbindings
+    shortNames:
+    - bpbinding
+    singular: blueprintbinding
+  conditions:
+  - lastTransitionTime: "2026-05-23T07:21:09Z"
+    message: no conflicts found
+    reason: NoConflicts
+    status: "True"
+    type: NamesAccepted
+  - lastTransitionTime: "2026-05-23T07:21:09Z"
+    message: the initial names have been accepted
+    reason: InitialNamesAccepted
+    status: "True"
+    type: Established
+  storedVersions:
+  - v1alpha1

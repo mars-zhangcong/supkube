@@ -1,0 +1,294 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  creationTimestamp: "2026-05-23T07:21:10Z"
+  generation: 1
+  name: filerecoverysessions.datamover.kio.kasten.io
+  resourceVersion: "274224"
+  uid: 05f731ca-733c-41ff-89fa-ea6e8b202b90
+spec:
+  conversion:
+    strategy: None
+  group: datamover.kio.kasten.io
+  names:
+    kind: FileRecoverySession
+    listKind: FileRecoverySessionList
+    plural: filerecoverysessions
+    shortNames:
+    - frs
+    singular: filerecoverysession
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.state
+      name: State
+      type: string
+    - jsonPath: .status.lastUpdateTime
+      name: LastStatusUpdate
+      type: date
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          FileRecoverySession is a custom resource used to request access to the
+          filesystem content of one or more previously saved volumes snapshots through
+          some transport protocol, without the need to restore the entire snapshot.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              FileRecoverySessionSpec specifies volume backups whose contents are to be made
+              accessible through one or more transport protocols.
+
+              There are 2 types of transport protocols, Filesystem based or Block based.
+
+              Filesystem based transport protocols can be used to access volume snapshot
+              content containing filesytems, regardless of the original VolumeMode used to
+              mount the volume, or the data format used to export the volume.
+              These transports expose the content of all the requested
+              volume snapshots in a single tree whose root contains sub-directories
+              named for each unique restore point, and each restore point directory contains
+              sub-directories named for the specified PVCs. The PVC directories each contain the
+              filesystem content of the snapshot of that PVC in that restore point.
+
+              Block based transport protocols can be used to access the content
+              of volumes that were mounted with a VolumeMode value of Block.
+              They provide block level access to individual snapshots.
+            properties:
+              transports:
+                description: |-
+                  Transports specifies the transport protocols to be used.
+                  At least one transport protocol must be specified.
+                properties:
+                  sftp:
+                    description: SFTP contains configuration information for Secure
+                      FTP.
+                    properties:
+                      userPublicKey:
+                        description: UserPublicKey is the public SSH key of a user
+                          authorized to use the service.
+                        minLength: 1
+                        type: string
+                    required:
+                    - userPublicKey
+                    type: object
+                type: object
+              volumes:
+                description: |-
+                  Volumes is a list of volume backups, each identified by the name of the volume PVC
+                  and a RestorePoint that captured the content of that volume at some point in time.
+
+                  It is possible to repeat the PVC and RestorePoint names across list entries, but the
+                  combination of any specific PVC and RestorePoint name must be distinct in the list.
+                  Specifying multiple RestorePoints for a single PVC enables the detection
+                  of changes between the snapshots. Specifying just a single RestorePoint is useful
+                  when the RestorePoint containing the data to be recovered is known.
+
+                  External policy may limit the number of volume requests that can be specified.
+                  Runtime availability of resources may limit the ability to fulfil the request.
+                items:
+                  description: |-
+                    VolumeRestorePoint specifies the PVC whose snapshot data is to
+                    be recovered, and the RestorePoint that captured this snapshot.
+                  properties:
+                    pvcName:
+                      description: PVCName is the name of a PersistentVolumeClaim
+                        object in the Namespace.
+                      minLength: 1
+                      type: string
+                    restorePointName:
+                      description: |-
+                        RestorePointName is the name of an apps.kio.kasten.io/v1alpha1 RestorePoint
+                        object in the Namespace.
+
+                        Currently only exported RestorePoint objects can be specified.
+                      minLength: 1
+                      type: string
+                  required:
+                  - pvcName
+                  - restorePointName
+                  type: object
+                minItems: 1
+                type: array
+            required:
+            - transports
+            - volumes
+            type: object
+          status:
+            description: FileRecoverySessionStatus tracks the state of the request
+              and returns results.
+            properties:
+              conditions:
+                description: Conditions track detailed progress in fulfilling the
+                  request.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              expiryTime:
+                description: |-
+                  ExpiryTime is set once the object reaches the Ready state.
+                  Once set, the request will automatically fail if not deleted by this time.
+                format: date-time
+                type: string
+              lastUpdateTime:
+                description: LastUpdateTime is set every time the Status is updated.
+                format: date-time
+                type: string
+              state:
+                description: State reflects the progress made in fulfilling the request.
+                enum:
+                - Starting
+                - Processing
+                - Ready
+                - Failed
+                - Resetting
+                type: string
+              transports:
+                description: Transports returns information needed to use the requested
+                  transport protocols when the State is Ready.
+                properties:
+                  sftp:
+                    description: SFTP returns information on the configured Secure
+                      FTP service, if requested.
+                    properties:
+                      endpoints:
+                        description: Endpoints contain one or more addresses for the
+                          SFTP service.
+                        items:
+                          type: string
+                        type: array
+                      hostKeyFingerprint:
+                        description: |-
+                          HostKeyFingerprint is the fingerprint of the SSH server key.
+                          It is needed for visual confirmation of the identity of the SFTP service
+                          when first connecting to the service with the sftp command.
+                        type: string
+                      hostKeySignature:
+                        description: |-
+                          HostKeySignature is the host signature of the SFTP service needed
+                          to establish trust on the client side. The value of this field
+                          can be added to the "known_hosts" file if using the sftp command
+                          or provided via the HostKeyCallback when configuring SSH programatically.
+                        type: string
+                      portNumber:
+                        description: PortNumber specifies the port for the SFTP service.
+                        type: integer
+                      serviceName:
+                        description: Name of the associated Service object.
+                        type: string
+                      serviceNamespace:
+                        description: Namespace of the associated Service object.
+                        type: string
+                    required:
+                    - hostKeyFingerprint
+                    - hostKeySignature
+                    - portNumber
+                    - serviceName
+                    - serviceNamespace
+                    type: object
+                type: object
+            required:
+            - lastUpdateTime
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: FileRecoverySession
+    listKind: FileRecoverySessionList
+    plural: filerecoverysessions
+    shortNames:
+    - frs
+    singular: filerecoverysession
+  conditions:
+  - lastTransitionTime: "2026-05-23T07:21:10Z"
+    message: no conflicts found
+    reason: NoConflicts
+    status: "True"
+    type: NamesAccepted
+  - lastTransitionTime: "2026-05-23T07:21:10Z"
+    message: the initial names have been accepted
+    reason: InitialNamesAccepted
+    status: "True"
+    type: Established
+  storedVersions:
+  - v1alpha1

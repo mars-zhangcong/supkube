@@ -1,0 +1,301 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  creationTimestamp: "2026-05-23T07:21:16Z"
+  generation: 1
+  name: repositoryserverrequests.datamover.kio.kasten.io
+  resourceVersion: "274351"
+  uid: 9c7fc64c-5428-472d-9ea1-9cb1893c795e
+spec:
+  conversion:
+    strategy: None
+  group: datamover.kio.kasten.io
+  names:
+    kind: RepositoryServerRequest
+    listKind: RepositoryServerRequestList
+    plural: repositoryserverrequests
+    shortNames:
+    - rsr
+    singular: repositoryserverrequest
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          RepositoryServerRequest is a per-job CR that drives the lifecycle of a shared
+          repository server pod. Each export or retire workflow creates one at startup
+          and deletes it on completion. The controller counts non-expired live RSR CRs
+          to decide whether the idle-TTL clock should start.
+
+          The RSR carries all information needed to bootstrap the server: repository
+          connection details (shared across all RSRs for the same backend) and the
+          per-job client identity (username + hostname) used to add the datamover to
+          the server's htpasswd file. Fields that can be derived from the environment
+          or cluster constants are sourced by the controller, not stored here.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              RepositoryServerRequestSpec is set by the workflow at creation time.
+              Fields in Repository must agree across all RSRs for the same backend
+              (same LabelRepositoryServerBackendName label); the controller validates
+              this and sets Status.Phase=Failed on conflicting RSRs.
+            properties:
+              appNamespace:
+                description: |-
+                  AppNamespace identifies the K8s namespace whose data is being processed.
+                  Together with ProfileRef.Name it determines which backend the request
+                  attaches to (via the deterministic LabelRepositoryServerBackendName label).
+                type: string
+              deadline:
+                description: |-
+                  Deadline is the absolute time after which the controller stops counting
+                  this RSR when computing the active-client count. This bounds the impact
+                  of executor hard-crashes: a dead client cannot keep the server alive
+                  indefinitely once its deadline passes.
+                format: date-time
+                type: string
+              jobID:
+                description: |-
+                  JobID is the workflow job identifier used for diagnostics and to derive
+                  the deterministic RSR name (rsr-{jobID}). Not used for server logic.
+                type: string
+              profileRef:
+                description: ProfileRef references the K10 Location Profile for this
+                  backend.
+                properties:
+                  name:
+                    description: Name of the referenced object
+                    type: string
+                  namespace:
+                    description: |-
+                      Namespace where the object is located. If it is empty, it should be
+                      interpreted as the same namespace of the referencing object, and not
+                      `default` by default.
+                    type: string
+                required:
+                - name
+                type: object
+              repository:
+                description: |-
+                  Repository has the details required to connect to the repository.
+                  All RSRs for the same backend must carry identical Repository values.
+                properties:
+                  hostname:
+                    description: |-
+                      If specified, these values will be used by the controller to
+                      override default hostname when connecting to the
+                      repository from the server.
+                    type: string
+                  rootPath:
+                    description: |-
+                      RootPath is a relative sub path within the path prefix specified in the
+                      location profile.
+                    type: string
+                    x-kubernetes-validations:
+                    - message: Value is immutable
+                      rule: self == oldSelf
+                  username:
+                    description: |-
+                      If specified, these values will be used by the controller to
+                      override default username when connecting to the
+                      repository from the server.
+                    type: string
+                required:
+                - rootPath
+                type: object
+              userAccess:
+                description: |-
+                  UserAccess identifies the client user for this specific job's
+                  datamover pod. The controller generates and manages the per-user
+                  passphrase internally; callers only supply the identity.
+                properties:
+                  hostname:
+                    description: Hostname is the client hostname for this datamover.
+                    type: string
+                  username:
+                    description: Username is the client username for this datamover.
+                    type: string
+                required:
+                - hostname
+                - username
+                type: object
+            required:
+            - appNamespace
+            - profileRef
+            - repository
+            - userAccess
+            type: object
+          status:
+            description: |-
+              RepositoryServerRequestStatus is written by the controller. Workflows poll
+              Status.Phase until Ready, then read Status.ServerInfo for connection details.
+            properties:
+              conditions:
+                description: Conditions provides per-step detail.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              message:
+                description: Message is a human-readable status line.
+                type: string
+              phase:
+                description: Phase mirrors the server's lifecycle state for this request.
+                enum:
+                - Ready
+                - Failed
+                - Pending
+                type: string
+              serverInfo:
+                description: ServerInfo contains all connection details the datamover
+                  needs.
+                properties:
+                  adminSecretRef:
+                    description: Secret refs populated by the controller into RSR
+                      status for workflow consumption.
+                    properties:
+                      name:
+                        description: name is unique within a namespace to reference
+                          a secret resource.
+                        type: string
+                      namespace:
+                        description: namespace defines the space within which the
+                          secret name must be unique.
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  networkPolicyName:
+                    description: NetworkPolicyName is the name of the NetworkPolicy
+                      gating access to the repository server pod.
+                    type: string
+                  podName:
+                    description: PodName is the name of the repository server pod
+                      that serves this request.
+                    type: string
+                  serviceName:
+                    description: ServiceName is the name of the Service fronting the
+                      repository server pod.
+                    type: string
+                  userAccessSecretRef:
+                    description: |-
+                      SecretReference represents a Secret Reference. It has enough information to retrieve secret
+                      in any namespace
+                    properties:
+                      name:
+                        description: name is unique within a namespace to reference
+                          a secret resource.
+                        type: string
+                      namespace:
+                        description: namespace defines the space within which the
+                          secret name must be unique.
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                type: object
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: RepositoryServerRequest
+    listKind: RepositoryServerRequestList
+    plural: repositoryserverrequests
+    shortNames:
+    - rsr
+    singular: repositoryserverrequest
+  conditions:
+  - lastTransitionTime: "2026-05-23T07:21:16Z"
+    message: no conflicts found
+    reason: NoConflicts
+    status: "True"
+    type: NamesAccepted
+  - lastTransitionTime: "2026-05-23T07:21:16Z"
+    message: the initial names have been accepted
+    reason: InitialNamesAccepted
+    status: "True"
+    type: Established
+  storedVersions:
+  - v1alpha1

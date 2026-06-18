@@ -28,6 +28,7 @@ package v1
 import (
 	"context"
 	"net/http"
+	"sort"
 
 	"github.com/gin-gonic/gin"
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
@@ -61,10 +62,11 @@ type BackupErrorEntry struct {
 // BackupErrorsResponse is what GET /backups/:name/errors returns.
 type BackupErrorsResponse struct {
 	BackupName string `json:"backupName"`
-	// Errors lists every failed DataUpload + PodVolumeBackup tied to
-	// this backup. Empty array (not null) when nothing failed.
+	// Errors lists failed DataUpload + PodVolumeBackup CRs, plus (when those
+	// carry no message) the engine/per-namespace errors pulled from the BSL
+	// <backup>-results.gz. Empty array (not null) when nothing failed.
 	Errors []BackupErrorEntry `json:"errors"`
-	// Warnings reserved for v0.9 BSL <backup>-results.gz integration.
+	// Warnings carries the warning section of the BSL <backup>-results.gz.
 	Warnings []BackupErrorEntry `json:"warnings"`
 	// FetchError surfaces a single top-level error if the cluster query
 	// itself failed. Frontend shows this above the empty list so users
@@ -153,15 +155,67 @@ func GetBackupErrors(c *gin.Context) {
 		appendFetchErr(&resp, "list PodVolumeBackups: "+err.Error())
 	}
 
-	// Hint when the count from Backup.status disagrees with what we
-	// found. If Velero reports errors=2 but we found 0 messages, the
-	// errors are likely in <backup>-results.gz (BSL) — surface a
-	// breadcrumb pointing v0.9 work, NOT silent zero.
-	if bk.Status.Errors > 0 && len(resp.Errors) == 0 {
-		appendFetchErr(&resp, "Backup.status reports errors but no DataUpload/PVB failed; the messages likely live in BSL <backup>-results.gz (v0.9 will fetch these via DownloadRequest, similar to RestoreResults).")
+	// ── BSL <backup>-results.gz (Velero engine + per-namespace results) ──
+	// The Backup CR only carries integer counts (status.Errors/Warnings); the
+	// actual messages live in `backups/<name>/<backup>-<name>-results.gz` in the
+	// BSL. We fetch that blob via the DownloadRequest dance (same path the
+	// Restore side uses — see restore_results.go) whenever the counts say there
+	// is detail the DataUpload/PVB scan above did not already surface. This
+	// closes the v0.8.8.1 gap: "Health: N errors" with no way to see them.
+	needResults := (bk.Status.Errors > 0 && len(resp.Errors) == 0) || bk.Status.Warnings > 0
+	if needResults {
+		res, ferr := fetchBackupDetailedResults(context.Background(), name)
+		mergeBackupResults(&resp, bk.Status.Errors, res, ferr)
 	}
 
 	c.JSON(http.StatusOK, resp)
+}
+
+// mergeBackupResults folds a <backup>-results.gz fetch outcome into resp.
+//
+// On fetch error it records a fetchError breadcrumb and leaves Errors as-is —
+// NEVER a silent "0 errors" when the Backup CR said there were some (the
+// v0.8.8.1 anti-pattern, ADR-024 §11.3). On success it adds results.gz errors
+// only when the CR-level scan (DataUpload/PVB) found none, so the same failure
+// is not double-counted from two sources; warnings are always added.
+func mergeBackupResults(resp *BackupErrorsResponse, statusErrors int, res *VeleroRestoreResults, ferr error) {
+	if ferr != nil {
+		appendFetchErr(resp, "fetch <backup>-results.gz: "+ferr.Error())
+		return
+	}
+	if res == nil {
+		return
+	}
+	if statusErrors > 0 && len(resp.Errors) == 0 {
+		resp.Errors = append(resp.Errors, flattenResultSection(res.Errors)...)
+	}
+	resp.Warnings = append(resp.Warnings, flattenResultSection(res.Warnings)...)
+}
+
+// flattenResultSection turns one Velero results.gz section (engine / cluster /
+// per-namespace string lists) into the flat BackupErrorEntry rows the UI
+// already renders. Source records the origin so the user can tell an engine
+// error from a per-namespace one; namespaces are emitted in sorted order so the
+// output is deterministic (stable UI + testable).
+func flattenResultSection(sec VeleroResultSection) []BackupErrorEntry {
+	out := []BackupErrorEntry{}
+	for _, m := range sec.Velero {
+		out = append(out, BackupErrorEntry{Source: "Velero", Message: m})
+	}
+	for _, m := range sec.Cluster {
+		out = append(out, BackupErrorEntry{Source: "Cluster", Message: m})
+	}
+	nss := make([]string, 0, len(sec.Namespaces))
+	for ns := range sec.Namespaces {
+		nss = append(nss, ns)
+	}
+	sort.Strings(nss)
+	for _, ns := range nss {
+		for _, m := range sec.Namespaces[ns] {
+			out = append(out, BackupErrorEntry{Source: "Namespace", Namespace: ns, Message: m})
+		}
+	}
+	return out
 }
 
 // appendFetchErr concatenates errors so we never lose a message but

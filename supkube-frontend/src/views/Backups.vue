@@ -45,6 +45,24 @@
       </button>
     </div>
 
+    <div class="backup-stats" v-if="backupStats.total > 0">
+      <div class="backup-stats-title">{{ t('backups.stats.title') }}</div>
+      <div class="backup-stats-cards">
+        <div class="backup-stat-card">
+          <div class="backup-stat-label">{{ t('backups.stats.total') }}</div>
+          <div class="backup-stat-value">{{ backupStats.total }}</div>
+        </div>
+        <div class="backup-stat-card is-success">
+          <div class="backup-stat-label">{{ t('backups.stats.success') }}</div>
+          <div class="backup-stat-value">{{ backupStats.success }}</div>
+        </div>
+        <div class="backup-stat-card is-failed">
+          <div class="backup-stat-label">{{ t('backups.stats.failed') }}</div>
+          <div class="backup-stat-value">{{ backupStats.failed }}</div>
+        </div>
+      </div>
+    </div>
+
     <!-- Filter / search / bulk toolbar -->
     <div class="filter-toolbar">
       <!-- v0.8.10 简化：Type 列三态互斥（Snapshot / Exported / Imported）取代旧的
@@ -58,6 +76,14 @@
       <el-input v-model="nameFilter" :placeholder="t('restorePoints.filterPlaceholder')" clearable class="filter-name">
         <template #prefix><el-icon><Search /></el-icon></template>
       </el-input>
+      <el-select v-model="phaseFilter" class="filter-phase">
+        <el-option
+          v-for="option in phaseFilterOptions"
+          :key="option.value"
+          :label="option.label"
+          :value="option.value"
+        />
+      </el-select>
       <span class="filter-spacer"></span>
       <span class="filter-summary" v-html="viewingHtml"></span>
       <!-- v0.8.5 step 3: Disable mutating actions if user lacks role. -->
@@ -371,6 +397,7 @@ const showCreateDialog = ref(false)
 // The pre-v0.8.10 sourceFilter has been folded into Type (Imported wins).
 const typeFilter = ref('all')
 const nameFilter = ref('')
+const phaseFilter = ref('')
 // v0.8.10.1: deep-link from Policies page. /backups?policy=<name>
 // pre-applies this chip, scoping the list to RPs from that policy
 // (both halves of a dual pair).
@@ -640,6 +667,22 @@ const statusChipKey = (phase) => {
   return 'muted'
 }
 
+const normalizeBackupPhase = (phase) => normalizePhase(phase || '')
+
+const allPhases = computed(() => {
+  const phases = new Set()
+  backups.value.forEach((row) => {
+    const normalized = normalizeBackupPhase(row?.status?.phase)
+    if (normalized) phases.add(normalized)
+  })
+  return Array.from(phases)
+})
+
+const phaseFilterOptions = computed(() => [
+  { label: t('backups.allPhases'), value: '' },
+  ...allPhases.value.map((phase) => ({ label: phase, value: phase }))
+])
+
 // Restore Point row primarily represents a namespace's protected state at a
 // point in time. Show the most informative namespace label; * = all.
 const formatNamespace = (row) => {
@@ -671,12 +714,14 @@ const filteredBackups = computed(() => {
   const name = nameFilter.value.trim().toLowerCase()
   const ns = nsFilter.value.trim()
   const policy = policyFilter.value.trim()
+  const phase = phaseFilter.value.trim()
   return backups.value.filter((row) => {
     // v0.8.10: typeFilter now matches typePill().key (snapshot / exported /
     // imported / metadata / unknown). Source filter merged into Type.
     if (typeFilter.value !== 'all' && typePill(row).key !== typeFilter.value) {
       return false
     }
+    if (phase && normalizeBackupPhase(row?.status?.phase) !== phase) return false
     // v0.8.10.1: Policy chip filter — same dimensional pattern as ns chip.
     if (policy && !matchesPolicy(row, policy)) return false
     // v0.7.13 chip filter: exact-namespace match. Backup must include the
@@ -697,6 +742,18 @@ const filteredBackups = computed(() => {
     }
     return true
   })
+})
+
+// PRD-034: stats aggregate is based on the fetched list itself so the cards
+// reflect the current dataset regardless of local table filters.
+const backupStats = computed(() => {
+  return backups.value.reduce((acc, row) => {
+    acc.total += 1
+    const key = statusChipKey(row?.status?.phase)
+    if (key === 'success') acc.success += 1
+    else if (key === 'error' || key === 'warning') acc.failed += 1
+    return acc
+  }, { total: 0, success: 0, failed: 0 })
 })
 
 // v0.7.13 chip system — keyed list of dimensional filters currently active.
@@ -725,6 +782,7 @@ const clearAllChips = () => {
   nsFilter.value = ''
   policyFilter.value = ''
   typeFilter.value = 'all'
+  phaseFilter.value = ''
   nameFilter.value = ''
   restoreIntentActive.value = false
   router.replace({ path: '/backups', query: {} })
@@ -1153,6 +1211,48 @@ onUnmounted(() => {
   cursor: not-allowed;
 }
 
+/* PRD-034: backup stats summary strip */
+.backup-stats {
+  margin-bottom: 14px;
+}
+.backup-stats-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sk-text);
+  margin-bottom: 8px;
+}
+.backup-stats-cards {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.backup-stat-card {
+  min-width: 120px;
+  padding: 12px 14px;
+  border: 1px solid #e4e7ed;
+  border-radius: 8px;
+  background: #ffffff;
+}
+.backup-stat-card.is-success {
+  border-color: #d9f0d0;
+  background: #f0f9eb;
+}
+.backup-stat-card.is-failed {
+  border-color: #f5c2c7;
+  background: #fef0f0;
+}
+.backup-stat-label {
+  font-size: 12px;
+  color: #909399;
+  margin-bottom: 4px;
+}
+.backup-stat-value {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--sk-text);
+  line-height: 1.2;
+}
+
 /* Filter toolbar */
 .filter-toolbar {
   display: flex;
@@ -1162,6 +1262,7 @@ onUnmounted(() => {
 }
 .filter-type { width: 180px; }
 .filter-name { width: 280px; }
+.filter-phase { width: 180px; }
 .filter-spacer { flex: 1; }
 .filter-summary {
   color: #606266;
@@ -1396,6 +1497,21 @@ onUnmounted(() => {
 .clear-filters-link:hover { text-decoration: underline; }
 
 /* Dark mode */
+:deep(html.dark) .backup-stats-title { color: var(--sk-text); }
+:deep(html.dark) .backup-stat-card {
+  background: #1f2026;
+  border-color: #3a3d46;
+}
+:deep(html.dark) .backup-stat-card.is-success {
+  background: rgba(103, 194, 58, 0.12);
+  border-color: rgba(103, 194, 58, 0.28);
+}
+:deep(html.dark) .backup-stat-card.is-failed {
+  background: rgba(245, 108, 108, 0.12);
+  border-color: rgba(245, 108, 108, 0.28);
+}
+:deep(html.dark) .backup-stat-label { color: #a8abb2; }
+
 :deep(html.dark) .intent-banner {
   background: linear-gradient(90deg, #1e1b4b 0%, #1f2026 100%);
   border-color: #3730a3;

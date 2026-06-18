@@ -19,12 +19,6 @@ var kbClusterGVR = schema.GroupVersionResource{
 	Resource: "clusters",
 }
 
-var kbRestoreGVR = schema.GroupVersionResource{
-	Group:    "dataprotection.kubeblocks.io",
-	Version:  "v1alpha1",
-	Resource: "restores",
-}
-
 // gateRestoringDB checks:
 //  1. KB Cluster CR phase == "Running"
 //  2. Headless service DNS resolves (svc.<ns>.svc.cluster.local)

@@ -1,0 +1,198 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  creationTimestamp: "2026-05-23T07:21:17Z"
+  generation: 1
+  name: transformsets.config.kio.kasten.io
+  resourceVersion: "274385"
+  uid: 011dc91c-1641-4a22-a65b-6ba0545a266c
+spec:
+  conversion:
+    strategy: None
+  group: config.kio.kasten.io
+  names:
+    kind: TransformSet
+    listKind: TransformSetList
+    plural: transformsets
+    singular: transformset
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.validation
+      name: Status
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: TransformSet is the Schema for the transformsets API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: TransformSetSpec defines the desired state of TransformSet
+            properties:
+              comment:
+                description: User-defined description for this TransformSet
+                type: string
+              transforms:
+                description: List of transformations
+                items:
+                  description: Transform holds transformation for a single resource
+                    type
+                  properties:
+                    comment:
+                      description: User-defined description for this transformation
+                      type: string
+                    json:
+                      description: JSON only JSON patch is supported for now
+                      items:
+                        description: JSONPatchOperation A RFC-6902 patch operation
+                          (command) contained within a JSON patch document
+                        properties:
+                          from:
+                            type: string
+                          op:
+                            type: string
+                          path:
+                            type: string
+                          regex:
+                            type: string
+                          value:
+                            x-kubernetes-preserve-unknown-fields: true
+                        required:
+                        - op
+                        type: object
+                      type: array
+                    name:
+                      description: Name for this transformation
+                      type: string
+                    subject:
+                      description: |-
+                        Resource requirement for this transformation.
+                        Kanister does not contain k8s:openapi-gen annotations, so we must exclude this
+                      properties:
+                        group:
+                          type: string
+                        matchExpressions:
+                          description: matchExpressions is a list of label selector
+                            requirements. The requirements are ANDed.
+                          items:
+                            description: |-
+                              A label selector requirement is a selector that contains values, a key, and an operator that
+                              relates the key and values.
+                            properties:
+                              key:
+                                description: key is the label key that the selector
+                                  applies to.
+                                type: string
+                              operator:
+                                description: |-
+                                  operator represents a key's relationship to a set of values.
+                                  Valid operators are In, NotIn, Exists and DoesNotExist.
+                                type: string
+                              values:
+                                description: |-
+                                  values is an array of string values. If the operator is In or NotIn,
+                                  the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                  the values array must be empty. This array is replaced during a strategic
+                                  merge patch.
+                                items:
+                                  type: string
+                                type: array
+                                x-kubernetes-list-type: atomic
+                            required:
+                            - key
+                            - operator
+                            type: object
+                          type: array
+                          x-kubernetes-list-type: atomic
+                        matchLabels:
+                          additionalProperties:
+                            type: string
+                          description: |-
+                            matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                            map is equivalent to an element of matchExpressions, whose key field is "key", the
+                            operator is "In", and the values array contains only "value". The requirements are ANDed.
+                          type: object
+                        name:
+                          default: ""
+                          description: |-
+                            Name of the referent.
+                            This field is effectively required, but due to backwards compatibility is
+                            allowed to be empty. Instances of this type with an empty value here are
+                            almost certainly wrong.
+                            More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                          type: string
+                        resource:
+                          type: string
+                        version:
+                          type: string
+                      type: object
+                      x-kubernetes-map-type: atomic
+                  required:
+                  - json
+                  type: object
+                type: array
+            type: object
+          status:
+            description: TransformSetStatus defines the observed state of TransformSet
+            properties:
+              error:
+                description: List of errors with validation
+                items:
+                  type: string
+                type: array
+              observedGeneration:
+                description: Object generation last observed by the controller
+                format: int64
+                type: integer
+              validation:
+                description: True if validation succeeded
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: TransformSet
+    listKind: TransformSetList
+    plural: transformsets
+    singular: transformset
+  conditions:
+  - lastTransitionTime: "2026-05-23T07:21:17Z"
+    message: no conflicts found
+    reason: NoConflicts
+    status: "True"
+    type: NamesAccepted
+  - lastTransitionTime: "2026-05-23T07:21:17Z"
+    message: the initial names have been accepted
+    reason: InitialNamesAccepted
+    status: "True"
+    type: Established
+  storedVersions:
+  - v1alpha1

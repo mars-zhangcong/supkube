@@ -40,6 +40,7 @@ type BackupSummaryInfo struct {
 	Completed  int `json:"completed"`
 	Failed     int `json:"failed"`
 	InProgress int `json:"inProgress"`
+	Deleting   int `json:"deleting"`
 }
 
 type RecentBackupInfo struct {
@@ -106,6 +107,8 @@ func GetDashboardSummary(c *gin.Context) {
 			summary.BackupSummary.Failed++
 		case velerov1.BackupPhaseInProgress:
 			summary.BackupSummary.InProgress++
+		case velerov1.BackupPhaseDeleting:
+			summary.BackupSummary.Deleting++
 		}
 	}
 

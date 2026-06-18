@@ -1,0 +1,410 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  creationTimestamp: "2026-05-23T07:21:03Z"
+  generation: 1
+  name: actionsets.cr.kanister.io
+  resourceVersion: "274107"
+  uid: 25f763b6-7984-40f3-ae41-77c8c40f57aa
+spec:
+  conversion:
+    strategy: None
+  group: cr.kanister.io
+  names:
+    kind: ActionSet
+    listKind: ActionSetList
+    plural: actionsets
+    singular: actionset
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - description: Progress of completion in percentage
+      jsonPath: .status.progress.percentCompleted
+      name: Progress
+      type: string
+    - description: Amount of data that has been downloaded
+      jsonPath: .status.progress.sizeDownloadedB
+      name: SizeDownloadedB
+      type: integer
+    - description: Amount of data that has been uploaded
+      jsonPath: .status.progress.sizeUploadedB
+      name: SizeUploadedB
+      type: integer
+    - description: Estimated amount of data to be downloaded
+      jsonPath: .status.progress.estimatedDownloadSizeB
+      name: EstimatedDownloadSizeB
+      type: integer
+    - description: Estimated amount of data to be uploaded
+      jsonPath: .status.progress.estimatedUploadSizeB
+      name: EstimatedUploadSizeB
+      type: integer
+    - description: The phase that is being run. If the actionset is completed, it
+        is set to ""
+      jsonPath: .status.progress.runningPhase
+      name: Running Phase
+      type: string
+    - description: Progress last transition time
+      format: date-time
+      jsonPath: .status.progress.lastTransitionTime
+      name: Last Transition Time
+      type: string
+    - description: State of the actionset
+      jsonPath: .status.state
+      name: State
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              actions:
+                items:
+                  description: ActionSpec is the specification for a single Action.
+                  properties:
+                    artifacts:
+                      additionalProperties:
+                        properties:
+                          keyValue:
+                            additionalProperties:
+                              type: string
+                            type: object
+                          kopiaSnapshot:
+                            type: string
+                            x-kubernetes-preserve-unknown-fields: true
+                        type: object
+                      description: Artifacts will be passed as inputs into this phase.
+                      type: object
+                    blueprint:
+                      description: Blueprint with instructions on how to execute this
+                        action.
+                      type: string
+                    configMaps:
+                      additionalProperties:
+                        properties:
+                          apiVersion:
+                            description: API version of the referent.
+                            type: string
+                          group:
+                            description: API Group of the referent.
+                            type: string
+                          kind:
+                            description: 'Kind of the referent. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds'
+                            type: string
+                          name:
+                            description: 'Name of the referent. More info: http://kubernetes.io/docs/user-guide/identifiers#names'
+                            type: string
+                          namespace:
+                            description: 'Namespace of the referent. More info: http://kubernetes.io/docs/user-guide/namespaces'
+                            type: string
+                          resource:
+                            description: Resource name of the referent.
+                            type: string
+                        type: object
+                      description: ConfigMaps that we will get and pass into the blueprint.
+                      type: object
+                    name:
+                      description: 'Name is the action we will perform. For example:
+                        backup or restore.'
+                      type: string
+                    object:
+                      description: Object refers to the thing we will perform this
+                        action on.
+                      properties:
+                        apiVersion:
+                          description: API version of the referent.
+                          type: string
+                        group:
+                          description: API Group of the referent.
+                          type: string
+                        kind:
+                          description: 'Kind of the referent. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds'
+                          type: string
+                        name:
+                          description: 'Name of the referent. More info: http://kubernetes.io/docs/user-guide/identifiers#names'
+                          type: string
+                        namespace:
+                          description: 'Namespace of the referent. More info: http://kubernetes.io/docs/user-guide/namespaces'
+                          type: string
+                        resource:
+                          description: Resource name of the referent.
+                          type: string
+                      type: object
+                    options:
+                      additionalProperties:
+                        type: string
+                      description: Options will be used to specify additional values
+                        to be used in the Blueprint.
+                      type: object
+                    podAnnotations:
+                      additionalProperties:
+                        type: string
+                      description: Custom annotations for the pods that are going
+                        to get created by the action targeted by this ActionSet.
+                      type: object
+                    podLabels:
+                      additionalProperties:
+                        type: string
+                      description: Custom labels for the pods that are going to get
+                        created by the action targeted by this ActionSet.
+                      type: object
+                    podOverride:
+                      description: PodOverride is used to specify pod specs that will
+                        override the default pod specs
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                    preferredVersion:
+                      description: PreferredVersion will be used to select the preferred
+                        version of Kanister functions to be executed for this action
+                      type: string
+                    profile:
+                      description: Profile is use to specify the location where store
+                        artifacts and the credentials authorized to access them.
+                      properties:
+                        apiVersion:
+                          description: API version of the referent.
+                          type: string
+                        group:
+                          description: API Group of the referent.
+                          type: string
+                        kind:
+                          description: 'Kind of the referent. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds'
+                          type: string
+                        name:
+                          description: 'Name of the referent. More info: http://kubernetes.io/docs/user-guide/identifiers#names'
+                          type: string
+                        namespace:
+                          description: 'Namespace of the referent. More info: http://kubernetes.io/docs/user-guide/namespaces'
+                          type: string
+                        resource:
+                          description: Resource name of the referent.
+                          type: string
+                      type: object
+                    repositoryServer:
+                      description: RepositoryServer is used to specify the CR reference
+                        of the kopia repository server
+                      properties:
+                        apiVersion:
+                          description: API version of the referent.
+                          type: string
+                        group:
+                          description: API Group of the referent.
+                          type: string
+                        kind:
+                          description: 'Kind of the referent. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds'
+                          type: string
+                        name:
+                          description: 'Name of the referent. More info: http://kubernetes.io/docs/user-guide/identifiers#names'
+                          type: string
+                        namespace:
+                          description: 'Namespace of the referent. More info: http://kubernetes.io/docs/user-guide/namespaces'
+                          type: string
+                        resource:
+                          description: Resource name of the referent.
+                          type: string
+                      required:
+                      - apiVersion
+                      - group
+                      - kind
+                      - name
+                      - resource
+                      type: object
+                    secrets:
+                      additionalProperties:
+                        properties:
+                          apiVersion:
+                            description: API version of the referent.
+                            type: string
+                          group:
+                            description: API Group of the referent.
+                            type: string
+                          kind:
+                            description: 'Kind of the referent. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds'
+                            type: string
+                          name:
+                            description: 'Name of the referent. More info: http://kubernetes.io/docs/user-guide/identifiers#names'
+                            type: string
+                          namespace:
+                            description: 'Namespace of the referent. More info: http://kubernetes.io/docs/user-guide/namespaces'
+                            type: string
+                          resource:
+                            description: Resource name of the referent.
+                            type: string
+                        type: object
+                      description: Secrets that we will get and pass into the blueprint.
+                      type: object
+                  type: object
+                type: array
+            type: object
+          status:
+            description: ActionSetStatus is the status for the actionset. This should
+              only be updated by the controller.
+            properties:
+              actions:
+                items:
+                  properties:
+                    artifacts:
+                      additionalProperties:
+                        properties:
+                          keyValue:
+                            additionalProperties:
+                              type: string
+                            type: object
+                          kopiaSnapshot:
+                            type: string
+                            x-kubernetes-preserve-unknown-fields: true
+                        type: object
+                      description: Artifacts created by this phase.
+                      type: object
+                    blueprint:
+                      description: Blueprint with instructions on how to execute this
+                        action.
+                      type: string
+                    deferPhase:
+                      properties:
+                        name:
+                          type: string
+                        output:
+                          type: object
+                          x-kubernetes-preserve-unknown-fields: true
+                        progress:
+                          properties:
+                            estimatedDownloadSizeB:
+                              type: integer
+                            estimatedTimeSeconds:
+                              type: integer
+                            estimatedUploadSizeB:
+                              type: integer
+                            lastTransitionTime:
+                              format: date-time
+                              type: string
+                            progressPercent:
+                              type: string
+                            sizeDownloadedB:
+                              type: integer
+                            sizeUploadedB:
+                              type: integer
+                          type: object
+                        state:
+                          type: string
+                      type: object
+                    name:
+                      description: 'Name is the action we will perform. For example:
+                        backup or restore.'
+                      type: string
+                    object:
+                      description: Object refers to the resource we perform this action
+                        on.
+                      properties:
+                        apiVersion:
+                          description: API version of the referent.
+                          type: string
+                        group:
+                          description: API Group of the referent.
+                          type: string
+                        kind:
+                          description: 'Kind of the referent. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds'
+                          type: string
+                        name:
+                          description: 'Name of the referent. More info: http://kubernetes.io/docs/user-guide/identifiers#names'
+                          type: string
+                        namespace:
+                          description: 'Namespace of the referent. More info: http://kubernetes.io/docs/user-guide/namespaces'
+                          type: string
+                        resource:
+                          description: Resource name of the referent.
+                          type: string
+                      type: object
+                    phases:
+                      description: Phases are sub-actions an are executed sequentially.
+                      items:
+                        properties:
+                          name:
+                            type: string
+                          output:
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                          progress:
+                            properties:
+                              estimatedDownloadSizeB:
+                                type: integer
+                              estimatedTimeSeconds:
+                                type: integer
+                              estimatedUploadSizeB:
+                                type: integer
+                              lastTransitionTime:
+                                format: date-time
+                                type: string
+                              progressPercent:
+                                type: string
+                              sizeDownloadedB:
+                                type: integer
+                              sizeUploadedB:
+                                type: integer
+                            type: object
+                          state:
+                            type: string
+                        type: object
+                      type: array
+                  type: object
+                type: array
+              error:
+                properties:
+                  message:
+                    type: string
+                type: object
+              progress:
+                properties:
+                  estimatedDownloadSizeB:
+                    type: integer
+                  estimatedUploadSizeB:
+                    type: integer
+                  lastTransitionTime:
+                    format: date-time
+                    type: string
+                  percentCompleted:
+                    type: string
+                  runningPhase:
+                    type: string
+                  sizeDownloadedB:
+                    type: integer
+                  sizeUploadedB:
+                    type: integer
+                type: object
+              state:
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+status:
+  acceptedNames:
+    kind: ActionSet
+    listKind: ActionSetList
+    plural: actionsets
+    singular: actionset
+  conditions:
+  - lastTransitionTime: "2026-05-23T07:21:03Z"
+    message: no conflicts found
+    reason: NoConflicts
+    status: "True"
+    type: NamesAccepted
+  - lastTransitionTime: "2026-05-23T07:21:03Z"
+    message: the initial names have been accepted
+    reason: InitialNamesAccepted
+    status: "True"
+    type: Established
+  storedVersions:
+  - v1alpha1

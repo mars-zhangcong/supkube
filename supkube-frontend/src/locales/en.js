@@ -169,6 +169,16 @@ export default {
     snapshotFailed: 'Snapshot failed: {msg}',
     snapshotProtectedNs: 'Snapshot of protected namespace is not allowed (kube-system / velero / supkube).'
   },
+  backups: {
+    phaseFilter: 'Filter by status',
+    allPhases: 'All statuses',
+    stats: {
+      title: 'Backup Statistics',
+      total: 'Total',
+      success: 'Success',
+      failed: 'Failed'
+    }
+  },
   restorePoints: {
     title: 'Restore Points',
     desc: 'View and manage all Restore Points created in this cluster',
@@ -274,7 +284,11 @@ export default {
   restores: {
     title: 'Restores',
     fromBackup: 'From Backup',
-    create: 'Create Restore'
+    create: 'Create Restore',
+    phaseFilter: 'Filter by status',
+    allPhases: 'All statuses',
+    pageSize: 'Items per page',
+    pageSizeAll: 'All'
   },
   // PRD-002 v1.3 atomic Transforms — Velero ResourceModifier rule
   // bundles. The rule editor that used to live in TransformSets.vue
