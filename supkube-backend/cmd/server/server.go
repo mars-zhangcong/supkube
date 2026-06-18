@@ -3,10 +3,14 @@ package server
 import (
 	"context"
 	"log"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	v1 "github.com/supkube/supkube-backend/internal/api/v1"
+	"github.com/supkube/supkube-backend/internal/audit"
+	"github.com/supkube/supkube-backend/internal/auditwatch"
 	"github.com/supkube/supkube-backend/internal/auth"
 	"github.com/supkube/supkube-backend/internal/clusterhealth"
 	"github.com/supkube/supkube-backend/internal/csi"
@@ -237,6 +241,38 @@ func Run() error {
 	// so backend boot doesn't depend on Dex being ready.
 	authCfg := auth.LoadConfigFromEnv()
 
+	// PRD-008 / ADR-039: Activity 审计持久层(嵌入式 SQLite on PV)。
+	// feature gate(#24):SUPKUBE_AUDIT_DISABLED=1 一键关。fail-soft:打不开就跳过——审计是观测面,
+	// 绝不能因它拖垮数据保护控制面;未接线时 audit.Emit 自动成无操作。
+	if os.Getenv("SUPKUBE_AUDIT_DISABLED") != "1" {
+		dbPath := os.Getenv("SUPKUBE_AUDIT_DB")
+		if dbPath == "" {
+			dbPath = "/data/audit/audit.db"
+		}
+		if id := os.Getenv("SUPKUBE_CLUSTER_ID"); id != "" {
+			audit.DefaultClusterID = id
+		}
+		if mkErr := os.MkdirAll(filepath.Dir(dbPath), 0o755); mkErr != nil {
+			log.Printf("[audit] 建目录失败,审计禁用: %v", mkErr)
+		} else if store, oErr := audit.OpenSQLite(dbPath); oErr != nil {
+			log.Printf("[audit] 打开 %s 失败,审计禁用: %v", dbPath, oErr)
+		} else {
+			audit.SetDefault(store)
+			audit.StartTTLReaper(context.Background(), store, audit.DefaultRetention, 24*time.Hour)
+			log.Printf("[audit] Activity 持久层就绪: %s (保留 %s)", dbPath, audit.DefaultRetention)
+			// PRD-008 Phase 2b:异步删除(DBR 级联)的终态补写——Backup CR 消失即判完成。
+			go func() {
+				cli, cerr := k8s.GetRuntimeClient()
+				if cerr != nil {
+					log.Printf("[auditwatch] runtime client 不可用,删除终态补写禁用: %v", cerr)
+					return
+				}
+				auditwatch.Run(context.Background(), cli)
+			}()
+		}
+	}
+
+	// #59 WI-024: /metrics 根引擎暴露所需的 client + 集群名(供下方 r.GET("/metrics") 路由)。
 	runtimeCli, err := k8s.GetRuntimeClient()
 	if err != nil {
 		log.Printf("[metrics] runtime client unavailable; /metrics will expose partial data: %v", err)
