@@ -8,15 +8,15 @@ import (
 
 func TestPruneOnce_DeletesOldAndAuditsItself(t *testing.T) {
 	s, _ := openTmp(t)
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 	ctx := context.Background()
 	now := time.Now().UTC()
 	// 5 条"老"(100 天前)+ 3 条"新"(今天)。
 	for i := 0; i < 5; i++ {
-		s.Append(ctx, ev("old", "c", PhaseSubmitted, now.Add(-100*24*time.Hour).Add(time.Duration(i)*time.Minute)))
+		_ = s.Append(ctx, ev("old", "c", PhaseSubmitted, now.Add(-100*24*time.Hour).Add(time.Duration(i)*time.Minute)))
 	}
 	for i := 0; i < 3; i++ {
-		s.Append(ctx, ev("new", "c", PhaseSubmitted, now.Add(time.Duration(i)*time.Minute)))
+		_ = s.Append(ctx, ev("new", "c", PhaseSubmitted, now.Add(time.Duration(i)*time.Minute)))
 	}
 
 	n, err := PruneOnce(ctx, s, DefaultRetention) // 90 天
@@ -43,9 +43,9 @@ func TestPruneOnce_DeletesOldAndAuditsItself(t *testing.T) {
 
 func TestPruneOnce_NoOldNoAuditNoise(t *testing.T) {
 	s, _ := openTmp(t)
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 	ctx := context.Background()
-	s.Append(ctx, ev("new", "c", PhaseSubmitted, time.Now().UTC()))
+	_ = s.Append(ctx, ev("new", "c", PhaseSubmitted, time.Now().UTC()))
 	n, err := PruneOnce(ctx, s, DefaultRetention)
 	if err != nil || n != 0 {
 		t.Fatalf("无老事件应删 0,got %d err=%v", n, err)
@@ -58,9 +58,9 @@ func TestPruneOnce_NoOldNoAuditNoise(t *testing.T) {
 
 func TestStartTTLReaper_RunsAndStops(t *testing.T) {
 	s, _ := openTmp(t)
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 	ctx, cancel := context.WithCancel(context.Background())
-	s.Append(ctx, ev("old", "c", PhaseSubmitted, time.Now().UTC().Add(-100*24*time.Hour)))
+	_ = s.Append(ctx, ev("old", "c", PhaseSubmitted, time.Now().UTC().Add(-100*24*time.Hour)))
 	stop := StartTTLReaper(ctx, s, DefaultRetention, time.Hour) // 立即跑一次
 	// 等首轮 prune 生效。
 	deadline := time.Now().Add(2 * time.Second)

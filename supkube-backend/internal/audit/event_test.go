@@ -17,11 +17,12 @@ func sample(id, prev string) ActivityEvent {
 
 func TestComputeHash_Deterministic(t *testing.T) {
 	e := sample("01", "")
-	if e.ComputeHash() != e.ComputeHash() {
+	h1, h2 := e.ComputeHash(), e.ComputeHash()
+	if h1 != h2 {
 		t.Fatal("同输入应同 hash(确定性)")
 	}
-	if e.ComputeHash() == "" || len(e.ComputeHash()) != 64 {
-		t.Fatalf("应为 64 hex 的 sha256,got %q", e.ComputeHash())
+	if h1 == "" || len(h1) != 64 {
+		t.Fatalf("应为 64 hex 的 sha256,got %q", h1)
 	}
 }
 

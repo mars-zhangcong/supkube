@@ -27,7 +27,7 @@ func ev(task, cluster string, ph Phase, ts time.Time) *ActivityEvent {
 
 func TestSQLite_AppendListGet(t *testing.T) {
 	s, _ := openTmp(t)
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 	ctx := context.Background()
 	base := time.Unix(1000, 0).UTC()
 	for i, ph := range []Phase{PhaseSubmitted, PhaseDBRCreated, PhaseCompleted} {
@@ -62,12 +62,12 @@ func TestSQLite_AppendListGet(t *testing.T) {
 
 func TestSQLite_Filters(t *testing.T) {
 	s, _ := openTmp(t)
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 	ctx := context.Background()
 	base := time.Unix(2000, 0).UTC()
-	s.Append(ctx, ev("A", "clu-1", PhaseSubmitted, base))
-	s.Append(ctx, ev("B", "clu-2", PhaseSubmitted, base.Add(time.Second)))
-	s.Append(ctx, ev("A", "clu-1", PhaseCompleted, base.Add(2*time.Second)))
+	_ = s.Append(ctx, ev("A", "clu-1", PhaseSubmitted, base))
+	_ = s.Append(ctx, ev("B", "clu-2", PhaseSubmitted, base.Add(time.Second)))
+	_ = s.Append(ctx, ev("A", "clu-1", PhaseCompleted, base.Add(2*time.Second)))
 
 	if g, _ := s.List(ctx, ListOpts{TaskID: "A"}); len(g) != 2 {
 		t.Fatalf("TaskID=A 应 2 条,got %d", len(g))
@@ -86,7 +86,7 @@ func TestSQLite_Filters(t *testing.T) {
 
 func TestSQLite_VerifyChain_Clean(t *testing.T) {
 	s, _ := openTmp(t)
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 	ctx := context.Background()
 	for i := 0; i < 50; i++ {
 		if err := s.Append(ctx, ev("t", "c", PhaseSubmitted, time.Unix(int64(i), 0))); err != nil {
@@ -103,16 +103,16 @@ func TestSQLite_VerifyChain_TamperDetected(t *testing.T) {
 	s, path := openTmp(t)
 	ctx := context.Background()
 	for i := 0; i < 5; i++ {
-		s.Append(ctx, ev("t", "c", PhaseSubmitted, time.Unix(int64(i), 0)))
+		_ = s.Append(ctx, ev("t", "c", PhaseSubmitted, time.Unix(int64(i), 0)))
 	}
-	s.Close()
+	_ = s.Close()
 
 	// 绕过 store 直接篡改一条 data(模拟落盘后被改),VerifyChain 须检出。
 	raw, err := OpenSQLite(path) // 重开同库
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer raw.Close()
+	defer func() { _ = raw.Close() }()
 	_, err = raw.db.Exec(`UPDATE activity_event SET data=? WHERE seq=(SELECT min(seq) FROM activity_event)`,
 		[]byte(`{"id":"x","task_id":"EVIL","phase":"Submitted","hash":"deadbeef","prev_hash":""}`))
 	if err != nil {
@@ -130,16 +130,16 @@ func TestSQLite_VerifyChain_TamperDetected(t *testing.T) {
 func TestSQLite_ReopenPersistsChain(t *testing.T) {
 	s, path := openTmp(t)
 	ctx := context.Background()
-	s.Append(ctx, ev("t", "c", PhaseSubmitted, time.Unix(1, 0)))
+	_ = s.Append(ctx, ev("t", "c", PhaseSubmitted, time.Unix(1, 0)))
 	lastBefore := s.lastHash
-	s.Close()
+	_ = s.Close()
 
 	// 重开:lastHash 应从末条恢复,后续 Append 接续不断链。
 	s2, err := OpenSQLite(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer s2.Close()
+	defer func() { _ = s2.Close() }()
 	if s2.lastHash != lastBefore {
 		t.Fatalf("重开应恢复链尾 hash,want %q got %q", lastBefore, s2.lastHash)
 	}
@@ -154,11 +154,11 @@ func TestSQLite_ReopenPersistsChain(t *testing.T) {
 
 func TestSQLite_PruneTTL_ChainStillValid(t *testing.T) {
 	s, _ := openTmp(t)
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 	ctx := context.Background()
 	base := time.Unix(0, 0).UTC()
 	for i := 0; i < 10; i++ {
-		s.Append(ctx, ev("t", "c", PhaseSubmitted, base.Add(time.Duration(i)*time.Hour)))
+		_ = s.Append(ctx, ev("t", "c", PhaseSubmitted, base.Add(time.Duration(i)*time.Hour)))
 	}
 	// 删前 5 小时之前的(保留后 5 条)。
 	n, err := s.PruneBefore(ctx, base.Add(5*time.Hour))
@@ -185,7 +185,7 @@ func TestSQLite_TenKSanity(t *testing.T) {
 		t.Skip("short")
 	}
 	s, _ := openTmp(t)
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 	ctx := context.Background()
 	t0 := time.Now()
 	for i := 0; i < 10000; i++ {

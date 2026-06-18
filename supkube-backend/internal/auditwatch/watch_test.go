@@ -42,7 +42,7 @@ func TestRunOnce_BackupGone_EmitsTerminal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 	audit.SetDefault(store)
 	defer audit.SetDefault(nil)
 	ctx := context.Background()

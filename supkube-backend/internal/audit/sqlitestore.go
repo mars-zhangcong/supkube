@@ -48,16 +48,16 @@ func OpenSQLite(path string) (*SQLiteStore, error) {
 		return nil, fmt.Errorf("open audit sqlite: %w", err)
 	}
 	if err := db.Ping(); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("ping audit sqlite: %w", err)
 	}
 	s := &SQLiteStore{db: db, defLimit: defaultListLimit}
 	if _, err := db.Exec(schemaSQL); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("migrate audit schema: %w", err)
 	}
 	if err := s.loadLastHash(); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, err
 	}
 	return s, nil
@@ -139,7 +139,7 @@ func (s *SQLiteStore) List(ctx context.Context, opt ListOpts) ([]ActivityEvent, 
 	if err != nil {
 		return nil, fmt.Errorf("query events: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := make([]ActivityEvent, 0, limit)
 	for rows.Next() {
 		var data []byte
@@ -193,7 +193,7 @@ func (s *SQLiteStore) VerifyChain(ctx context.Context) (bool, string, error) {
 	if err != nil {
 		return false, "", fmt.Errorf("verify query: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	prev := ""
 	first := true
 	for rows.Next() {
