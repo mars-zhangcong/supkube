@@ -24,4 +24,29 @@
 {{-   if not .Values.auth.dex.publicURL }}
 {{-     fail "\n\n  ❌ SupKube install error: embedded Dex is enabled but auth.dex.publicURL is empty.\n\n  Dex needs the EXTERNAL URL your users' browsers use to reach SupKube.\n  There is no default — a localhost guess silently breaks login after sign-in.\n\n  Add it to your helm install command:\n\n    --set auth.dex.publicURL=https://supkube.example.com\n\n  Pick the value that matches how SupKube is exposed:\n    local dev / NodePort : --set auth.dex.publicURL=http://localhost:30888\n    Ingress / domain     : --set auth.dex.publicURL=https://supkube.example.com\n    Tailscale homelab    : --set auth.dex.publicURL=https://host.tailnet.ts.net\n\n  issuer derives automatically as <publicURL>/dex (override: --set auth.dex.issuer=...).\n\n  Not using SupKube's built-in login? Disable embedded Dex instead:\n    --set auth.dex.enabled=false\n\n  Full install reference: USER_MANUAL §23\n" }}
 {{-   end }}
+{{- /*
+  PRD-028 / ADR-056 v2: subpath ↔ Dex publicURL consistency gate.
+
+  When SupKube is served under a URL subpath (frontend.basePath != "/"), the
+  browser reaches the embedded Dex proxy at <host><basePath>/dex/. The OIDC
+  issuer is derived as <publicURL>/dex, so publicURL's path MUST equal the
+  basePath — otherwise Dex redirects/issuer would point at the wrong path and
+  login breaks AFTER sign-in (the exact class of failure this file guards).
+
+  We compare the *path segment* of publicURL against the normalized basePath.
+  Only enforced when basePath is a real subpath AND publicURL carries a path;
+  the default basePath "/" skips this entirely (zero-regression).
+*/}}
+{{-   $bp := .Values.frontend.basePath | default "/" }}
+{{-   if and (ne $bp "/") (ne $bp "") }}
+{{-     $wantPath := printf "/%s" (trimAll "/" $bp) }}
+{{-     $pub := .Values.auth.dex.publicURL | toString }}
+{{-     $afterScheme := $pub }}
+{{-     if contains "://" $pub }}{{- $afterScheme = (splitList "://" $pub | last) }}{{- end }}
+{{-     $pathSegs := rest (splitList "/" $afterScheme) }}
+{{-     $havePath := printf "/%s" (trimAll "/" (join "/" $pathSegs)) }}
+{{-     if ne (trimSuffix "/" $havePath) (trimSuffix "/" $wantPath) }}
+{{-       fail (printf "\n\n  ❌ SupKube install error: frontend.basePath and auth.dex.publicURL path disagree.\n\n  frontend.basePath = %q  → SupKube is served under path %q\n  auth.dex.publicURL = %q → path %q\n\n  When SupKube runs under a subpath, the Dex publicURL MUST carry the SAME\n  path so the OIDC issuer (<publicURL>/dex) and the in-cluster /dex/ proxy\n  agree — otherwise login breaks after sign-in.\n\n  Fix: set publicURL to include the basePath, e.g.\n\n    --set frontend.basePath=%s \\\n    --set auth.dex.publicURL=https://supkube.example.com%s\n" $bp $wantPath $pub $havePath $bp $wantPath) }}
+{{-     end }}
+{{-   end }}
 {{- end }}

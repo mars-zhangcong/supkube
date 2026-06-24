@@ -29,15 +29,30 @@ spec:
             - name: http
               containerPort: {{ .Values.frontend.port }}
               protocol: TCP
+          env:
+            # PRD-028 / ADR-056 v2: URL subpath. Consumed by nginx
+            # 20-envsubst-on-templates.sh (expands ${BASE_PATH} in
+            # default.conf.template) and by 30-supkube-basepath.sh (rewrites
+            # <base href>, favicon and writes /config.js). The entrypoint
+            # normalizes this: trailing slash stripped, "/" → "" (empty
+            # prefix → "location /" etc., i.e. zero-regression at default).
+            # NORMALIZED prefix for envsubst into the nginx template (runs at
+            # 20-, BEFORE 30-supkube-basepath.sh). MUST be "" at root so
+            # `location ${BASE_PATH}/` renders `location /` (NOT `location //`,
+            # which would break the default deployment — zero-regression).
+            # "/supkube" (any slashes) -> "/supkube"; "/" or empty -> "".
+            - name: BASE_PATH
+              value: {{ if and .Values.frontend.basePath (ne .Values.frontend.basePath "/") }}{{ printf "/%s" (trimAll "/" .Values.frontend.basePath) | quote }}{{ else }}""{{ end }}
           livenessProbe:
             httpGet:
-              path: /
+              # PRD-028: probe under the subpath. At basePath "/" this is "/".
+              path: {{ if and .Values.frontend.basePath (ne .Values.frontend.basePath "/") }}{{ printf "/%s/" (trimAll "/" .Values.frontend.basePath) }}{{ else }}/{{ end }}
               port: http
             initialDelaySeconds: 5
             periodSeconds: 30
           readinessProbe:
             httpGet:
-              path: /
+              path: {{ if and .Values.frontend.basePath (ne .Values.frontend.basePath "/") }}{{ printf "/%s/" (trimAll "/" .Values.frontend.basePath) }}{{ else }}/{{ end }}
               port: http
             initialDelaySeconds: 3
             periodSeconds: 10
@@ -45,15 +60,19 @@ spec:
             {{- toYaml .Values.frontend.resources | nindent 12 }}
           # v0.8.5: nginx config from ConfigMap so we can add the /dex/*
           # proxy (and future routes) without rebuilding the image.
+          # PRD-028: mounted as an envsubst TEMPLATE (not a final conf). The
+          # nginx:alpine entrypoint expands ${BASE_PATH} into
+          # /etc/nginx/conf.d/default.conf at startup. Mount the whole
+          # templates dir (NOT a readOnly subPath over default.conf) so the
+          # entrypoint can write the generated conf to conf.d.
           volumeMounts:
             - name: nginx-conf
-              mountPath: /etc/nginx/conf.d/default.conf
-              subPath: default.conf
+              mountPath: /etc/nginx/templates
               readOnly: true
       volumes:
         - name: nginx-conf
           configMap:
             name: {{ include "supkube.fullname" . }}-frontend-nginx
             items:
-              - key: default.conf
-                path: default.conf
+              - key: default.conf.template
+                path: default.conf.template
