@@ -6,6 +6,10 @@ const raw = (typeof window !== 'undefined' && window.__SUPKUBE_CONFIG__ && windo
 export const basePath = raw === '/' || raw === '' ? '/' : '/' + raw.replace(/^\/+|\/+$/g, '')
 // prefix for building absolute URLs: '' at root, '/supkube' otherwise
 export const basePrefix = basePath === '/' ? '' : basePath
-export const apiBase = basePrefix + '/api/v1'
+// NOTE: do NOT export a module-level `apiBase = basePrefix + '/api/v1'` — when
+// consumed at module-init (axios baseURL) esbuild const-folds basePrefix to ""
+// and bakes "/api/v1", dropping the subpath prefix. Build the API URL at
+// request time from basePrefix (see api/velero.js). loginPath/callbackPath are
+// safe because they're only read inside function bodies.
 export const loginPath = basePrefix + '/login'
 export const callbackPath = basePrefix + '/auth/callback'
