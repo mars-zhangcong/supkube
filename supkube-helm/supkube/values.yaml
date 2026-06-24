@@ -686,38 +686,3 @@ auth:
     idTokenExpiry: "8h"
     refreshTokenInactivity: "24h"
     refreshTokenLifetime: "168h"
-# ===========================================================================
-# KubeBlocks UI 插件 (kb-addon)
-# ===========================================================================
-# KubeBlocks 运维控制台,像 Velero/Dex 随 supkube helm 部署。
-# 独立 POD+Service;--set kbAddon.enabled=true 开启。镜像在独立产品仓 kubeblocks-ui 出。
-# 身份:复用 SupKube Dex(per-ns/cluster RBAC 待 PRD-018;现身份层 fail-closed、per-ns 桩)。
-kbAddon:
-  enabled: false
-  backend:
-    image:
-      repository: supkube.azurecr.io/kbui-backend
-      tag: "latest"
-      pullPolicy: IfNotPresent
-    port: 8082
-    authzMode: "strict"   # strict(生产) | permissive(仅本地/内网 demo,绕过身份校验)
-    resources:
-      requests:
-        cpu: 50m
-        memory: 64Mi
-      limits:
-        cpu: 300m
-        memory: 256Mi
-  frontend:
-    image:
-      repository: supkube.azurecr.io/kbui-frontend
-      tag: "latest"
-      pullPolicy: IfNotPresent
-    port: 80
-    resources:
-      requests:
-        cpu: 25m
-        memory: 32Mi
-      limits:
-        cpu: 100m
-        memory: 64Mi
