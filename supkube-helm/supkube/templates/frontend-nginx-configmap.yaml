@@ -29,6 +29,10 @@ data:
 
         # Long-cache hashed assets (Vite produces content-hashed filenames).
         location ~* ^${BASE_PATH}/assets/.*\.(js|css|woff2?|ttf|otf|eot|svg|png|jpe?g|gif|ico)$ {
+            # PRD-028: static files live at webroot, not under a ${BASE_PATH}/
+            # subdir — strip the prefix so root+try_files resolves. Identity at
+            # BASE_PATH="" (root, zero-regression).
+            rewrite ^${BASE_PATH}/(.*)$ /$1 break;
             expires 1y;
             add_header Cache-Control "public, immutable" always;
             try_files $uri =404;
@@ -37,6 +41,7 @@ data:
         # The SPA shell. Never cached — same-hash redeploys still need to
         # fetch a fresh index.html so users pick up new bundle filenames.
         location = ${BASE_PATH}/index.html {
+            rewrite ^ /index.html break;
             add_header Cache-Control "no-store, no-cache, must-revalidate, max-age=0" always;
             add_header Pragma "no-cache" always;
             expires off;
@@ -45,7 +50,10 @@ data:
         # SPA fallback.
         location ${BASE_PATH}/ {
             add_header Cache-Control "no-store, no-cache, must-revalidate, max-age=0" always;
-            try_files $uri $uri/ ${BASE_PATH}/index.html;
+            # PRD-028: strip ${BASE_PATH} so webroot files + /index.html fallback
+            # resolve. Identity at BASE_PATH="" (root, zero-regression).
+            rewrite ^${BASE_PATH}/(.*)$ /$1 break;
+            try_files $uri $uri/ /index.html;
         }
 
         # Backend API proxy. Bearer tokens flow through here.
@@ -78,7 +86,12 @@ data:
         # so we strip ${BASE_PATH} before forwarding to keep Dex's internal
         # /dex/... routing intact.
         location ${BASE_PATH}/dex/ {
-            proxy_pass http://{{ include "supkube.fullname" . }}-dex:5556/dex/;
+            # Dex serves at its issuer PATH (= publicURL/dex). At a subpath that
+            # is /supkube/dex/..., so pass the FULL URI (no trailing path on
+            # proxy_pass → no prefix strip). At root the URI is /dex/... and Dex
+            # serves /dex/... — identical. (Prior /dex/ trailing path broke the
+            # subpath case: Dex got /dex/* but serves /supkube/dex/*.)
+            proxy_pass http://{{ include "supkube.fullname" . }}-dex:5556;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
