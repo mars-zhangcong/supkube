@@ -17,6 +17,9 @@
 
 import { reactive, readonly } from 'vue'
 import { getBranding } from '../api/velero'
+// PRD-028: subpath-aware bundled-asset prefix + auth paths. At default
+// basePath "/", basePrefix is '' so these resolve identically to today.
+import { basePrefix, loginPath, callbackPath } from '../basePath'
 
 // Built-in defaults — kept simple. If the bundled assets later change
 // path (e.g. moved out of /public), update these in one place.
@@ -27,8 +30,8 @@ import { getBranding } from '../api/velero'
 // browser's broken-image placeholder). Customer-visible first-impression
 // bug. Fixed by pointing defaults at the real bundled paths.
 const DEFAULT_PRODUCT_NAME    = 'SupKube'
-const DEFAULT_LOGO_URL        = '/supkube-logo.svg'      // bundled built-in (see supkube-frontend/public/)
-const DEFAULT_FAVICON_URL     = '/supkube-favicon.svg'   // matches index.html link rel="icon"
+const DEFAULT_LOGO_URL        = basePrefix + '/supkube-logo.svg'      // bundled built-in (see supkube-frontend/public/)
+const DEFAULT_FAVICON_URL     = basePrefix + '/supkube-favicon.svg'   // matches index.html link rel="icon"
 const PAGE_TITLE_TAIL         = '— Kubernetes Data Protection'
 
 // One module-level state object. Imports from this file all receive
@@ -157,6 +160,6 @@ export function useBranding() {
 // interceptor now also skips redirect on /auth/callback, but
 // preventing the unnecessary request altogether is cleaner.
 const _bootPath = typeof window !== 'undefined' ? window.location.pathname : ''
-if (_bootPath !== '/login' && _bootPath !== '/auth/callback') {
+if (_bootPath !== loginPath && _bootPath !== callbackPath) {
   fetchBranding()
 }

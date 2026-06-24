@@ -1,6 +1,8 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Dashboard from '../views/Dashboard.vue'
 import { useAuth } from '../composables/useAuth'
+// PRD-028: router base derives from the runtime basePath ('/' by default).
+import { basePath } from '../basePath'
 
 const routes = [
   // v0.8.5: Login route — public, no guard.
@@ -39,7 +41,7 @@ const routes = [
 ]
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory(basePath),
   routes
 })
 

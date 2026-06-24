@@ -23,6 +23,8 @@
 
 import { ref, computed } from 'vue'
 import { getAuthProviders, authCallback, getAuthMe, authLogout } from '../api/velero'
+// PRD-028: subpath-aware login redirect (== '/login' at default basePath).
+import { loginPath } from '../basePath'
 
 // Singleton state. Composables import { auth } directly and share this.
 const idToken = ref(localStorage.getItem('supkube.idToken') || '')
@@ -215,7 +217,7 @@ async function handleCallback(code, state) {
 async function logout() {
   try { await authLogout() } catch {}
   clearSession()
-  window.location.href = '/login'
+  window.location.href = loginPath
 }
 
 export function useAuth() {

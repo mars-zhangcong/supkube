@@ -152,7 +152,7 @@
           <div class="live-preview-label sk-h3">{{ t('branding.livePreview') }}</div>
           <div class="live-preview-sidebar">
             <img
-              :src="form.logoDataUrl || '/favicon.svg'"
+              :src="form.logoDataUrl || (basePrefix + '/supkube-favicon.svg')"
               :alt="form.productName"
               class="live-preview-logo"
             />
@@ -185,6 +185,9 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { getBranding, updateBranding } from '../api/velero'
 import { useBranding } from '../composables/useBranding'
+// PRD-028: subpath-aware bundled-asset prefix ('' at default basePath).
+// Exposed to the template (script-setup top-level binding) for the live-preview fallback.
+import { basePrefix } from '../basePath'
 
 const { t } = useI18n()
 const { refresh: refreshBranding } = useBranding()
