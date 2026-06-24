@@ -1,4 +1,7 @@
 import axios from 'axios'
+// PRD-028: subpath-aware API base + auth paths. At basePath "/" these are
+// '/api/v1', '/login', '/auth/callback' — identical to the previous literals.
+import { apiBase, loginPath, callbackPath } from '../basePath'
 
 // Always use a relative base URL so requests go through the same-origin nginx
 // reverse proxy (`/api/` → supkube-backend:8080). The previous default of
@@ -7,7 +10,7 @@ import axios from 'axios'
 // user happened to have a `kubectl port-forward 8080:8080` running, otherwise
 // silently fell back to stale HTTP cache. If you need to override for local
 // dev outside K8S, set VITE_API_URL=http://localhost:8080/api/v1.
-const BASE_URL = import.meta.env.VITE_API_URL || '/api/v1'
+const BASE_URL = import.meta.env.VITE_API_URL || apiBase
 
 const api = axios.create({ baseURL: BASE_URL })
 
@@ -59,11 +62,11 @@ api.interceptors.response.use(
       const path = window.location.pathname
       // Avoid redirect loops if we're already on /login or processing
       // the OIDC callback (code-exchange is in flight there).
-      if (path !== '/login' && path !== '/auth/callback') {
+      if (path !== loginPath && path !== callbackPath) {
         localStorage.removeItem('supkube.idToken')
         localStorage.removeItem('supkube.refreshToken')
         localStorage.removeItem('supkube.user')
-        window.location.href = '/login?reason=expired'
+        window.location.href = loginPath + '?reason=expired'
       }
     }
     return Promise.reject(err)

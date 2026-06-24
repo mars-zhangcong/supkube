@@ -18,6 +18,11 @@ const buildStamp = (() => {
 })()
 
 export default defineConfig({
+  // PRD-028 / ADR-056 v2: relative asset URLs (./assets/...) so a single
+  // built image can be served from ANY URL subpath. The runtime <base href>
+  // (injected by the nginx entrypoint) anchors these relative URLs. At the
+  // default basePath "/" this resolves identically to today's absolute paths.
+  base: './',
   plugins: [vue()],
   // __SUPKUBE_VERSION__ and __SUPKUBE_BUILD__ are inlined at build time.
   // src/version.js re-exports them so component code doesn't have to know

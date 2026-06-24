@@ -133,6 +133,14 @@ backend:
       cpu: 500m
       memory: 256Mi
 frontend:
+  # PRD-028 / ADR-056 v2: URL subpath the SPA is served under.
+  #   "/"          → default, byte-identical to pre-PRD-028 behavior (root).
+  #   "/supkube"   → serve under https://host/supkube/ (single image, no rebuild).
+  # The nginx entrypoint (envsubst on the template + 30-supkube-basepath.sh)
+  # rewrites <base href>, /config.js and the nginx location prefixes at start.
+  # When embedded Dex is enabled, auth.dex.publicURL's path suffix MUST match
+  # this value (enforced by templates/dex-check.yaml).
+  basePath: "/"
   image:
     repository: supkube.azurecr.io/frontend
     tag: "0.9.1.9-alpha"

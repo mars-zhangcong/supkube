@@ -120,6 +120,8 @@ import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { SUPPORTED_LOCALES, setLocale } from '../i18n'
 import { getStatus, getDashboardSummary } from '../api/velero'
+// PRD-028: subpath-aware API base (== '/api/v1' at default basePath).
+import { apiBase } from '../basePath'
 import { ElMessage } from 'element-plus'
 import { useAuth } from '../composables/useAuth'
 import MyAccessPanel from '../components/MyAccessPanel.vue'
@@ -150,7 +152,7 @@ const loading = ref(false)
 const veleroStatus = ref({ connected: false, version: '', namespace: '', plugins: [] })
 const clusterInfo = ref({ k8sVersion: '', nodes: 0, namespaces: 0 })
 const supkubeInfo = ref({ version: '' })
-const apiUrl = import.meta.env.VITE_API_URL || '/api/v1'
+const apiUrl = import.meta.env.VITE_API_URL || apiBase
 
 const BLOCK_KEY = 'supkube.policy.blockSnapshotOnly'
 const blockSnapshotOnly = ref(localStorage.getItem(BLOCK_KEY) === 'true')

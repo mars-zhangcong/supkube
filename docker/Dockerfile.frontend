@@ -25,6 +25,15 @@ RUN rm /etc/nginx/conf.d/default.conf
 
 COPY --from=builder /app/dist /usr/share/nginx/html
 
+# PRD-028 / ADR-056 v2: base-path entrypoint. Runs before nginx (after the
+# stock 20-envsubst-on-templates.sh which expands ${BASE_PATH} in the mounted
+# nginx template) to rewrite <base href>, the favicon and emit /config.js.
+# POSIX sh, idempotent. At BASE_PATH=/ (default) it reproduces root behavior.
+# NOTE: build context is ./supkube-frontend (see .github/workflows/{ci,cd}.yaml),
+# so this path is relative to supkube-frontend/.
+COPY docker/30-supkube-basepath.sh /docker-entrypoint.d/30-supkube-basepath.sh
+RUN chmod +x /docker-entrypoint.d/30-supkube-basepath.sh
+
 RUN printf 'server {\n\
     listen 80;\n\
     server_name _;\n\
