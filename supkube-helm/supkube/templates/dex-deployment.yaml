@@ -40,17 +40,21 @@ spec:
           # Dex exposes /healthz on the same HTTP port. We use it for both
           # liveness (is the binary alive?) and readiness (can it answer
           # OIDC discovery?).
-          # Dex serves all routes under the issuer's path prefix. Our
-          # issuer is .../dex so healthz lives at /dex/healthz, not /healthz.
+          # Dex serves all routes under the issuer's path prefix. Issuer is
+          # <publicURL>/dex, so under a subpath (frontend.basePath=/supkube)
+          # healthz lives at /supkube/dex/healthz; at root it's /dex/healthz.
+          # PRD-028: keep this probe in lockstep with the basePath.
+          {{- $bp := "" }}
+          {{- if and .Values.frontend.basePath (ne .Values.frontend.basePath "/") }}{{ $bp = printf "/%s" (trimAll "/" .Values.frontend.basePath) }}{{ end }}
           livenessProbe:
             httpGet:
-              path: /dex/healthz
+              path: {{ $bp }}/dex/healthz
               port: http
             initialDelaySeconds: 10
             periodSeconds: 10
           readinessProbe:
             httpGet:
-              path: /dex/healthz
+              path: {{ $bp }}/dex/healthz
               port: http
             initialDelaySeconds: 2
             periodSeconds: 5

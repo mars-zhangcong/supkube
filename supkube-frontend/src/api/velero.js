@@ -1,7 +1,7 @@
 import axios from 'axios'
 // PRD-028: subpath-aware API base + auth paths. At basePath "/" these are
 // '/api/v1', '/login', '/auth/callback' — identical to the previous literals.
-import { apiBase, loginPath, callbackPath } from '../basePath'
+import { basePrefix, loginPath, callbackPath } from '../basePath'
 
 // Always use a relative base URL so requests go through the same-origin nginx
 // reverse proxy (`/api/` → supkube-backend:8080). The previous default of
@@ -10,9 +10,14 @@ import { apiBase, loginPath, callbackPath } from '../basePath'
 // user happened to have a `kubectl port-forward 8080:8080` running, otherwise
 // silently fell back to stale HTTP cache. If you need to override for local
 // dev outside K8S, set VITE_API_URL=http://localhost:8080/api/v1.
-const BASE_URL = import.meta.env.VITE_API_URL || apiBase
-
-const api = axios.create({ baseURL: BASE_URL })
+//
+// PRD-028 fix: do NOT set baseURL at module-init from a basePrefix-derived
+// const — esbuild const-folds `basePrefix + '/api/v1'` (used at module top
+// level) down to the literal "/api/v1", dropping the subpath prefix. We set
+// baseURL INSIDE the request interceptor (a function body) so basePrefix is
+// read at request time and survives minification. (loginPath/callbackPath are
+// only used inside functions, which is why they were unaffected.)
+const api = axios.create()
 
 // Per-request cache-buster: append `_=<ts>` to every GET URL so the browser
 // treats it as a unique resource and never serves a cached prior response.
@@ -20,6 +25,8 @@ const api = axios.create({ baseURL: BASE_URL })
 // would trigger CORS preflight, and they're redundant with the cache-buster
 // param plus the server-side `Cache-Control: no-store` we send on responses.
 api.interceptors.request.use((config) => {
+  // PRD-028: runtime API base (subpath-aware, fold-proof — see note above).
+  config.baseURL = import.meta.env.VITE_API_URL || (basePrefix + '/api/v1')
   if ((config.method || 'get').toLowerCase() === 'get') {
     config.params = { ...(config.params || {}), _: Date.now() }
   }

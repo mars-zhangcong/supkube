@@ -51,7 +51,11 @@ spec:
               # For embedded Dex this is the Service DNS (browser URL would
               # be localhost:30888 which is unreachable from inside pods).
               # For external IdPs the discovery URL == issuer URL.
-              value: {{ if .Values.auth.dex.enabled }}{{ printf "http://%s-dex:5556/dex" (include "supkube.fullname" .) | quote }}{{ else }}{{ .Values.auth.oidc.issuerURL | quote }}{{ end }}
+              # PRD-028: Dex serves at its issuer PATH (<publicURL>/dex), so
+              # under a subpath the in-cluster path is <basePath>/dex, not /dex.
+              {{- $bp := "" }}
+              {{- if and .Values.frontend.basePath (ne .Values.frontend.basePath "/") }}{{ $bp = printf "/%s" (trimAll "/" .Values.frontend.basePath) }}{{ end }}
+              value: {{ if .Values.auth.dex.enabled }}{{ printf "http://%s-dex:5556%s/dex" (include "supkube.fullname" .) $bp | quote }}{{ else }}{{ .Values.auth.oidc.issuerURL | quote }}{{ end }}
             - name: OIDC_CLIENT_ID
               value: {{ .Values.auth.oidc.clientID | quote }}
             - name: OIDC_CLIENT_SECRET

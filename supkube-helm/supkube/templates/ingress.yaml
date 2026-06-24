@@ -1,0 +1,57 @@
+{{- /*
+PRD-028 / ADR-056 v2 — Ingress for the SupKube frontend.
+
+Routes a (sub)path on a shared host to the frontend service. The frontend
+nginx serves UNDER ${BASE_PATH} (frontend.basePath), so we do NOT rewrite the
+path here — ingress passes the URL through and nginx's `location ${BASE_PATH}/`
+matches. Set ingress.hosts[].paths[].path = frontend.basePath for the subpath
+deployment (e.g. /supkube). Default basePath "/" + path "/" = root, unchanged.
+
+Disabled by default (ingress.enabled=false) → zero-regression for LB/NodePort.
+*/ -}}
+{{- if .Values.ingress.enabled -}}
+{{- $fullName := include "supkube.fullname" . -}}
+{{- $svcPort := .Values.service.frontend.port | default 80 -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $fullName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "supkube.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with .Values.ingress.tls }}
+  tls:
+    {{- range . }}
+    - hosts:
+        {{- range .hosts }}
+        - {{ . | quote }}
+        {{- end }}
+      {{- with .secretName }}
+      secretName: {{ . }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+  rules:
+    {{- range .Values.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path | quote }}
+            pathType: {{ .pathType | default "Prefix" }}
+            backend:
+              service:
+                name: {{ $fullName }}-frontend
+                port:
+                  number: {{ $svcPort }}
+          {{- end }}
+    {{- end }}
+{{- end }}
