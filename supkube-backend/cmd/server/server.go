@@ -335,6 +335,8 @@ func Run() error {
 		api.GET("/namespaces", v1.ListNamespaces)
 		api.POST("/namespaces", v1.CreateNamespace)
 		api.GET("/dashboard/summary", v1.GetDashboardSummary)
+		// PRD-029/N2 (Kopia 仓库服务): 列 Velero BackupRepository CR(去重可见的第一扇窗)。
+		api.GET("/backup-repositories", v1.ListBackupRepositories)
 		api.GET("/applications", v1.ListApplications)
 		api.GET("/applications/:namespace/details", v1.GetApplicationDetails)
 		api.GET("/applications/:namespace/storage-capability", v1.GetNamespaceStorageCapability)
