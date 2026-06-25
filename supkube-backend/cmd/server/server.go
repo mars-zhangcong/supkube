@@ -15,6 +15,7 @@ import (
 	"github.com/supkube/supkube-backend/internal/clusterhealth"
 	"github.com/supkube/supkube-backend/internal/csi"
 	"github.com/supkube/supkube-backend/internal/drflow"
+	"github.com/supkube/supkube-backend/internal/eventwatch"
 	"github.com/supkube/supkube-backend/internal/fingerprint"
 	"github.com/supkube/supkube-backend/internal/gc"
 	"github.com/supkube/supkube-backend/internal/importpolicy"
@@ -54,6 +55,20 @@ func Run() error {
 		}
 		log.Printf("[gc] orphan GC runner started")
 		gc.Run(context.Background(), runtimeCli, k8sCli)
+	}()
+
+	// Terminal-event watcher: poll Velero Backup/Restore CRs and emit
+	// *.completed/*.failed on the event bus (consumed by GET /api/v1/events).
+	// Fills SupInsight's #2 gap — the thin-adapter "trigger → wait for
+	// completion" needs terminal events to wait on.
+	go func() {
+		runtimeCli, err := k8s.GetRuntimeClient()
+		if err != nil {
+			log.Printf("[eventwatch] runtime client unavailable; terminal events disabled: %v", err)
+			return
+		}
+		log.Printf("[eventwatch] terminal-event watcher started")
+		eventwatch.Run(context.Background(), runtimeCli)
 	}()
 
 	// v0.8.10 Plan-B: dual-policy pair controller. Watches snapshot-half
@@ -332,6 +347,10 @@ func Run() error {
 		api.GET("/audit-logs", auth.ListAuditLogs)
 
 		api.GET("/status", v1.GetStatus)
+		// SSE event stream — agents (SupInsight / MCP server) subscribe to
+		// react to Supkube state changes (incl. terminal *.completed/*.failed
+		// from the eventwatch runner) without polling. Registered in RBAC table.
+		api.GET("/events", v1.EventsHandler)
 		api.GET("/namespaces", v1.ListNamespaces)
 		api.POST("/namespaces", v1.CreateNamespace)
 		api.GET("/dashboard/summary", v1.GetDashboardSummary)
