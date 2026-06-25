@@ -1,0 +1,22 @@
+{
+  "name": "supkube-mcp",
+  "version": "0.1.0",
+  "protocol": "2025-03-26",
+  "transport": "streamable-http",
+  "endpoint": "/mcp",
+  "auth": "Bearer (Authorization header)",
+  "skills": [
+    {
+      "name": "list_k8s_workloads",
+      "write": false,
+      "description": "List Kubernetes namespaces with workload counts and backup protection status."
+    }
+  ],
+  "deferred": [
+    { "name": "get_backup_advice", "reason": "PRR C1 — depends on PRD-003 Advisor Engine" },
+    { "name": "create_backup_policy", "write": true, "reason": "PRR C3 — needs HitL-confirm-storage ADR first" },
+    { "name": "trigger_backup_execution", "write": true, "reason": "PRR C3 — needs HitL-confirm-storage ADR first" },
+    { "name": "get_backup_status", "reason": "Phase 2" }
+  ],
+  "notes": "Phase-1 PoC per PRD-004 + independent PRR conditions C1/C3/C5. list_k8s_workloads currently returns per-namespace workload counts; full per-workload enumeration needs a dedicated supkube-backend endpoint (flagged)."
+}
