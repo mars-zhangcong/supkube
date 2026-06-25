@@ -29,13 +29,17 @@ type Workload struct {
 }
 
 type Client interface {
+	// PRD-004 reads.
 	ListWorkloads(ctx context.Context, cluster, namespace string) ([]Workload, error)
+	GetBackupAdvice(ctx context.Context, namespace string) (map[string]any, error)
+	GetBackupStatus(ctx context.Context, name string) (map[string]any, error)
 	// GetRestoreStatus = the authoritative status fallback SupInsight asked for
 	// (#3): reliable wait = SSE fast-path + this poll. Returns a trimmed summary.
 	GetRestoreStatus(ctx context.Context, name string) (map[string]any, error)
-	// Write ops (#1) — executed only after HitL confirm (ADR-057).
+	// PRD-004 writes — executed only after HitL confirm (ADR-057).
+	CreateBackupPolicy(ctx context.Context, args map[string]any) (map[string]any, error)
+	RunBackupPolicy(ctx context.Context, name string) (map[string]any, error)
 	TriggerRestore(ctx context.Context, args map[string]any) (map[string]any, error)
-	TriggerBackup(ctx context.Context, args map[string]any) (map[string]any, error)
 }
 
 // HTTP is the real client; bearer = the server→backend service token.
@@ -106,14 +110,47 @@ func (h *HTTP) GetRestoreStatus(ctx context.Context, name string) (map[string]an
 	return map[string]any{"name": name, "phase": phase, "status": status}, nil
 }
 
+// GetBackupAdvice calls GET /api/v1/backup-advisor/{namespace} — the live
+// Advisor endpoint (proxied as-is). Note: full PRD-003 Advisor productionization
+// is a separate gate; this skill exposes what the backend already serves.
+func (h *HTTP) GetBackupAdvice(ctx context.Context, namespace string) (map[string]any, error) {
+	var raw map[string]any
+	if err := h.getJSON(ctx, "/api/v1/backup-advisor/"+namespace, "", &raw); err != nil {
+		return nil, err
+	}
+	return raw, nil
+}
+
+// GetBackupStatus calls GET /api/v1/backups/{name} and returns a trimmed summary
+// (≤4KB target per PRD-004 §4.3): name/phase/status, not raw logs.
+func (h *HTTP) GetBackupStatus(ctx context.Context, name string) (map[string]any, error) {
+	var raw map[string]any
+	if err := h.getJSON(ctx, "/api/v1/backups/"+name, "", &raw); err != nil {
+		return nil, err
+	}
+	status, _ := raw["status"].(map[string]any)
+	phase := ""
+	if status != nil {
+		phase, _ = status["phase"].(string)
+	}
+	return map[string]any{"name": name, "phase": phase, "status": status}, nil
+}
+
+// CreateBackupPolicy POSTs /api/v1/schedules (CreateSchedule — a backup policy in
+// this backend). Called only post-confirm.
+func (h *HTTP) CreateBackupPolicy(ctx context.Context, args map[string]any) (map[string]any, error) {
+	return h.postJSON(ctx, "/api/v1/schedules", args)
+}
+
+// RunBackupPolicy POSTs /api/v1/schedules/{name}/run-once — PRD-004's
+// trigger_backup_execution: run an existing policy immediately. Post-confirm only.
+func (h *HTTP) RunBackupPolicy(ctx context.Context, name string) (map[string]any, error) {
+	return h.postJSON(ctx, "/api/v1/schedules/"+name+"/run-once", map[string]any{})
+}
+
 // TriggerRestore POSTs /api/v1/restores (CreateRestore). Called only post-confirm.
 func (h *HTTP) TriggerRestore(ctx context.Context, args map[string]any) (map[string]any, error) {
 	return h.postJSON(ctx, "/api/v1/restores", args)
-}
-
-// TriggerBackup POSTs /api/v1/backups (CreateBackup). Called only post-confirm.
-func (h *HTTP) TriggerBackup(ctx context.Context, args map[string]any) (map[string]any, error) {
-	return h.postJSON(ctx, "/api/v1/backups", args)
 }
 
 func (h *HTTP) getJSON(ctx context.Context, path, cluster string, out any) error {
