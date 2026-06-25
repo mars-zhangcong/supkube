@@ -20,6 +20,7 @@ import (
 	"github.com/supkube/supkube-backend/internal/gc"
 	"github.com/supkube/supkube-backend/internal/importpolicy"
 	"github.com/supkube/supkube-backend/internal/k8s"
+	"github.com/supkube/supkube-backend/internal/mcpconfirm"
 	"github.com/supkube/supkube-backend/internal/metrics"
 	"github.com/supkube/supkube-backend/internal/policypair"
 	"github.com/supkube/supkube-backend/internal/velerons"
@@ -69,6 +70,27 @@ func Run() error {
 		}
 		log.Printf("[eventwatch] terminal-event watcher started")
 		eventwatch.Run(context.Background(), runtimeCli)
+	}()
+
+	// MCP HitL confirmation reaper (ADR-057 R1): periodically GC expired
+	// confirmation Secrets. Get-time expiry already prevents stale confirms from
+	// executing; this just keeps orphaned Secrets from accumulating.
+	go func() {
+		cli, err := k8s.GetRuntimeClient()
+		if err != nil {
+			log.Printf("[mcpconfirm] runtime client unavailable; confirmation reaper disabled: %v", err)
+			return
+		}
+		st := mcpconfirm.New(cli, v1.ConfirmNamespace(), mcpconfirm.DefaultTTL)
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			if n, err := st.Reap(context.Background()); err != nil {
+				log.Printf("[mcpconfirm] reap error: %v", err)
+			} else if n > 0 {
+				log.Printf("[mcpconfirm] reaped %d expired confirmation(s)", n)
+			}
+		}
 	}()
 
 	// v0.8.10 Plan-B: dual-policy pair controller. Watches snapshot-half
@@ -416,6 +438,11 @@ func Run() error {
 		api.GET("/restores/:name", v1.GetRestore)
 		api.GET("/restores/:name/results", v1.GetRestoreResults)
 		api.DELETE("/restores/:name", v1.DeleteRestore)
+
+		// MCP HitL confirmation store (ADR-057 R1) — internal, supkube-mcp client.
+		api.POST("/mcp/confirmations", v1.CreateMCPConfirmation)
+		api.GET("/mcp/confirmations/:id", v1.GetMCPConfirmation)
+		api.DELETE("/mcp/confirmations/:id", v1.DeleteMCPConfirmation)
 
 		// v0.8.0 Activity / Actions — unified stream replacing the
 		// per-CRD pages. Aggregates Backups + Restores into Action shape.

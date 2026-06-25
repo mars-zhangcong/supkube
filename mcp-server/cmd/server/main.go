@@ -26,9 +26,18 @@ func main() {
 		log.Println("WARN: MCP_BEARER_TOKEN unset — /mcp will reject all requests (fail-closed)")
 	}
 
-	// PoC uses the in-memory confirm store; production swaps in the CR-backed
-	// store for cross-replica HitL (ADR-057) — same Store interface.
-	reg := skills.NewRegistry(supkubeclient.NewHTTP(backend, backendToken), confirm.NewMemory())
+	// HitL confirm store (ADR-057 R1): when a backend is configured, persist
+	// confirmations there (backend-managed K8s Secret = cross-replica). Only fall
+	// back to in-memory (single-replica) when there's no backend at all.
+	var store confirm.Store
+	if backend != "" {
+		store = confirm.NewBackendStore(backend, backendToken)
+		log.Printf("HitL confirm store: backend Secret-backed (cross-replica) via %s", backend)
+	} else {
+		store = confirm.NewMemory()
+		log.Println("HitL confirm store: in-memory (single-replica; no backend configured)")
+	}
+	reg := skills.NewRegistry(supkubeclient.NewHTTP(backend, backendToken), store)
 	h := mcpproto.New(reg)
 
 	mux := http.NewServeMux()

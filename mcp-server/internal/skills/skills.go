@@ -11,7 +11,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"time"
 
 	"github.com/supkube/mcp-server/internal/confirm"
 	"github.com/supkube/mcp-server/internal/supkubeclient"
@@ -70,14 +69,19 @@ func (r *Registry) Call(ctx context.Context, name string, args map[string]any) (
 		return marshal(s.Run(ctx, args))
 	}
 	if cid, _ := args["confirm_id"].(string); cid != "" {
-		snap, ok := r.confirms.Get(cid)
+		snap, ok, err := r.confirms.Get(ctx, cid)
+		if err != nil {
+			return "confirm store error: " + err.Error(), true
+		}
 		if !ok {
 			return "confirm_id invalid or expired — re-run for a fresh dry-run", true
 		}
 		if snap.Skill != name {
 			return "confirm_id does not belong to this tool", true
 		}
-		r.confirms.Delete(cid)                    // one-shot (anti-replay)
+		if err := r.confirms.Delete(ctx, cid); err != nil { // one-shot (anti-replay)
+			return "confirm store error: " + err.Error(), true
+		}
 		return marshal(s.Execute(ctx, snap.Args)) // IGNORE this call's args; use snapshot
 	}
 	// first call: dry-run + persist + ask for confirmation
@@ -85,10 +89,10 @@ func (r *Registry) Call(ctx context.Context, name string, args map[string]any) (
 	if err != nil {
 		return err.Error(), true
 	}
-	id := r.confirms.Put(confirm.Snapshot{
-		Skill: name, Args: normalize(args), DryRun: preview,
-		Created: time.Now(), Expires: time.Now().Add(confirm.DefaultTTL),
-	})
+	id, err := r.confirms.Put(ctx, confirm.Snapshot{Skill: name, Args: normalize(args), DryRun: preview})
+	if err != nil {
+		return "confirm store error: " + err.Error(), true
+	}
 	b, _ := json.MarshalIndent(map[string]any{
 		"requires_confirmation": true,
 		"confirm_id":            id,

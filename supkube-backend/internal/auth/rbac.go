@@ -124,6 +124,11 @@ var permissionTable = []permEntry{
 	{"POST", "/api/v1/restores", RoleEditor},
 	{"POST", "/api/v1/restores/preflight", RoleEditor},
 	{"DELETE", "/api/v1/restores/:name", RoleEditor},
+	// MCP HitL confirmation store (ADR-057 R1) — internal, called by supkube-mcp.
+	// MUST be here or RBAC 403s them in prod (the PR#66 F1 lesson).
+	{"POST", "/api/v1/mcp/confirmations", RoleEditor},
+	{"GET", "/api/v1/mcp/confirmations/:id", RoleEditor},
+	{"DELETE", "/api/v1/mcp/confirmations/:id", RoleEditor},
 	{"POST", "/api/v1/schedules", RoleEditor},
 	{"PATCH", "/api/v1/schedules/:name", RoleEditor},
 	{"POST", "/api/v1/schedules/:name/run-once", RoleEditor},
