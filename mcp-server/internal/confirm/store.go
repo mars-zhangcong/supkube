@@ -9,6 +9,7 @@
 package confirm
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"sync"
@@ -25,13 +26,16 @@ type Snapshot struct {
 	Expires time.Time
 }
 
+// Store persists confirmation snapshots. ctx+error so a network-backed impl
+// (BackendStore) can report failures; Memory never errors.
 type Store interface {
-	Put(s Snapshot) string          // returns confirm_id
-	Get(id string) (Snapshot, bool) // false if missing or expired
-	Delete(id string)
+	Put(ctx context.Context, s Snapshot) (string, error)        // returns confirm_id
+	Get(ctx context.Context, id string) (Snapshot, bool, error) // ok=false if missing or expired
+	Delete(ctx context.Context, id string) error
 }
 
-// Memory is the PoC/test store. Production swaps in a CR-backed impl (ADR-057).
+// Memory is the single-replica PoC/test store. Production uses BackendStore
+// (backend-persisted K8s Secret, cross-replica) per ADR-057 R1.
 type Memory struct {
 	mu  sync.Mutex
 	m   map[string]Snapshot
@@ -41,7 +45,7 @@ type Memory struct {
 
 func NewMemory() *Memory { return &Memory{m: map[string]Snapshot{}, ttl: DefaultTTL, now: time.Now} }
 
-func (s *Memory) Put(snap Snapshot) string {
+func (s *Memory) Put(_ context.Context, snap Snapshot) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := s.now()
@@ -53,27 +57,28 @@ func (s *Memory) Put(snap Snapshot) string {
 	}
 	id := newID()
 	s.m[id] = snap
-	return id
+	return id, nil
 }
 
-func (s *Memory) Get(id string) (Snapshot, bool) {
+func (s *Memory) Get(_ context.Context, id string) (Snapshot, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	snap, ok := s.m[id]
 	if !ok {
-		return Snapshot{}, false
+		return Snapshot{}, false, nil
 	}
 	if s.now().After(snap.Expires) { // expired → GC + miss
 		delete(s.m, id)
-		return Snapshot{}, false
+		return Snapshot{}, false, nil
 	}
-	return snap, true
+	return snap, true, nil
 }
 
-func (s *Memory) Delete(id string) {
+func (s *Memory) Delete(_ context.Context, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.m, id)
+	return nil
 }
 
 func newID() string {
