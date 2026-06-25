@@ -36,10 +36,15 @@ func NewRegistry(c supkubeclient.Client, store confirm.Store) *Registry {
 	return &Registry{
 		confirms: store,
 		skills: []Skill{
-			listK8sWorkloads(c), // read (Phase-1 PoC)
+			// PRD-004 locked five.
+			listK8sWorkloads(c),       // read
+			getBackupAdvice(c),        // read
+			getBackupStatus(c),        // read
+			createBackupPolicy(c),     // write — HitL
+			triggerBackupExecution(c), // write — HitL
+			// SupInsight extras (restore orchestration).
 			getRestoreStatus(c), // read — #3 authoritative status fallback
-			triggerRestore(c),   // write — #1 HitL
-			triggerBackup(c),    // write — #1 HitL
+			triggerRestore(c),   // write — HitL
 		},
 	}
 }
@@ -178,23 +183,77 @@ func triggerRestore(c supkubeclient.Client) Skill {
 	}
 }
 
-func triggerBackup(c supkubeclient.Client) Skill {
+func getBackupAdvice(c supkubeclient.Client) Skill {
 	return Skill{
-		Name:        "trigger_backup",
+		Name:        "get_backup_advice",
+		Description: "Get the backup Advisor's recommendation for a namespace (score/tier/factors). Proxies the live backend Advisor.",
+		InputSchema: obj(map[string]any{"namespace": str("namespace to advise on (required)")}),
+		Run: func(ctx context.Context, args map[string]any) (any, error) {
+			ns, _ := args["namespace"].(string)
+			if ns == "" {
+				return nil, errors.New("namespace is required")
+			}
+			return c.GetBackupAdvice(ctx, ns)
+		},
+	}
+}
+
+func getBackupStatus(c supkubeclient.Client) Skill {
+	return Skill{
+		Name:        "get_backup_status",
+		Description: "Get a backup's current status summary (phase/errors). Structured, ≤4KB (PRD-004 §4.3).",
+		InputSchema: obj(map[string]any{"name": str("backup name (required)")}),
+		Run: func(ctx context.Context, args map[string]any) (any, error) {
+			name, _ := args["name"].(string)
+			if name == "" {
+				return nil, errors.New("name is required")
+			}
+			return c.GetBackupStatus(ctx, name)
+		},
+	}
+}
+
+func createBackupPolicy(c supkubeclient.Client) Skill {
+	return Skill{
+		Name:        "create_backup_policy",
 		Write:       true,
-		Description: "Trigger an immediate Velero backup. Returns a dry-run preview + confirm_id first; call again with confirm_id to execute (HitL, ADR-057).",
+		Description: "Create a backup policy (schedule). Returns a dry-run preview + confirm_id first; call again with confirm_id to execute (HitL, ADR-057).",
 		InputSchema: obj(map[string]any{
-			"name":      str("backup name (required)"),
-			"namespace": str("namespace to back up (required)"),
+			"name":               str("policy name (required)"),
+			"schedule":           str("cron schedule, e.g. '0 2 * * *' (required)"),
+			"includedNamespaces": str("namespaces to back up (comma-separated or array; optional)"),
 		}),
 		DryRun: func(_ context.Context, args map[string]any) (any, error) {
 			return map[string]any{
-				"action": "backup", "name": args["name"], "namespace": args["namespace"],
-				"preview": "would create a Velero Backup; NOT executed until confirmed",
+				"action": "create_backup_policy", "name": args["name"], "schedule": args["schedule"],
+				"includedNamespaces": args["includedNamespaces"],
+				"preview":            "would create a backup schedule; NOT executed until confirmed",
 			}, nil
 		},
 		Execute: func(ctx context.Context, args map[string]any) (any, error) {
-			return c.TriggerBackup(ctx, args)
+			return c.CreateBackupPolicy(ctx, args)
+		},
+	}
+}
+
+func triggerBackupExecution(c supkubeclient.Client) Skill {
+	return Skill{
+		Name:        "trigger_backup_execution",
+		Write:       true,
+		Description: "Trigger an existing backup policy to run immediately (run-once). Returns a dry-run preview + confirm_id first; call again with confirm_id to execute (HitL, ADR-057).",
+		InputSchema: obj(map[string]any{"policyName": str("name of the existing backup policy/schedule to run now (required)")}),
+		DryRun: func(_ context.Context, args map[string]any) (any, error) {
+			return map[string]any{
+				"action": "run_backup_policy", "policyName": args["policyName"],
+				"preview": "would run the policy once immediately; NOT executed until confirmed",
+			}, nil
+		},
+		Execute: func(ctx context.Context, args map[string]any) (any, error) {
+			name, _ := args["policyName"].(string)
+			if name == "" {
+				return nil, errors.New("policyName is required")
+			}
+			return c.RunBackupPolicy(ctx, name)
 		},
 	}
 }

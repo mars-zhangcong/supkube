@@ -18,14 +18,23 @@ type mockClient struct{}
 func (mockClient) ListWorkloads(_ context.Context, _, _ string) ([]supkubeclient.Workload, error) {
 	return []supkubeclient.Workload{{Namespace: "prod-orders", Workloads: 3}}, nil
 }
+func (mockClient) GetBackupAdvice(_ context.Context, ns string) (map[string]any, error) {
+	return map[string]any{"namespace": ns, "tier": "gold"}, nil
+}
+func (mockClient) GetBackupStatus(_ context.Context, name string) (map[string]any, error) {
+	return map[string]any{"name": name, "phase": "Completed"}, nil
+}
 func (mockClient) GetRestoreStatus(_ context.Context, name string) (map[string]any, error) {
 	return map[string]any{"name": name, "phase": "Completed"}, nil
 }
+func (mockClient) CreateBackupPolicy(_ context.Context, args map[string]any) (map[string]any, error) {
+	return map[string]any{"created": "policy", "name": args["name"]}, nil
+}
+func (mockClient) RunBackupPolicy(_ context.Context, name string) (map[string]any, error) {
+	return map[string]any{"ran": name}, nil
+}
 func (mockClient) TriggerRestore(_ context.Context, args map[string]any) (map[string]any, error) {
 	return map[string]any{"created": "restore", "namespace": args["namespace"]}, nil
-}
-func (mockClient) TriggerBackup(_ context.Context, args map[string]any) (map[string]any, error) {
-	return map[string]any{"created": "backup", "name": args["name"]}, nil
 }
 
 func newH() *Handler { return New(skills.NewRegistry(mockClient{}, confirm.NewMemory())) }
@@ -47,12 +56,15 @@ func TestInitialize(t *testing.T) {
 func TestToolsList(t *testing.T) {
 	w := call(newH(), `{"jsonrpc":"2.0","id":2,"method":"tools/list"}`)
 	b := w.Body.String()
-	if !strings.Contains(b, "list_k8s_workloads") {
-		t.Fatalf("missing list_k8s_workloads: %s", b)
-	}
-	// PRR C1: get_backup_advice must NOT be registered yet (depends on PRD-003).
-	if strings.Contains(b, "get_backup_advice") {
-		t.Fatalf("C1 violated: get_backup_advice registered before PRD-003: %s", b)
+	// PRD-004 locked five must all be registered (C1 reconciled: get_backup_advice
+	// proxies the live backend Advisor endpoint).
+	for _, name := range []string{
+		"list_k8s_workloads", "get_backup_advice", "get_backup_status",
+		"create_backup_policy", "trigger_backup_execution",
+	} {
+		if !strings.Contains(b, name) {
+			t.Fatalf("missing PRD-004 skill %s: %s", name, b)
+		}
 	}
 }
 

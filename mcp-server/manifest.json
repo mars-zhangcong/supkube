@@ -5,16 +5,16 @@
   "transport": "streamable-http",
   "endpoint": "/mcp",
   "auth": "Bearer (Authorization header)",
-  "skills": [
+  "prd004_skills": [
     { "name": "list_k8s_workloads", "write": false, "description": "List namespaces with workload counts and backup protection status." },
-    { "name": "get_restore_status", "write": false, "description": "Restore status summary (phase/errors). Authoritative status for reliable waiting." },
-    { "name": "trigger_restore", "write": true, "hitl": true, "description": "Trigger a Velero restore. Dry-run + confirm_id first; execute on confirm (ADR-057)." },
-    { "name": "trigger_backup", "write": true, "hitl": true, "description": "Trigger an immediate Velero backup. Dry-run + confirm_id first; execute on confirm (ADR-057)." }
+    { "name": "get_backup_advice", "write": false, "description": "Backup Advisor recommendation for a namespace (score/tier/factors). Proxies live backend Advisor." },
+    { "name": "get_backup_status", "write": false, "description": "Backup status summary (phase/errors), structured ≤4KB." },
+    { "name": "create_backup_policy", "write": true, "hitl": true, "description": "Create a backup policy (schedule). Dry-run + confirm_id first; execute on confirm (ADR-057)." },
+    { "name": "trigger_backup_execution", "write": true, "hitl": true, "description": "Run an existing backup policy immediately (run-once). Dry-run + confirm_id first; execute on confirm (ADR-057)." }
   ],
-  "deferred": [
-    { "name": "get_backup_advice", "reason": "PRR C1 — depends on PRD-003 Advisor Engine" },
-    { "name": "create_backup_policy", "write": true, "reason": "next: same HitL path as trigger_*" },
-    { "name": "get_backup_status", "reason": "next: read skill like get_restore_status" }
+  "orchestration_extras": [
+    { "name": "get_restore_status", "write": false, "description": "Restore status summary. Authoritative status for reliable waiting (SupInsight #3)." },
+    { "name": "trigger_restore", "write": true, "hitl": true, "description": "Trigger a Velero restore. Dry-run + confirm_id first; execute on confirm (ADR-057)." }
   ],
   "hitl": {
     "spec": "ADR-057",
@@ -22,5 +22,5 @@
     "store": "PoC = in-memory; production = K8s CR (cross-replica), per ADR-057",
     "unifies": "MCP write-skill HitL == PRD-013 four-eyes == orchestration high-risk approval (one mechanism)"
   },
-  "notes": "Phase-1 + #1/#3 from SupInsight's review. list_k8s_workloads returns per-namespace counts (full per-workload needs a backend endpoint)."
+  "notes": "PRD-004's 5 locked skills all registered + 2 restore extras for orchestration. list_k8s_workloads returns per-namespace counts (full per-workload needs a backend endpoint). get_backup_advice proxies the live /backup-advisor endpoint (full PRD-003 productionization is a separate gate)."
 }
