@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/supkube/mcp-server/internal/auth"
+	"github.com/supkube/mcp-server/internal/confirm"
 	"github.com/supkube/mcp-server/internal/skills"
 	"github.com/supkube/mcp-server/internal/supkubeclient"
 )
@@ -17,8 +18,17 @@ type mockClient struct{}
 func (mockClient) ListWorkloads(_ context.Context, _, _ string) ([]supkubeclient.Workload, error) {
 	return []supkubeclient.Workload{{Namespace: "prod-orders", Workloads: 3}}, nil
 }
+func (mockClient) GetRestoreStatus(_ context.Context, name string) (map[string]any, error) {
+	return map[string]any{"name": name, "phase": "Completed"}, nil
+}
+func (mockClient) TriggerRestore(_ context.Context, args map[string]any) (map[string]any, error) {
+	return map[string]any{"created": "restore", "namespace": args["namespace"]}, nil
+}
+func (mockClient) TriggerBackup(_ context.Context, args map[string]any) (map[string]any, error) {
+	return map[string]any{"created": "backup", "name": args["name"]}, nil
+}
 
-func newH() *Handler { return New(skills.NewRegistry(mockClient{})) }
+func newH() *Handler { return New(skills.NewRegistry(mockClient{}, confirm.NewMemory())) }
 
 func call(h http.Handler, body string) *httptest.ResponseRecorder {
 	w := httptest.NewRecorder()

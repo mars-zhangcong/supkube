@@ -10,6 +10,7 @@ import (
 	"os"
 
 	"github.com/supkube/mcp-server/internal/auth"
+	"github.com/supkube/mcp-server/internal/confirm"
 	"github.com/supkube/mcp-server/internal/mcpproto"
 	"github.com/supkube/mcp-server/internal/skills"
 	"github.com/supkube/mcp-server/internal/supkubeclient"
@@ -25,7 +26,9 @@ func main() {
 		log.Println("WARN: MCP_BEARER_TOKEN unset — /mcp will reject all requests (fail-closed)")
 	}
 
-	reg := skills.NewRegistry(supkubeclient.NewHTTP(backend, backendToken))
+	// PoC uses the in-memory confirm store; production swaps in the CR-backed
+	// store for cross-replica HitL (ADR-057) — same Store interface.
+	reg := skills.NewRegistry(supkubeclient.NewHTTP(backend, backendToken), confirm.NewMemory())
 	h := mcpproto.New(reg)
 
 	mux := http.NewServeMux()

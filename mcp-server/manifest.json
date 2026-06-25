@@ -6,17 +6,21 @@
   "endpoint": "/mcp",
   "auth": "Bearer (Authorization header)",
   "skills": [
-    {
-      "name": "list_k8s_workloads",
-      "write": false,
-      "description": "List Kubernetes namespaces with workload counts and backup protection status."
-    }
+    { "name": "list_k8s_workloads", "write": false, "description": "List namespaces with workload counts and backup protection status." },
+    { "name": "get_restore_status", "write": false, "description": "Restore status summary (phase/errors). Authoritative status for reliable waiting." },
+    { "name": "trigger_restore", "write": true, "hitl": true, "description": "Trigger a Velero restore. Dry-run + confirm_id first; execute on confirm (ADR-057)." },
+    { "name": "trigger_backup", "write": true, "hitl": true, "description": "Trigger an immediate Velero backup. Dry-run + confirm_id first; execute on confirm (ADR-057)." }
   ],
   "deferred": [
     { "name": "get_backup_advice", "reason": "PRR C1 — depends on PRD-003 Advisor Engine" },
-    { "name": "create_backup_policy", "write": true, "reason": "PRR C3 — needs HitL-confirm-storage ADR first" },
-    { "name": "trigger_backup_execution", "write": true, "reason": "PRR C3 — needs HitL-confirm-storage ADR first" },
-    { "name": "get_backup_status", "reason": "Phase 2" }
+    { "name": "create_backup_policy", "write": true, "reason": "next: same HitL path as trigger_*" },
+    { "name": "get_backup_status", "reason": "next: read skill like get_restore_status" }
   ],
-  "notes": "Phase-1 PoC per PRD-004 + independent PRR conditions C1/C3/C5. list_k8s_workloads currently returns per-namespace workload counts; full per-workload enumeration needs a dedicated supkube-backend endpoint (flagged)."
+  "hitl": {
+    "spec": "ADR-057",
+    "flow": "write skill first call returns requires_confirmation + dry_run + confirm_id; second call with confirm_id executes using the SNAPSHOT inputs (2nd-call inputs ignored), one-shot, 5-min TTL",
+    "store": "PoC = in-memory; production = K8s CR (cross-replica), per ADR-057",
+    "unifies": "MCP write-skill HitL == PRD-013 four-eyes == orchestration high-risk approval (one mechanism)"
+  },
+  "notes": "Phase-1 + #1/#3 from SupInsight's review. list_k8s_workloads returns per-namespace counts (full per-workload needs a backend endpoint)."
 }
