@@ -80,6 +80,7 @@ func RegisterPermissions(entries ...PermEntry) {
 var permissionTable = []permEntry{
 	// ─── Read-only — viewer + above ─────────────────────────────────
 	{"GET", "/api/v1/status", RoleViewer},
+	{"GET", "/api/v1/events", RoleViewer}, // SSE event stream (agents subscribe); MUST be here or RBAC 403s it (F1)
 	{"GET", "/api/v1/dashboard/summary", RoleViewer},
 	{"GET", "/api/v1/applications", RoleViewer},
 	{"GET", "/api/v1/applications/:namespace/details", RoleViewer},
