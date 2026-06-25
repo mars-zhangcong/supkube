@@ -18,6 +18,7 @@ import (
 
 	"github.com/supkube/supkube-backend/internal/audit"
 	"github.com/supkube/supkube-backend/internal/auth"
+	"github.com/supkube/supkube-backend/internal/events"
 	"github.com/supkube/supkube-backend/internal/gc"
 	"github.com/supkube/supkube-backend/internal/k8s"
 	"github.com/supkube/supkube-backend/internal/velerons"
@@ -329,6 +330,7 @@ func CreateBackup(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	events.Publish(events.Event{Type: events.TypeBackupCreated, Subject: backup.Name})
 	c.JSON(http.StatusCreated, backup)
 }
 
@@ -835,6 +837,7 @@ func CreateRestore(c *gin.Context) {
 		// Echo the same CR back in the response with the target-cluster
 		// annotation visible so the SPA can pivot the user to the target
 		// cluster's Activity page.
+		events.Publish(events.Event{Type: events.TypeRestoreCreated, Subject: restore.Name})
 		c.JSON(http.StatusCreated, restore)
 		return
 	}
@@ -844,6 +847,7 @@ func CreateRestore(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	events.Publish(events.Event{Type: events.TypeRestoreCreated, Subject: restore.Name})
 	c.JSON(http.StatusCreated, restore)
 }
 

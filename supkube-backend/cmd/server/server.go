@@ -332,6 +332,12 @@ func Run() error {
 		api.GET("/audit-logs", auth.ListAuditLogs)
 
 		api.GET("/status", v1.GetStatus)
+		// PRD-004 Supkube MCP Server ("Supkube Skills"): Streamable-HTTP
+		// JSON-RPC endpoint so external AI agents drive Supkube as MCP tools.
+		api.POST("/mcp", v1.MCPHandler)
+		// Agent-friendly "subscribe" half: SSE event stream (in-process bus,
+		// no broker) so agents react to Supkube events without polling.
+		api.GET("/events", v1.EventsHandler)
 		api.GET("/namespaces", v1.ListNamespaces)
 		api.POST("/namespaces", v1.CreateNamespace)
 		api.GET("/dashboard/summary", v1.GetDashboardSummary)
