@@ -1,0 +1,15 @@
+# 跨文件一致性闸 — 多文件 PR 合并前必过(挡 #52 型"绿着却断")
+name: cross-file-lint
+on:
+  pull_request:
+    branches: [ main ]
+jobs:
+  cross-file-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }          # 取全历史，供 --base diff 做 gutting 检查
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: cross-file consistency gate
+        run: node hack/cross-file-lint.mjs --base "origin/${{ github.base_ref }}"
