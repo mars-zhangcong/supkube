@@ -35,5 +35,12 @@ func RegisterAIRoutes(r *gin.RouterGroup) {
 		// explainer ships in a later PRD-011 unit; current handler writes
 		// one stub frame so SPA can wire EventSource code today.
 		ai.GET("/explain/:taskId", ExplainStubHandler)
+
+		// PRD-011 §4.6: /ai/scores — collector-driven cluster-wide DR scoring
+		// (Task #115 Phase A, dr_score.go). Walks every app namespace, builds
+		// evaluator.AppContext from real K8s + Velero state, scores it via the
+		// deterministic rule engine, and attaches actionable backup advice.
+		// Read-only (viewer can read; same level as /score).
+		ai.GET("/scores", ListDRScores)
 	}
 }
