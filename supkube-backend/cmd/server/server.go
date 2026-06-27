@@ -378,6 +378,9 @@ func Run() error {
 		api.GET("/dashboard/summary", v1.GetDashboardSummary)
 		// PRD-029/N2 (Kopia 仓库服务): 列 Velero BackupRepository CR(去重可见的第一扇窗)。
 		api.GET("/backup-repositories", v1.ListBackupRepositories)
+		// DR posture export — canonical backup/DR snapshot for SupInsight ingest
+		// (Velero + DRFlowRunner → engine-agnostic shape). See dr_posture.go.
+		api.GET("/dr-posture", v1.GetDRPosture)
 		api.GET("/applications", v1.ListApplications)
 		api.GET("/applications/:namespace/details", v1.GetApplicationDetails)
 		api.GET("/applications/:namespace/storage-capability", v1.GetNamespaceStorageCapability)
