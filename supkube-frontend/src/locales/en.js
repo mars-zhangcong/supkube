@@ -15,6 +15,7 @@ export default {
     //   Audit Log + Log Viewer) replaces 3 separate entries; Storage +
     //   Snapshot Locations move into Settings → Cluster Management.
     dashboard: 'Dashboard',
+    drScores: 'DR Health',
     observability: 'Observability',           // v0.9.1.2 hub (was 'Backup Advisor')
     applications: 'Applications',
     restorePoints: 'App Restore',             // v0.9.1.2 renamed from 'Restore Points'
@@ -119,6 +120,46 @@ export default {
     NonCompliant: 'Non-Compliant',
     InProgress: 'Backup In Progress',
     Empty: 'Empty'
+  },
+  drScores: {
+    title: 'DR Health Scores',
+    desc: 'Per-application backup posture — health score + actionable backup advice across the cluster.',
+    avgScore: 'Avg Health',
+    ofScored: '{n} of {total} scored',
+    atRisk: 'At Risk',
+    atRiskSub: 'fragile / critical / unbacked',
+    unbacked: 'Unbacked Data',
+    unbackedSub: 'stateful but no backup',
+    drills: 'Drills Passed',
+    drillsSub: 'recovery drill results',
+    application: 'Application',
+    healthScore: 'Health Score',
+    data: 'Data',
+    advice: 'Advice',
+    ok: 'OK',
+    unprotected: 'No Backup',
+    protected: 'Protected',
+    backupNow: 'Back up now',
+    recommendations: 'Recommendations',
+    noRecs: 'No issues — healthy.',
+    dimensions: 'Score Breakdown',
+    footnote: 'Rules {v} · scored at {at}',
+    status: {
+      noPolicy: 'No Policy',
+      neverRan: 'Never Backed Up'
+    },
+    level: {
+      high_resilience: 'High Resilience',
+      compliant_low_risk: 'Compliant',
+      fragile: 'Fragile',
+      critical: 'Critical'
+    },
+    dim: {
+      coverage: 'Coverage',
+      resilience: 'Resilience',
+      security: 'Security',
+      reliability: 'Reliability'
+    }
   },
   dashboard: {
     nodes: 'Nodes',
