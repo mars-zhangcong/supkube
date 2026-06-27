@@ -11,6 +11,7 @@ export default {
     //   存储位置 + 快照位置 移入 系统设置 → 集群管理 → 存储类管理。
     dashboard: '系统概览',
     drScores: 'DR 健康度',
+    assistant: '助手',
     observability: '可观测性',             // v0.9.1.2 hub（前身: 备份顾问）
     applications: '应用列表',
     restorePoints: '应用还原',             // v0.9.1.2 改名（前身: 数据还原）
@@ -114,6 +115,19 @@ export default {
     NonCompliant: '不合规',
     InProgress: '备份中',
     Empty: '空'
+  },
+  copilot: {
+    title: 'SupKube Copilot',
+    welcome: '你好 — 问我集群的容灾态势吧。我能看到备份健康评分、哪些应用有风险、以及怎么修复。',
+    thinking: '思考中…',
+    placeholder: '问问备份、DR 评分、改进建议…',
+    chip1: '哪些应用风险最高？',
+    chip2: '这个应用为什么没备份？',
+    chip3: '怎么提升整体 DR 评分？',
+    errDisabled: 'AI 未启用：后端需 SUPKUBE_ALLOW_AI=1 + Azure OpenAI 配置。',
+    errTimeout: '模型调用失败或超时，请重试。',
+    errAuth: '请先登录。',
+    errGeneric: '调用失败：{e}'
   },
   drScores: {
     title: 'DR 健康评分',

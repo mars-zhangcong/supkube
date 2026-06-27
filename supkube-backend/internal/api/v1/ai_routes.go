@@ -42,5 +42,11 @@ func RegisterAIRoutes(r *gin.RouterGroup) {
 		// deterministic rule engine, and attaches actionable backup advice.
 		// Read-only (viewer can read; same level as /score).
 		ai.GET("/scores", ListDRScores)
+
+		// M3: /ai/chat — Copilot 对话（移植自 SupInsight）。上下文感知（前端把
+		// 当前页 + DR 评分塞进 context）+ Azure OpenAI/claude provider。LLM 仅在
+		// 此 + ai_explain 出现；评分路径永不调 LLM（PRD-011 铁律）。
+		// Feature gate: SUPKUBE_ALLOW_AI=1（见 ai_core.go）。
+		ai.POST("/chat", ChatHandler)
 	}
 }
