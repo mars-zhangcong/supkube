@@ -153,6 +153,19 @@ frontend:
     limits:
       cpu: 200m
       memory: 128Mi
+
+# M3/M4 Copilot — AI（Azure OpenAI，pod 内可用）。默认关；启用需先建 Azure
+# OpenAI Secret（key: AZURE_OPENAI_KEY）再 --set ai.enabled=true。密钥走
+# secretKeyRef，永不进 git/values。endpoint/deployment 非密，可写 values。
+ai:
+  enabled: false
+  provider: azure
+  azure:
+    endpoint: ""        # https://<resource>.openai.azure.com
+    deployment: ""      # e.g. gpt-5 / gpt-4o-mini
+    apiVersion: "2024-06-01"
+    keySecret: ""       # k8s Secret 名（含 key AZURE_OPENAI_KEY）
+
 # Service exposure.
 #
 # IMPORTANT for public cloud (AKS / GKE / EKS) — Mars demo 2026-05-26
