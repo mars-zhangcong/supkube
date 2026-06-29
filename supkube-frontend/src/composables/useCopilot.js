@@ -23,8 +23,10 @@ export function useCopilot() {
       state.contextLabel = label || ''
       state.context = ctx || null
     },
-    addMessage(role, text) {
-      state.messages.push({ id: ++_id, role, text })
+    addMessage(role, text, action = null) {
+      // action: optional pendingAction { tool, namespace, summary } → renders a
+      // HitL confirm card under the message.
+      state.messages.push({ id: ++_id, role, text, action, acting: false })
     },
     clear() { state.messages = [] }
   }

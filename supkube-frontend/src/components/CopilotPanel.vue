@@ -32,6 +32,14 @@
         <div v-for="m in state.messages" :key="m.id" :class="['cop-msg', m.role]">
           <div v-if="m.role === 'ai'" class="cop-who">Copilot</div>
           <div :class="['cop-bubble', m.role === 'you' ? 'cop-you' : 'cop-ai']">{{ m.text }}</div>
+          <!-- M4 HitL: LLM-proposed action → confirm card -->
+          <div v-if="m.action" class="cop-action">
+            <div class="cop-action-head"><el-icon><Lightning /></el-icon> {{ m.action.summary }}</div>
+            <div class="cop-action-btns">
+              <el-button size="small" type="primary" :loading="m.acting" @click="confirmAction(m)">{{ t('copilot.confirm') }}</el-button>
+              <el-button size="small" @click="cancelAction(m)">{{ t('copilot.cancel') }}</el-button>
+            </div>
+          </div>
         </div>
         <div v-if="loading" class="cop-thinking">{{ t('copilot.thinking') }}</div>
       </div>
@@ -69,9 +77,9 @@
 <script setup>
 import { ref, computed, nextTick, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { MagicStick, Close, Top, DataAnalysis } from '@element-plus/icons-vue'
+import { MagicStick, Close, Top, DataAnalysis, Lightning } from '@element-plus/icons-vue'
 import { useCopilot } from '../composables/useCopilot'
-import { askCopilot, getDRScores } from '../api/velero'
+import { askCopilot, getDRScores, createManualSnapshot } from '../api/velero'
 
 const { t } = useI18n()
 const { state, close, setContext, addMessage } = useCopilot()
@@ -127,7 +135,7 @@ async function send(preset) {
   try {
     const ctx = state.context ? JSON.stringify(state.context) : ''
     const res = await askCopilot({ prompt: q, context: ctx, model: model.value })
-    addMessage('ai', res.answer || '(empty)')
+    addMessage('ai', res.answer || '(empty)', res.pendingAction || null)
   } catch (e) {
     const code = e?.response?.status
     let msg = t('copilot.errGeneric', { e: e?.message || code || 'unknown' })
@@ -139,6 +147,29 @@ async function send(preset) {
     loading.value = false
     await scrollDown()
   }
+}
+
+// M4 HitL: user confirmed the LLM-proposed action → call the real write API.
+async function confirmAction(m) {
+  if (!m.action || m.acting) return
+  const a = m.action
+  m.acting = true
+  try {
+    if (a.tool === 'create_backup') {
+      const res = await createManualSnapshot(a.namespace, { comment: 'via Copilot' })
+      m.action = null
+      addMessage('ai', t('copilot.actionDone', { ns: a.namespace, name: res?.data?.backupName || '' }))
+    }
+  } catch (e) {
+    addMessage('ai', t('copilot.actionFail', { e: e?.response?.data?.error || e?.message || 'error' }))
+  } finally {
+    m.acting = false
+    await scrollDown()
+  }
+}
+function cancelAction(m) {
+  m.action = null
+  addMessage('ai', t('copilot.actionCancelled'))
 }
 </script>
 
@@ -185,4 +216,7 @@ async function send(preset) {
 .cop-inputbox { border: 1px solid var(--el-border-color); border-radius: 10px; padding: 8px; }
 .cop-inputbox :deep(.el-textarea__inner) { box-shadow: none; padding: 2px 4px; }
 .cop-controls { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; }
+.cop-action { margin-top: 8px; padding: 10px 12px; border: 1px solid var(--el-color-warning-light-5); background: var(--el-color-warning-light-9); border-radius: 10px; }
+.cop-action-head { font-size: 13px; font-weight: 600; color: var(--el-text-color-primary); display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+.cop-action-btns { display: flex; gap: 8px; }
 </style>

@@ -45,7 +45,9 @@ const aiSystemPrompt = "You are SupKube Copilot, the AI assistant inside SupKube
 	"backup recommendations. The context may include DR health scores (per-namespace " +
 	"totalScore/level/status/recommendations from /ai/scores) and cluster/backup state. " +
 	"Answer concisely using ONLY the provided context; if it lacks the answer, say so briefly. " +
-	"Plain text, no markdown headers. 中文提问就用中文回答。"
+	"Plain text, no markdown headers. 中文提问就用中文回答。 " +
+	"When the user explicitly asks to back up / snapshot / protect a specific namespace, " +
+	"call the create_backup tool (do not just describe how) — the user will confirm before it runs."
 
 // callAzureOpenAI hits the Azure OpenAI chat-completions API (LHF cloud path).
 func callAzureOpenAI(ctx context.Context, system, user string) (string, error) {

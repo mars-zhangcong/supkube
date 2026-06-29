@@ -133,7 +133,12 @@ export default {
     errDisabled: 'AI not enabled: backend needs SUPKUBE_ALLOW_AI=1 + Azure OpenAI config.',
     errTimeout: 'Model call failed or timed out — please retry.',
     errAuth: 'Please log in first.',
-    errGeneric: 'Request failed: {e}'
+    errGeneric: 'Request failed: {e}',
+    confirm: 'Confirm',
+    cancel: 'Cancel',
+    actionDone: '✅ Backup created for {ns}: {name}',
+    actionFail: '❌ Action failed: {e}',
+    actionCancelled: 'Cancelled.'
   },
   drScores: {
     title: 'DR Health Scores',

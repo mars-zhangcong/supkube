@@ -127,7 +127,12 @@ export default {
     errDisabled: 'AI 未启用：后端需 SUPKUBE_ALLOW_AI=1 + Azure OpenAI 配置。',
     errTimeout: '模型调用失败或超时，请重试。',
     errAuth: '请先登录。',
-    errGeneric: '调用失败：{e}'
+    errGeneric: '调用失败：{e}',
+    confirm: '确认执行',
+    cancel: '取消',
+    actionDone: '✅ 已为 {ns} 创建备份：{name}',
+    actionFail: '❌ 执行失败：{e}',
+    actionCancelled: '已取消。'
   },
   drScores: {
     title: 'DR 健康评分',
