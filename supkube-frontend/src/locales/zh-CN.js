@@ -877,6 +877,8 @@ export default {
   topology: {
     title: '灾备拓扑',
     subtitle: '一眼看清每个命名空间备份到哪里，以及集群整体的保护等级。',
+    demo: '演示',
+    demoTip: '切换示例多集群灾备拓扑（演示数据，不影响真实备份）',
     clusters: '集群',
     policies: '策略',
     policiesShort: '策略',

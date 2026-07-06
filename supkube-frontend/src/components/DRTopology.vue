@@ -40,6 +40,13 @@
           <h3 class="sk-h2 dr-title">{{ t('topology.title') }}</h3>
           <p v-if="expanded" class="sk-caption dr-subtitle">{{ t('topology.subtitle') }}</p>
         </div>
+        <button
+          class="dr-demo-toggle"
+          :class="{ 'is-on': demoMode }"
+          type="button"
+          @click.stop="toggleDemo"
+          :title="t('topology.demoTip')"
+        >{{ t('topology.demo') }}</button>
       </div>
 
       <div class="dr-header-score" @click.stop>
@@ -326,16 +333,94 @@ const summary = ref({ clusterCount: 0, policyCount: 0, rpCount: 0 })
 const posture = ref({ layer5Status: 'muted', lastDrillAt: null, nextDrillAt: null })
 const showOrphans = ref(false)
 
+// ──────────────────────────────────────────────────────────────────
+// Demo mode (customer showcase). A self-contained, richer multi-cluster
+// topology so the capability can be shown without a complex live estate.
+// Opt-in toggle, persisted; purely client-side — never touches the API or
+// real backups. buildDemoTopology() re-derives timestamps relative to now
+// so "X ago" labels stay fresh.
+// ──────────────────────────────────────────────────────────────────
+const DEMO_KEY = 'supkube.drTopology.demo'
+const demoMode = ref(localStorage.getItem(DEMO_KEY) === 'true')
+
+function buildDemoTopology() {
+  const now = Date.now()
+  const ago = (min) => new Date(now - min * 60000).toISOString()
+  const inDays = (d) => new Date(now + d * 86400000).toISOString()
+  const GiB = 1024 ** 3
+  const f = (fromCluster, fromNamespace, toBSL, type, policyNames, backupCount) =>
+    ({ fromCluster, fromNamespace, toBSL, type, policyNames, backupCount })
+  return {
+    clusters: [
+      { id: 'prod-beijing', name: 'prod-beijing', type: 'primary', isCurrent: true, k8sVersion: 'v1.29.4', nodeCount: 6, policyCount: 7,
+        namespaceNames: ['payments', 'orders', 'inventory', 'user-auth', 'analytics', 'cms', 'search-es'] },
+      { id: 'dr-shanghai', name: 'dr-shanghai', type: 'secondary', isCurrent: false, k8sVersion: 'v1.29.4', nodeCount: 4, policyCount: 5,
+        namespaceNames: ['payments', 'orders', 'user-auth', 'message-queue', 'analytics'] },
+      { id: 'edge-singapore', name: 'edge-singapore', type: 'secondary', isCurrent: false, k8sVersion: 'v1.28.9', nodeCount: 3, policyCount: 3,
+        namespaceNames: ['cdn-cache', 'iot-ingest', 'user-auth'] },
+    ],
+    bsls: [
+      { name: 'local-snapshots', kind: 'local', role: 'snapshot', provider: 'CSI Snapshot', phase: 'Available', rpCount: 128, backedupNs: 7, lastBackupAt: ago(12) },
+      { name: 'minio-onprem', kind: 'local', provider: 'MinIO', bucket: 'supkube-backups', phase: 'Available', rpCount: 96, backedupNs: 6,
+        capacityBytes: 2048 * GiB, usedBytes: 690 * GiB, lastBackupAt: ago(23) },
+      { name: 's3-beijing', kind: 'cloud', provider: 'AWS S3', bucket: 'sk-cn-north-backups', phase: 'Available', rpCount: 84, backedupNs: 5, lastBackupAt: ago(34) },
+      { name: 's3-singapore-immutable', kind: 'cloud', provider: 'AWS S3', bucket: 'sk-ap-immutable', phase: 'Available', rpCount: 52, backedupNs: 4,
+        objectLockEnabled: true, objectLockMode: 'COMPLIANCE', lastBackupAt: ago(58) },
+      { name: 'azure-blob-dr', kind: 'cloud', role: 'copy', provider: 'Azure Blob', bucket: 'skdrblob', phase: 'Available', rpCount: 40, backedupNs: 3, lastBackupAt: ago(70) },
+    ],
+    flows: [
+      f('prod-beijing', 'payments', 'local-snapshots', 'snapshot', ['payments-6h'], 42),
+      f('prod-beijing', 'payments', 'minio-onprem', 'export', ['payments-6h'], 38),
+      f('prod-beijing', 'payments', 's3-singapore-immutable', 'copy', ['payments-offsite'], 30),
+      f('prod-beijing', 'orders', 'local-snapshots', 'snapshot', ['orders-daily'], 28),
+      f('prod-beijing', 'orders', 'minio-onprem', 'export', ['orders-daily'], 26),
+      f('prod-beijing', 'orders', 's3-beijing', 'copy', ['orders-offsite'], 22),
+      f('prod-beijing', 'inventory', 'minio-onprem', 'export', ['inventory-daily'], 18),
+      f('prod-beijing', 'user-auth', 'local-snapshots', 'snapshot', ['auth-critical'], 20),
+      f('prod-beijing', 'user-auth', 's3-singapore-immutable', 'copy', ['auth-offsite'], 16),
+      f('prod-beijing', 'analytics', 's3-beijing', 'export', ['analytics-weekly'], 12),
+      f('prod-beijing', 'cms', 'minio-onprem', 'export', ['cms-daily'], 14),
+      f('prod-beijing', 'search-es', 'minio-onprem', 'export', ['es-daily'], 10),
+      f('dr-shanghai', 'payments', 's3-beijing', 'copy', ['payments-dr'], 18),
+      f('dr-shanghai', 'user-auth', 's3-singapore-immutable', 'copy', ['auth-dr'], 12),
+      f('dr-shanghai', 'message-queue', 'minio-onprem', 'export', ['mq-daily'], 9),
+      f('edge-singapore', 'iot-ingest', 'azure-blob-dr', 'copy', ['iot-dr'], 8),
+      f('edge-singapore', 'cdn-cache', 'azure-blob-dr', 'copy', ['cdn-dr'], 6),
+      f('dr-shanghai', 'payments', 's3-beijing', 'restore', ['payments-dr'], 3),
+    ],
+    score: { threeCopies: true, twoMedia: true, oneOffsite: true, oneImmutable: true, zeroErrors: true },
+    posture: { layer5Status: 'ok', lastDrillAt: ago(60 * 24 * 3), nextDrillAt: inDays(4) },
+    summary: { clusterCount: 3, policyCount: 15, rpCount: 400, namespaceCount: 12, localBSLCount: 2, cloudBSLCount: 3 },
+  }
+}
+
+function applyTopology(data) {
+  clusters.value = data.clusters || []
+  bsls.value = data.bsls || []
+  flows.value = data.flows || []
+  score.value = data.score || {}
+  summary.value = data.summary || {}
+  posture.value = data.posture || { layer5Status: 'muted' }
+}
+
+function toggleDemo() {
+  demoMode.value = !demoMode.value
+  try { localStorage.setItem(DEMO_KEY, String(demoMode.value)) } catch (_) {}
+  if (demoMode.value && !expanded.value) toggle() // auto-expand so the demo is visible
+  fetchTopology()
+}
+
 async function fetchTopology() {
+  // Demo mode short-circuits the network — pure client-side sample data.
+  if (demoMode.value) {
+    applyTopology(buildDemoTopology())
+    loading.value = false
+    return
+  }
   loading.value = true
   try {
     const res = await getTopology()
-    clusters.value = res.data.clusters || []
-    bsls.value = res.data.bsls || []
-    flows.value = res.data.flows || []
-    score.value = res.data.score || {}
-    summary.value = res.data.summary || {}
-    posture.value = res.data.posture || { layer5Status: 'muted' }
+    applyTopology(res.data)
   } catch (e) {
     // eslint-disable-next-line no-console
     console.warn('topology fetch failed', e?.response?.status)
@@ -653,6 +738,25 @@ defineExpose({ FLOW_TYPES, l5State, classifyBSL, normalizeFlowType })
 .dr-chevron.is-open { transform: rotate(90deg); }
 .dr-title { margin: 0; }
 .dr-subtitle { margin: 2px 0 0 0; }
+.dr-demo-toggle {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--sk-border, #d0d5dd);
+  background: var(--sk-bg-subtle, #f4f5f7);
+  color: var(--sk-text-caption);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.dr-demo-toggle:hover { border-color: var(--sk-primary, #2f6feb); color: var(--sk-primary, #2f6feb); }
+.dr-demo-toggle.is-on {
+  background: var(--sk-primary, #2f6feb);
+  border-color: var(--sk-primary, #2f6feb);
+  color: #fff;
+}
 
 .dr-header-score {
   display: flex;

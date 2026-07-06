@@ -905,6 +905,8 @@ export default {
   topology: {
     title: 'DR Topology',
     subtitle: 'Where each namespace is backed up — and how protected the cluster is overall.',
+    demo: 'Demo',
+    demoTip: 'Toggle a sample multi-cluster DR topology (demo data — does not touch live backups)',
     clusters: 'clusters',
     policies: 'policies',
     policiesShort: 'pol',
