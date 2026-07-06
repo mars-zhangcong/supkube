@@ -902,6 +902,9 @@ defineExpose({ FLOW_TYPES, l5State, classifyBSL, normalizeFlowType })
 .dr-legend-title { font-weight: 600; color: var(--sk-text, #333); margin-right: 2px; }
 .dr-legend-item { display: inline-flex; align-items: center; gap: 6px; }
 .dr-legend-swatch { flex-shrink: 0; }
+/* Legend swatches are plain line segments — no arrowhead (the svg-arrow-*
+   classes add a marker-end; strip it here so only the coloured line shows). */
+.dr-legend-swatch line { marker-end: none; }
 .dr-legend-badge {
   display: inline-flex;
   align-items: center;
