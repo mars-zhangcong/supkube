@@ -35,8 +35,9 @@ export default {
     advisor: 'Backup Advisor'                 // moved to Observability → Advisor tab
   },
   observability: {
-    subtitle: 'See what\'s happening across your backup estate — activity, advisor recommendations, audit trail, and logs in one place.',
+    subtitle: 'See your backup posture at a glance — DR health scores, activity, advisor recommendations, audit trail, and logs in one place.',
     tabs: {
+      dr: 'DR Health',
       activity: 'Activity',
       advisor: 'Backup Advisor',
       audit: 'Audit Log',

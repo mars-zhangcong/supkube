@@ -29,8 +29,9 @@ export default {
     advisor: '备份顾问'                     // 已移入 可观测性 → 备份顾问 tab
   },
   observability: {
-    subtitle: '一站看清备份运行情况——活动、顾问建议、审计轨迹、日志全在这里。',
+    subtitle: '一站看清备份态势——DR 健康评分、活动、顾问建议、审计轨迹、日志全在这里。',
     tabs: {
+      dr: 'DR 健康评分',
       activity: '活动查看',
       advisor: '备份顾问',
       audit: '审计日志',

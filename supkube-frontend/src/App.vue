@@ -99,10 +99,6 @@
             <el-icon><Monitor /></el-icon>
             <template #title>{{ t('nav.dashboard') }}</template>
           </el-menu-item>
-          <el-menu-item index="/dr-scores">
-            <el-icon><Odometer /></el-icon>
-            <template #title>{{ t('nav.drScores') }}</template>
-          </el-menu-item>
           <el-menu-item index="/observability">
             <el-icon><MagicStick /></el-icon>
             <template #title>{{ t('nav.observability') }}</template>
@@ -230,7 +226,7 @@ import { useI18n } from 'vue-i18n'
 import { useRouter, useRoute } from 'vue-router'
 import { SUPPORTED_LOCALES, setLocale } from './i18n'
 import {
-  Monitor, Grid, FolderOpened, RefreshRight, Clock, Coin, Setting, Odometer,
+  Monitor, Grid, FolderOpened, RefreshRight, Clock, Coin, Setting,
   Camera, MagicStick, ArrowLeft, ArrowRight, ArrowDown, DataLine,
   Files, Tools, SwitchButton, DocumentCopy, Connection, Plus
 } from '@element-plus/icons-vue'

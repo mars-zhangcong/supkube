@@ -40,6 +40,15 @@
     </div>
 
     <el-tabs v-model="activeTab" class="obs-tabs">
+      <el-tab-pane name="dr">
+        <template #label>
+          <span class="obs-tab-label"><el-icon><Odometer /></el-icon> {{ t('observability.tabs.dr') }}</span>
+        </template>
+        <!-- DR 健康评分 folded in from the retired standalone /dr-scores page.
+             Same DRScores.vue view, embedded as a tab pane (no duplicate code). -->
+        <DRScoresView v-if="activeTab === 'dr'" />
+      </el-tab-pane>
+
       <el-tab-pane name="activity">
         <template #label>
           <span class="obs-tab-label"><el-icon><DataLine /></el-icon> {{ t('observability.tabs.activity') }}</span>
@@ -82,11 +91,12 @@
 import { ref, onMounted, defineAsyncComponent } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
-import { DataLine, MagicStick, Document, Monitor } from '@element-plus/icons-vue'
+import { DataLine, MagicStick, Document, Monitor, Odometer } from '@element-plus/icons-vue'
 
 // Lazy-load the existing top-level views as tab panes. Keeps the bundle
 // chunk-split — opening Observability doesn't drag in Advisor JS until
 // the tab is actually clicked.
+const DRScoresView      = defineAsyncComponent(() => import('./DRScores.vue'))
 const ActivityView      = defineAsyncComponent(() => import('./Activity.vue'))
 const BackupAdvisorView = defineAsyncComponent(() => import('./BackupAdvisor.vue'))
 const AuditLogPanel     = defineAsyncComponent(() => import('../components/AuditLogPanel.vue'))
@@ -95,13 +105,15 @@ const LogViewer         = defineAsyncComponent(() => import('../components/LogVi
 const { t } = useI18n()
 const route = useRoute()
 
-// Default tab = Activity (most-used). Old /activity and /advisor routes
-// redirect here with ?tab= so bookmarks keep working.
-const activeTab = ref('activity')
+// Default tab = DR 健康评分 (the flagship posture view, folded in from the
+// retired standalone /dr-scores nav entry — opening 可观测性 lands on it,
+// preserving the old one-click-to-DR-health behavior). Old /activity,
+// /advisor, /dr-scores routes redirect here with ?tab= so bookmarks keep working.
+const activeTab = ref('dr')
 
 onMounted(() => {
   const tabParam = route.query.tab
-  if (typeof tabParam === 'string' && ['activity', 'advisor', 'audit', 'logs'].includes(tabParam)) {
+  if (typeof tabParam === 'string' && ['dr', 'activity', 'advisor', 'audit', 'logs'].includes(tabParam)) {
     activeTab.value = tabParam
   }
 })
