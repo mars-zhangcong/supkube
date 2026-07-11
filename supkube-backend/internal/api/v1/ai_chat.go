@@ -1,0 +1,121 @@
+package v1
+
+// ai_chat.go — M3 Copilot 对话端点。POST /api/v1/ai/chat（移植自 SupInsight handleAI）。
+//
+// 上下文感知：前端把"当前页 + DR 评分（/ai/scores 结果）"塞进 context 字段，
+// 后端拼进 prompt 让 LLM 据此回答（"为什么 kb-cloud 危险？怎么修？"）。
+// KB4AI RAG 暂未接（M3.1 再加 internal/kb）。LLM 调用见 ai_core.go。
+//
+// 鉴权：走 /api/v1 组的鉴权（需登录）+ feature gate SUPKUBE_ALLOW_AI=1。
+
+import (
+	"context"
+	"log"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/gin-gonic/gin"
+)
+
+type aiChatRequest struct {
+	Prompt  string `json:"prompt"`
+	Context string `json:"context"`
+	Model   string `json:"model"`
+	System  string `json:"system"`
+	UseKB   bool   `json:"useKB"`   // 预留：M3.1 KB RAG
+	KBQuery string `json:"kbQuery"` // 预留
+	KBTopK  int    `json:"kbTopK"`  // 预留
+}
+
+// aiPendingAction — a write the LLM proposed via function calling, NOT yet
+// executed. Frontend renders a confirm card; on confirm it calls the real
+// write API (HitL: LLM proposes, human confirms, then it acts).
+type aiPendingAction struct {
+	Tool      string `json:"tool"`      // e.g. create_backup
+	Namespace string `json:"namespace"` // target ns
+	Reason    string `json:"reason,omitempty"`
+	Summary   string `json:"summary"` // human-readable, shown on the confirm card
+}
+
+type aiChatResponse struct {
+	Answer        string           `json:"answer"`
+	Provider      string           `json:"provider"`
+	KBUsed        bool             `json:"kbUsed"`
+	PendingAction *aiPendingAction `json:"pendingAction,omitempty"`
+}
+
+// ChatHandler implements POST /api/v1/ai/chat.
+func ChatHandler(c *gin.Context) {
+	if !aiEnabled() {
+		c.JSON(http.StatusForbidden, gin.H{"error": "AI disabled (set SUPKUBE_ALLOW_AI=1)"})
+		return
+	}
+	var in aiChatRequest
+	if err := c.ShouldBindJSON(&in); err != nil || strings.TrimSpace(in.Prompt) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "empty or invalid prompt"})
+		return
+	}
+
+	sys := in.System
+	if sys == "" {
+		sys = aiSystemPrompt
+	}
+	ctxv := in.Context
+	if ctxv == "" {
+		ctxv = "(none)"
+	}
+	// KB4AI RAG 暂未接（M3.1）；UseKB/KBQuery/KBTopK 字段预留，当前忽略。
+	kbUsed := false
+	if len(ctxv) > 9000 {
+		ctxv = ctxv[:9000] + "…(truncated)"
+	}
+	userMsg := "--- CONTEXT ---\n" + ctxv + "\n\n--- USER ---\n" + in.Prompt
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 90*time.Second)
+	defer cancel()
+
+	provider := aiProvider()
+	var answer string
+	var pending *aiPendingAction
+	var err error
+	switch provider {
+	case "azure":
+		// M4: function calling — LLM may propose a write (create_backup). We do
+		// NOT execute it; we hand it back as pendingAction for the user to confirm.
+		var calls []aiToolCall
+		answer, calls, err = callAzureOpenAITools(ctx, sys, userMsg, copilotTools)
+		if err == nil {
+			for _, tc := range calls {
+				if tc.Name != "create_backup" {
+					continue
+				}
+				ns, _ := tc.Args["namespace"].(string)
+				if ns == "" {
+					continue
+				}
+				reason, _ := tc.Args["reason"].(string)
+				pending = &aiPendingAction{
+					Tool: "create_backup", Namespace: ns, Reason: reason,
+					Summary: "为 " + ns + " 创建一次性备份（CSI 快照）",
+				}
+				if strings.TrimSpace(answer) == "" {
+					answer = "我可以为 " + ns + " 创建一次性备份，请确认后执行。"
+				}
+				break
+			}
+		}
+	default:
+		answer, err = callClaudeCLI(ctx, sys+"\n\n"+userMsg, in.Model)
+	}
+	if err != nil {
+		msg := "AI call failed"
+		if ctx.Err() == context.DeadlineExceeded {
+			msg = "AI call timed out"
+		}
+		log.Printf("[ai] provider=%s %s: %v", provider, msg, err)
+		c.JSON(http.StatusBadGateway, gin.H{"error": msg})
+		return
+	}
+	c.JSON(http.StatusOK, aiChatResponse{Answer: answer, Provider: provider, KBUsed: kbUsed, PendingAction: pending})
+}

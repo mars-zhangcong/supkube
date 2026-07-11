@@ -118,6 +118,27 @@ spec:
             - name: AUTH_HTPASSWD_PATH
               value: /etc/supkube/htpasswd
             {{- end }}
+            # M3/M4 Copilot — Azure OpenAI (pod 内). gated by ai.enabled.
+            # Key via secretKeyRef (never in git); endpoint/deployment plain env.
+            {{- if .Values.ai.enabled }}
+            - name: SUPKUBE_ALLOW_AI
+              value: "1"
+            - name: AI_PROVIDER
+              value: {{ .Values.ai.provider | quote }}
+            - name: AZURE_OPENAI_ENDPOINT
+              value: {{ .Values.ai.azure.endpoint | quote }}
+            - name: AZURE_OPENAI_DEPLOYMENT
+              value: {{ .Values.ai.azure.deployment | quote }}
+            - name: AZURE_OPENAI_API_VERSION
+              value: {{ .Values.ai.azure.apiVersion | quote }}
+            {{- if .Values.ai.azure.keySecret }}
+            - name: AZURE_OPENAI_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.ai.azure.keySecret }}
+                  key: AZURE_OPENAI_KEY
+            {{- end }}
+            {{- end }}
           {{- if and .Values.auth.basic .Values.auth.basic.enabled .Values.auth.basic.secretName }}
           volumeMounts:
             - name: htpasswd

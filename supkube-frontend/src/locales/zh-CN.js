@@ -10,6 +10,8 @@ export default {
     //   侧边栏 10 → 7 项；"可观测性" hub 合并 备份顾问+活动查看+审计日志+日志查看器；
     //   存储位置 + 快照位置 移入 系统设置 → 集群管理 → 存储类管理。
     dashboard: '系统概览',
+    drScores: 'DR 健康度',
+    assistant: '助手',
     observability: '可观测性',             // v0.9.1.2 hub（前身: 备份顾问）
     applications: '应用列表',
     restorePoints: '应用还原',             // v0.9.1.2 改名（前身: 数据还原）
@@ -27,8 +29,9 @@ export default {
     advisor: '备份顾问'                     // 已移入 可观测性 → 备份顾问 tab
   },
   observability: {
-    subtitle: '一站看清备份运行情况——活动、顾问建议、审计轨迹、日志全在这里。',
+    subtitle: '一站看清备份态势——DR 健康评分、活动、顾问建议、审计轨迹、日志全在这里。',
     tabs: {
+      dr: 'DR 健康评分',
       activity: '活动查看',
       advisor: '备份顾问',
       audit: '审计日志',
@@ -113,6 +116,64 @@ export default {
     NonCompliant: '不合规',
     InProgress: '备份中',
     Empty: '空'
+  },
+  copilot: {
+    title: 'SupKube Copilot',
+    welcome: '你好 — 问我集群的容灾态势吧。我能看到备份健康评分、哪些应用有风险、以及怎么修复。',
+    thinking: '思考中…',
+    placeholder: '问问备份、DR 评分、改进建议…',
+    chip1: '哪些应用风险最高？',
+    chip2: '这个应用为什么没备份？',
+    chip3: '怎么提升整体 DR 评分？',
+    errDisabled: 'AI 未启用：后端需 SUPKUBE_ALLOW_AI=1 + Azure OpenAI 配置。',
+    errTimeout: '模型调用失败或超时，请重试。',
+    errAuth: '请先登录。',
+    errGeneric: '调用失败：{e}',
+    confirm: '确认执行',
+    cancel: '取消',
+    actionDone: '✅ 已为 {ns} 创建备份：{name}',
+    actionFail: '❌ 执行失败：{e}',
+    actionCancelled: '已取消。'
+  },
+  drScores: {
+    title: 'DR 健康评分',
+    desc: '按应用的备份态势——集群范围的健康评分 + 可执行的备份建议。',
+    avgScore: '平均健康度',
+    ofScored: '{total} 个应用中 {n} 个已评分',
+    atRisk: '风险应用',
+    atRiskSub: '脆弱/危急/未备份',
+    unbacked: '有数据未备份',
+    unbackedSub: '有状态但无备份',
+    drills: '演练通过',
+    drillsSub: '恢复演练结果',
+    application: '应用',
+    healthScore: '健康评分',
+    data: '数据',
+    advice: '建议',
+    ok: '良好',
+    unprotected: '未备份',
+    protected: '已保护',
+    backupNow: '立即备份',
+    recommendations: '建议项',
+    noRecs: '无问题——健康。',
+    dimensions: '评分细分',
+    footnote: '规则 {v} · 评分于 {at}',
+    status: {
+      noPolicy: '无策略',
+      neverRan: '从未备份'
+    },
+    level: {
+      high_resilience: '高韧性',
+      compliant_low_risk: '合规低风险',
+      fragile: '脆弱',
+      critical: '危急'
+    },
+    dim: {
+      coverage: '覆盖',
+      resilience: '韧性',
+      security: '安全',
+      reliability: '可靠性'
+    }
   },
   dashboard: {
     nodes: '节点',

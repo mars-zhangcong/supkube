@@ -145,6 +145,11 @@
           <h2>{{ branding.productName }} {{ t('app.titleTail') }}</h2>
           <span class="version-badge" :title="`Build: ${BUILD}`">v{{ VERSION }} <span class="build-suffix">· {{ BUILD }}</span></span>
           <span class="header-spacer"></span>
+          <button class="assistant-btn" type="button" @click="copilot.toggle()" :title="t('copilot.title')"
+            style="display:inline-flex;align-items:center;gap:6px;background:transparent;border:none;color:inherit;cursor:pointer;font-size:14px;font-weight:500;padding:6px 10px;border-radius:6px;margin-right:4px">
+            <el-icon style="color:#22d3ee"><MagicStick /></el-icon>
+            <span>{{ t('nav.assistant') }}</span>
+          </button>
           <el-dropdown trigger="click" @command="onLocaleChange" class="locale-dropdown">
             <button class="locale-toggle" type="button" :title="t('settings.language')">
               {{ currentLocaleShort }}
@@ -211,6 +216,7 @@
         </el-main>
       </el-container>
     </el-container>
+    <CopilotPanel />
   </div>
 </template>
 
@@ -227,10 +233,13 @@ import {
 import { useAuth } from './composables/useAuth'
 import { useBranding } from './composables/useBranding'
 import { useCluster } from './composables/useCluster'
+import { useCopilot } from './composables/useCopilot'
+import CopilotPanel from './components/CopilotPanel.vue'
 import { VERSION, BUILD } from './version'
 
 const auth = useAuth()
 const cluster = useCluster()
+const copilot = useCopilot()
 const router = useRouter()
 const route = useRoute()
 

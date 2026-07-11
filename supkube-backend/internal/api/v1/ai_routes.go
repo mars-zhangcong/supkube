@@ -17,13 +17,30 @@ package v1
 // RBAC: 这两个端点目前不显式声明 permission — viewer 即可读 (score 是纯计算).
 // PRD-011 §4.6 不要求 admin/editor gate, 跟 /backup-advisor (现役) 同级.
 
-import "github.com/gin-gonic/gin"
+import (
+	"github.com/gin-gonic/gin"
+
+	"github.com/supkube/supkube-backend/internal/auth"
+)
 
 // RegisterAIRoutes registers PRD-011 §4.6 AI Backup Advisor endpoints on
 // the given gin RouterGroup (typically the /api/v1 group from server.go).
 //
 // Caller:  v1.RegisterAIRoutes(api)  // where api = r.Group("/api/v1")
 func RegisterAIRoutes(r *gin.RouterGroup) {
+	// RBAC table is fail-closed: an endpoint with no entry returns "endpoint
+	// not in RBAC table". These AI endpoints are read/advisory (no cluster
+	// mutation — /scores & /score are pure reads, /chat & /explain are LLM
+	// advisory), so viewer is the floor. Co-located with the routes so the
+	// two never drift again. (Bug: /ai/* shipped without table entries → the
+	// DR-health page 403'd for every logged-in user.)
+	auth.RegisterPermissions(
+		auth.PermEntry{Method: "POST", Pattern: "/api/v1/ai/score", MinRole: auth.RoleViewer},
+		auth.PermEntry{Method: "GET", Pattern: "/api/v1/ai/explain/:taskId", MinRole: auth.RoleViewer},
+		auth.PermEntry{Method: "GET", Pattern: "/api/v1/ai/scores", MinRole: auth.RoleViewer},
+		auth.PermEntry{Method: "POST", Pattern: "/api/v1/ai/chat", MinRole: auth.RoleViewer},
+	)
+
 	ai := r.Group("/ai")
 	{
 		// PRD-011 §4.6 H5: /ai/score — deterministic rule-engine scoring,
@@ -35,5 +52,18 @@ func RegisterAIRoutes(r *gin.RouterGroup) {
 		// explainer ships in a later PRD-011 unit; current handler writes
 		// one stub frame so SPA can wire EventSource code today.
 		ai.GET("/explain/:taskId", ExplainStubHandler)
+
+		// PRD-011 §4.6: /ai/scores — collector-driven cluster-wide DR scoring
+		// (Task #115 Phase A, dr_score.go). Walks every app namespace, builds
+		// evaluator.AppContext from real K8s + Velero state, scores it via the
+		// deterministic rule engine, and attaches actionable backup advice.
+		// Read-only (viewer can read; same level as /score).
+		ai.GET("/scores", ListDRScores)
+
+		// M3: /ai/chat — Copilot 对话（移植自 SupInsight）。上下文感知（前端把
+		// 当前页 + DR 评分塞进 context）+ Azure OpenAI/claude provider。LLM 仅在
+		// 此 + ai_explain 出现；评分路径永不调 LLM（PRD-011 铁律）。
+		// Feature gate: SUPKUBE_ALLOW_AI=1（见 ai_core.go）。
+		ai.POST("/chat", ChatHandler)
 	}
 }

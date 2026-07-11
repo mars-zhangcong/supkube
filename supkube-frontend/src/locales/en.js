@@ -15,6 +15,8 @@ export default {
     //   Audit Log + Log Viewer) replaces 3 separate entries; Storage +
     //   Snapshot Locations move into Settings → Cluster Management.
     dashboard: 'Dashboard',
+    drScores: 'DR Health',
+    assistant: 'Assistant',
     observability: 'Observability',           // v0.9.1.2 hub (was 'Backup Advisor')
     applications: 'Applications',
     restorePoints: 'App Restore',             // v0.9.1.2 renamed from 'Restore Points'
@@ -33,8 +35,9 @@ export default {
     advisor: 'Backup Advisor'                 // moved to Observability → Advisor tab
   },
   observability: {
-    subtitle: 'See what\'s happening across your backup estate — activity, advisor recommendations, audit trail, and logs in one place.',
+    subtitle: 'See your backup posture at a glance — DR health scores, activity, advisor recommendations, audit trail, and logs in one place.',
     tabs: {
+      dr: 'DR Health',
       activity: 'Activity',
       advisor: 'Backup Advisor',
       audit: 'Audit Log',
@@ -119,6 +122,64 @@ export default {
     NonCompliant: 'Non-Compliant',
     InProgress: 'Backup In Progress',
     Empty: 'Empty'
+  },
+  copilot: {
+    title: 'SupKube Copilot',
+    welcome: 'Hi — ask me about your cluster DR posture. I can see backup health scores, which apps are at risk, and how to fix them.',
+    thinking: 'Thinking…',
+    placeholder: 'Ask about backups, DR scores, recommendations…',
+    chip1: 'Which apps are most at risk?',
+    chip2: 'Why is this app unprotected?',
+    chip3: 'How do I raise the overall DR score?',
+    errDisabled: 'AI not enabled: backend needs SUPKUBE_ALLOW_AI=1 + Azure OpenAI config.',
+    errTimeout: 'Model call failed or timed out — please retry.',
+    errAuth: 'Please log in first.',
+    errGeneric: 'Request failed: {e}',
+    confirm: 'Confirm',
+    cancel: 'Cancel',
+    actionDone: '✅ Backup created for {ns}: {name}',
+    actionFail: '❌ Action failed: {e}',
+    actionCancelled: 'Cancelled.'
+  },
+  drScores: {
+    title: 'DR Health Scores',
+    desc: 'Per-application backup posture — health score + actionable backup advice across the cluster.',
+    avgScore: 'Avg Health',
+    ofScored: '{n} of {total} scored',
+    atRisk: 'At Risk',
+    atRiskSub: 'fragile / critical / unbacked',
+    unbacked: 'Unbacked Data',
+    unbackedSub: 'stateful but no backup',
+    drills: 'Drills Passed',
+    drillsSub: 'recovery drill results',
+    application: 'Application',
+    healthScore: 'Health Score',
+    data: 'Data',
+    advice: 'Advice',
+    ok: 'OK',
+    unprotected: 'No Backup',
+    protected: 'Protected',
+    backupNow: 'Back up now',
+    recommendations: 'Recommendations',
+    noRecs: 'No issues — healthy.',
+    dimensions: 'Score Breakdown',
+    footnote: 'Rules {v} · scored at {at}',
+    status: {
+      noPolicy: 'No Policy',
+      neverRan: 'Never Backed Up'
+    },
+    level: {
+      high_resilience: 'High Resilience',
+      compliant_low_risk: 'Compliant',
+      fragile: 'Fragile',
+      critical: 'Critical'
+    },
+    dim: {
+      coverage: 'Coverage',
+      resilience: 'Resilience',
+      security: 'Security',
+      reliability: 'Reliability'
+    }
   },
   dashboard: {
     nodes: 'Nodes',

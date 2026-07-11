@@ -56,6 +56,16 @@ data:
             try_files $uri $uri/ /index.html;
         }
 
+        # DR posture export is auth-EXEMPT on the backend (read-only canonical
+        # snapshot for SupInsight's in-cluster ingest, service-to-service). Block
+        # it at the PUBLIC edge so only in-cluster callers — which hit the backend
+        # Service DNS directly and never traverse this nginx — can read it.
+        # Exact-match (=) wins over the /api/ prefix below. See dr_posture.go +
+        # auth.go isAuthBypassPath.
+        location = /api/v1/dr-posture {
+            return 403;
+        }
+
         # Backend API proxy. Bearer tokens flow through here.
         location ${BASE_PATH}/api/ {
             proxy_pass http://{{ include "supkube.fullname" . }}-backend:{{ .Values.service.backend.port }}/api/;

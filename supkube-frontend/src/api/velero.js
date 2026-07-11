@@ -298,3 +298,13 @@ export const getMultiClusterSummary  = () => api.get('/multicluster/summary')
 // POST with no body at all.
 export const createManualSnapshot = (namespace, data = {}) =>
   api.post(`/applications/${namespace}/snapshot`, data)
+
+// PRD-011 §4.6 DR Health Score Dashboard — collector-driven cluster-wide
+// scoring. GET /api/v1/ai/scores → { cluster, summary, apps: [{ namespace,
+// totalScore, level, status, recommendations, ... }] }. Token +
+// X-Supkube-Cluster headers are injected by the request interceptor above.
+export const getDRScores = () => api.get('/ai/scores')
+
+// M3 Copilot 对话。POST /api/v1/ai/chat { prompt, context, model } → { answer, provider, kbUsed }.
+// Token + X-Supkube-Cluster headers 由上面的请求拦截器注入。
+export const askCopilot = (payload) => api.post('/ai/chat', payload).then((r) => r.data)

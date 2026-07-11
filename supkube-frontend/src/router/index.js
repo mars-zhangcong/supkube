@@ -12,6 +12,11 @@ const routes = [
 
   { path: '/', redirect: '/dashboard' },
   { path: '/dashboard', name: 'Dashboard', component: Dashboard },
+  // PRD-011 §4.6: DR Health Score Dashboard — per-app backup posture scoring
+  // + actionable advice, fed by GET /ai/scores (collector + evaluator).
+  // v0.9.1.x: folded into the Observability hub as its first tab (DRScores.vue
+  // is now a tab pane). Old /dr-scores bookmarks redirect to the tab.
+  { path: '/dr-scores', redirect: '/observability?tab=dr' },
   // v0.9.0.2: MCM Dashboard — the page Mode Switcher → "Multi-Cluster
   // Manager" lands on. Aggregated view across all registered clusters.
   { path: '/multicluster', name: 'Multicluster', component: () => import('../views/MulticlusterDashboard.vue') },

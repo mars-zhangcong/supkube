@@ -47,3 +47,6 @@ supkube-helm/*/charts/*.tgz
 drflowdrytest
 *.test
 supkube-backend/**/*drytest
+
+# 本地 KB 功能梳理 review 用的参考表（Claude），仅留磁盘，不入库。
+KubeBlocks开源功能梳理_Review.xlsx
