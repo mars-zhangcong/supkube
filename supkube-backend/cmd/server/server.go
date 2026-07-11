@@ -522,6 +522,9 @@ func Run() error {
 		// BSLs + flows + 3-2-1-1-0 score into one payload so the
 		// above-the-fold Dashboard card renders in one round-trip.
 		api.GET("/dashboard/topology", v1.GetTopology)
+		// DR posture export — canonical backup/DR snapshot for SupInsight ingest
+		// (Velero + DRFlowRunner → engine-agnostic shape). See dr_posture.go.
+		api.GET("/dr-posture", v1.GetDRPosture)
 		// v0.8.13 HC4: optional component (plugin) status for the
 		// Settings → Plugins tab. Returns per-plugin install state +
 		// the helm upgrade command the admin pastes to toggle each.

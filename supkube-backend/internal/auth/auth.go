@@ -516,7 +516,11 @@ func isAuthBypassPath(p string) bool {
 	case "/api/v1/status",
 		"/api/v1/auth/providers",
 		"/api/v1/auth/callback",
-		"/api/v1/auth/logout":
+		"/api/v1/auth/logout",
+		// DR posture export — read-only canonical backup/DR snapshot consumed by
+		// SupInsight's ingest (service-to-service, in-cluster DNS). Exempt by design;
+		// the public Ingress is separately gated by nginx. See dr_posture.go.
+		"/api/v1/dr-posture":
 		return true
 	}
 	return false
