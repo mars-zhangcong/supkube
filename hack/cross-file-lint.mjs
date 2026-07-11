@@ -62,11 +62,30 @@ function collectPaths(obj, prefix = '', set = new Set(), leaves = new Set()) {
   }
   return { set, leaves }
 }
+// deep-merge b 进 a（叶子后者胜）——供"单体 + 片段目录"合并
+function deepMerge(a, b) {
+  for (const k of Object.keys(b)) {
+    if (b[k] && typeof b[k] === 'object' && !Array.isArray(b[k]))
+      a[k] = deepMerge(a[k] && typeof a[k] === 'object' ? a[k] : {}, b[k])
+    else a[k] = b[k]
+  }
+  return a
+}
+// 登记处去中心化：locale = 单体 en.js/zh-CN.js  +  片段目录 locales/en|zh-CN/*.js。
+// 片段每功能一份、装配见 src/i18n.js 的 import.meta.glob。此处同样合并后再校验，
+// 否则迁到片段里的 key 会被误报 I18N-MISSING（正是「绿着却断」）。
+function loadLocaleMerged(monolith, fragDir) {
+  const merged = deepMerge({}, loadLocale(monolith))
+  if (fs.existsSync(fragDir))
+    for (const f of fs.readdirSync(fragDir))
+      if (f.endsWith('.js')) deepMerge(merged, loadLocale(path.join(fragDir, f)))
+  return merged
+}
 
 // ===== 1) i18n 检查 =====
 let en, zh
-try { en = collectPaths(loadLocale(LOCALES[0])) } catch (e) { errors.push(['I18N-LOAD', e.message]) }
-try { zh = collectPaths(loadLocale(LOCALES[1])) } catch (e) { errors.push(['I18N-LOAD', e.message]) }
+try { en = collectPaths(loadLocaleMerged(LOCALES[0], path.join(FE, 'locales', 'en'))) } catch (e) { errors.push(['I18N-LOAD', e.message]) }
+try { zh = collectPaths(loadLocaleMerged(LOCALES[1], path.join(FE, 'locales', 'zh-CN'))) } catch (e) { errors.push(['I18N-LOAD', e.message]) }
 
 if (en && zh) {
   // 1a 引用的 key 必须两边都在
