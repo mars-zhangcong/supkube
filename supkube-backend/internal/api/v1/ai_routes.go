@@ -17,13 +17,30 @@ package v1
 // RBAC: 这两个端点目前不显式声明 permission — viewer 即可读 (score 是纯计算).
 // PRD-011 §4.6 不要求 admin/editor gate, 跟 /backup-advisor (现役) 同级.
 
-import "github.com/gin-gonic/gin"
+import (
+	"github.com/gin-gonic/gin"
+
+	"github.com/supkube/supkube-backend/internal/auth"
+)
 
 // RegisterAIRoutes registers PRD-011 §4.6 AI Backup Advisor endpoints on
 // the given gin RouterGroup (typically the /api/v1 group from server.go).
 //
 // Caller:  v1.RegisterAIRoutes(api)  // where api = r.Group("/api/v1")
 func RegisterAIRoutes(r *gin.RouterGroup) {
+	// RBAC table is fail-closed: an endpoint with no entry returns "endpoint
+	// not in RBAC table". These AI endpoints are read/advisory (no cluster
+	// mutation — /scores & /score are pure reads, /chat & /explain are LLM
+	// advisory), so viewer is the floor. Co-located with the routes so the
+	// two never drift again. (Bug: /ai/* shipped without table entries → the
+	// DR-health page 403'd for every logged-in user.)
+	auth.RegisterPermissions(
+		auth.PermEntry{Method: "POST", Pattern: "/api/v1/ai/score", MinRole: auth.RoleViewer},
+		auth.PermEntry{Method: "GET", Pattern: "/api/v1/ai/explain/:taskId", MinRole: auth.RoleViewer},
+		auth.PermEntry{Method: "GET", Pattern: "/api/v1/ai/scores", MinRole: auth.RoleViewer},
+		auth.PermEntry{Method: "POST", Pattern: "/api/v1/ai/chat", MinRole: auth.RoleViewer},
+	)
+
 	ai := r.Group("/ai")
 	{
 		// PRD-011 §4.6 H5: /ai/score — deterministic rule-engine scoring,
