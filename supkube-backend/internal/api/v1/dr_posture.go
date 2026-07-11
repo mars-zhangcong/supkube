@@ -105,7 +105,7 @@ func GetDRPosture(c *gin.Context) {
 	// BSLs → repositories (+ unavailable-alerts)
 	for _, l := range bsls.Items {
 		bucket := ""
-		if os := l.Spec.StorageType.ObjectStorage; os != nil {
+		if os := l.Spec.ObjectStorage; os != nil {
 			bucket = os.Bucket
 		}
 		out.Repositories = append(out.Repositories, drpRepo{
@@ -179,7 +179,7 @@ func durSecs(start, end *metav1.Time) int {
 	return int(end.Sub(start.Time).Seconds())
 }
 func ttlDays(ttl metav1.Duration) int {
-	return int(ttl.Duration.Hours() / 24)
+	return int(ttl.Hours() / 24)
 }
 func backupStatus(p velerov1.BackupPhase) string {
 	switch p {

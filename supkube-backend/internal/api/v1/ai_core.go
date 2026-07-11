@@ -11,12 +11,7 @@ package v1
 // （PRD-011 finding #2 铁律：规则引擎评分，LLM 只解释/对话）。
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"strings"
@@ -49,56 +44,8 @@ const aiSystemPrompt = "You are SupKube Copilot, the AI assistant inside SupKube
 	"When the user explicitly asks to back up / snapshot / protect a specific namespace, " +
 	"call the create_backup tool (do not just describe how) — the user will confirm before it runs."
 
-// callAzureOpenAI hits the Azure OpenAI chat-completions API (LHF cloud path).
-func callAzureOpenAI(ctx context.Context, system, user string) (string, error) {
-	endpoint := strings.TrimRight(os.Getenv("AZURE_OPENAI_ENDPOINT"), "/")
-	deployment := os.Getenv("AZURE_OPENAI_DEPLOYMENT")
-	apiVer := os.Getenv("AZURE_OPENAI_API_VERSION")
-	if apiVer == "" {
-		apiVer = "2024-06-01"
-	}
-	key := os.Getenv("AZURE_OPENAI_KEY")
-	if endpoint == "" || deployment == "" || key == "" {
-		return "", fmt.Errorf("azure openai not configured (need AZURE_OPENAI_ENDPOINT/DEPLOYMENT/KEY)")
-	}
-	url := endpoint + "/openai/deployments/" + deployment + "/chat/completions?api-version=" + apiVer
-	body, _ := json.Marshal(map[string]any{
-		"messages": []map[string]string{
-			{"role": "system", "content": system},
-			{"role": "user", "content": user},
-		},
-		// GPT-5 family: max_tokens rejected (use max_completion_tokens); non-default
-		// temperature rejected by reasoning models — omit it. Generous budget covers
-		// reasoning + output.
-		"max_completion_tokens": 4000,
-	})
-	req, _ := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("api-key", key)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	data, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode >= 400 {
-		return "", fmt.Errorf("azure openai status %d: %s", resp.StatusCode, aiTrunc(string(data), 200))
-	}
-	var out struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-	}
-	if err := json.Unmarshal(data, &out); err != nil {
-		return "", fmt.Errorf("parse azure response: %w", err)
-	}
-	if len(out.Choices) == 0 {
-		return "", fmt.Errorf("azure openai: no choices")
-	}
-	return strings.TrimSpace(out.Choices[0].Message.Content), nil
-}
+// (callAzureOpenAI, the plain no-tools variant, was removed as dead code —
+// the Copilot chat path uses callAzureOpenAITools exclusively, see ai_tools.go.)
 
 // callClaudeCLI shells out to the local `claude` CLI (subscription). Local dev only.
 // Strips ANTHROPIC_* env so it uses the interactive subscription login, not an API key.

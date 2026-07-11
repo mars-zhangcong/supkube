@@ -85,7 +85,7 @@ func callAzureOpenAITools(ctx context.Context, system, user string, tools []map[
 	if err != nil {
 		return "", nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	data, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {
 		return "", nil, fmt.Errorf("azure openai status %d: %s", resp.StatusCode, aiTrunc(string(data), 200))
