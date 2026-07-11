@@ -1031,14 +1031,7 @@ export default {
     syncHint: 'Velero polls this object-storage profile every 60s.',
     nameImmutableHint: 'Name is immutable. To rename, delete and recreate.'
   },
-  vsl: {
-    title: 'Snapshot Locations',
-    desc: 'Volume Snapshot Locations tell Velero how to take volume snapshots — CSI for in-cluster CSI drivers, or cloud-native (AWS EBS / GCP PD / Azure Disk) for managed storage.',
-    create: 'Create Snapshot Location',
-    config: 'Config',
-    noConfig: 'no config (uses Velero defaults)',
-    emptyHint: 'No Snapshot Locations yet. Create one to enable CSI / cloud-native volume snapshots.'
-  },
+  // vsl namespace migrated to locales/en/vsl.js (登记处去中心化样板，见 i18n.js)
   settings: {
     title: 'Settings',
     language: 'Language',
