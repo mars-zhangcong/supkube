@@ -1003,7 +1003,14 @@ export default {
     syncHint: 'Velero 每 60 秒轮询一次该对象存储。',
     nameImmutableHint: '名称不可修改。如需改名请删除后重建。'
   },
-  // vsl 命名空间已迁至 locales/zh-CN/vsl.js（登记处去中心化样板，见 i18n.js）
+  vsl: {
+    title: '快照位置',
+    desc: '快照位置告诉 Velero 如何拍摄卷快照——CSI 用于集群内 CSI 驱动，或云原生（AWS EBS / GCP PD / Azure Disk）用于托管存储。',
+    create: '创建快照位置',
+    config: '配置',
+    noConfig: '无配置（使用 Velero 默认值）',
+    emptyHint: '尚无快照位置。创建一个以启用 CSI / 云原生卷快照。'
+  },
   settings: {
     title: '设置',
     language: '语言',
