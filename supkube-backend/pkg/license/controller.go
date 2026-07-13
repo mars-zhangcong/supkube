@@ -84,10 +84,10 @@ type controller struct {
 	target   *corev1.ConfigMap // event object
 
 	// event throttle state (avoid spamming every 5m tick)
-	lastState        string
-	lastLoadedID     string
-	lastExceeded     bool
-	lastExpSoonDate  string // yyyy-mm-dd of last LicenseExpiringSoon
+	lastState       string
+	lastLoadedID    string
+	lastExceeded    bool
+	lastExpSoonDate string // yyyy-mm-dd of last LicenseExpiringSoon
 }
 
 // Run starts the license controller loop: an immediate check then every 5

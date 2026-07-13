@@ -11,8 +11,8 @@ package license
 
 import (
 	"crypto/ed25519"
-	"encoding/base64"
 	_ "embed"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"strings"
