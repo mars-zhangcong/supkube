@@ -40,6 +40,13 @@
           <h3 class="sk-h2 dr-title">{{ t('topology.title') }}</h3>
           <p v-if="expanded" class="sk-caption dr-subtitle">{{ t('topology.subtitle') }}</p>
         </div>
+        <button
+          class="dr-demo-toggle"
+          :class="{ 'is-on': demoMode }"
+          type="button"
+          @click.stop="toggleDemo"
+          :title="t('topology.demoTip')"
+        >{{ t('topology.demo') }}</button>
       </div>
 
       <div class="dr-header-score" @click.stop>
@@ -87,11 +94,16 @@
       </div>
 
       <div ref="canvasRef" class="dr-canvas svg-canvas-bg">
+        <div class="dr-zoom" @click.stop>
+          <button type="button" class="dr-zoom-btn" @click="zoomOut" :disabled="zoom <= 0.5" aria-label="zoom out">−</button>
+          <button type="button" class="dr-zoom-level" @click="zoomReset">{{ Math.round(zoom * 100) }}%</button>
+          <button type="button" class="dr-zoom-btn" @click="zoomIn" :disabled="zoom >= 2" aria-label="zoom in">+</button>
+        </div>
         <svg
           v-if="layout"
           :viewBox="`0 0 ${layout.width} ${layout.height}`"
-          :width="layout.width"
-          :height="layout.height"
+          :width="layout.width * zoom"
+          :height="layout.height * zoom"
           class="dr-svg"
           preserveAspectRatio="xMidYMid meet"
           data-testid="dr-svg"
@@ -99,11 +111,15 @@
           <!-- Arrow marker defs (D2): filled triangle = movement,
                hollow triangle = copy-only data flow. -->
           <defs>
-            <marker id="svg-marker-filled" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
-              <path d="M0,0 L8,4 L0,8 Z" class="svg-marker-filled-shape" />
+            <!-- markerUnits=userSpaceOnUse: keep a fixed ~9px arrowhead regardless of
+                 stroke-width. Without this the default (strokeWidth) scaling turned a
+                 width-6 flow's 8px marker into a ~48px black triangle that stacked
+                 into a solid blob where many flows converged on one BSL. -->
+            <marker id="svg-marker-filled" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+              <path d="M0,0 L9,4.5 L0,9 Z" class="svg-marker-filled-shape" />
             </marker>
-            <marker id="svg-marker-hollow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
-              <path d="M0,0 L8,4 L0,8 Z" fill="none" stroke="currentColor" stroke-width="1" />
+            <marker id="svg-marker-hollow" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+              <path d="M0,0 L9,4.5 L0,9 Z" fill="none" stroke="currentColor" stroke-width="1.2" />
             </marker>
           </defs>
 
@@ -120,6 +136,7 @@
                 @mouseleave="hoverFlow = null"
               />
               <text
+                v-if="hoverFlow === flow"
                 :x="flow.labelX"
                 :y="flow.labelY"
                 class="dr-flow-label"
@@ -131,7 +148,7 @@
           <!-- Cluster cards (D1: blue family) -->
           <g class="dr-clusters">
             <g
-              v-for="(cluster, ci) in layout.clusters"
+              v-for="(cluster, ci) in layout.clusters.concat(layout.targets || [])"
               :key="`cluster-${ci}`"
               :transform="`translate(${cluster.x}, ${cluster.y})`"
               class="dr-clickable"
@@ -151,6 +168,9 @@
               </text>
               <text v-if="cluster.isCurrent" :x="cluster.width - 14" :y="24" text-anchor="end" class="dr-card-badge">
                 ★ {{ t('topology.current') }}
+              </text>
+              <text v-else-if="cluster.isTarget" :x="cluster.width - 14" :y="24" text-anchor="end" class="dr-card-badge dr-card-badge-standby">
+                ⟳ {{ t('topology.restoreTarget') }}
               </text>
               <text :x="14" :y="44" class="dr-card-meta">
                 <tspan v-if="cluster.k8sVersion">k8s {{ cluster.k8sVersion }}</tspan>
@@ -269,6 +289,26 @@
         </div>
       </div>
 
+      <!-- Legend: flow-line types (colour) + storage layers L1–L4 -->
+      <div class="dr-legend">
+        <div class="dr-legend-group">
+          <span class="dr-legend-title">{{ t('topology.legendFlows') }}</span>
+          <span v-for="ft in FLOW_TYPES" :key="`lg-${ft}`" class="dr-legend-item">
+            <svg width="26" height="10" class="dr-legend-swatch" aria-hidden="true">
+              <line x1="1" y1="5" x2="25" y2="5" :class="`svg-arrow-${ft}`" stroke-width="3" />
+            </svg>
+            {{ t(`topology.flowType.${ft}`) }}
+          </span>
+        </div>
+        <div class="dr-legend-group">
+          <span class="dr-legend-title">{{ t('topology.legendLayers') }}</span>
+          <span v-for="ly in ['l1', 'l2', 'l3', 'l4']" :key="`lg-${ly}`" class="dr-legend-item">
+            <span class="dr-legend-badge" :class="`dr-lg-${ly}`">{{ ly.toUpperCase() }}</span>
+            {{ t(`topology.legend${ly.toUpperCase()}`) }}
+          </span>
+        </div>
+      </div>
+
       <div v-if="orphanBSLs.length" class="dr-orphans">
         <button class="dr-orphan-toggle" @click="showOrphans = !showOrphans">
           {{ showOrphans ? '▼' : '▶' }} {{ orphanBSLs.length }} {{ t('topology.inactiveBSLs') }}
@@ -321,21 +361,115 @@ const loading = ref(true)
 const clusters = ref([])
 const bsls = ref([])
 const flows = ref([])
+const restoreTargets = ref([]) // col-3 standby clusters that receive scheduled restores (BSL → cluster B)
 const score = ref({})
+
+// SVG zoom (canvas pans via overflow:auto). 1 = fit; clamped 0.5–2.
+const zoom = ref(1)
+function zoomIn() { zoom.value = Math.min(2, +(zoom.value + 0.2).toFixed(2)) }
+function zoomOut() { zoom.value = Math.max(0.5, +(zoom.value - 0.2).toFixed(2)) }
+function zoomReset() { zoom.value = 1 }
 const summary = ref({ clusterCount: 0, policyCount: 0, rpCount: 0 })
 const posture = ref({ layer5Status: 'muted', lastDrillAt: null, nextDrillAt: null })
 const showOrphans = ref(false)
 
+// ──────────────────────────────────────────────────────────────────
+// Demo mode (customer showcase). A self-contained, richer multi-cluster
+// topology so the capability can be shown without a complex live estate.
+// Opt-in toggle, persisted; purely client-side — never touches the API or
+// real backups. buildDemoTopology() re-derives timestamps relative to now
+// so "X ago" labels stay fresh.
+// ──────────────────────────────────────────────────────────────────
+const DEMO_KEY = 'supkube.drTopology.demo'
+const demoMode = ref(localStorage.getItem(DEMO_KEY) === 'true')
+
+function buildDemoTopology() {
+  const now = Date.now()
+  const ago = (min) => new Date(now - min * 60000).toISOString()
+  const inDays = (d) => new Date(now + d * 86400000).toISOString()
+  const GiB = 1024 ** 3
+  const f = (fromCluster, fromNamespace, toBSL, type, policyNames, backupCount) =>
+    ({ fromCluster, fromNamespace, toBSL, type, policyNames, backupCount })
+  return {
+    clusters: [
+      { id: 'prod-beijing', name: 'prod-beijing', type: 'primary', isCurrent: true, k8sVersion: 'v1.29.4', nodeCount: 6, policyCount: 7,
+        namespaceNames: ['payments', 'orders', 'inventory', 'user-auth', 'analytics', 'cms', 'search-es'] },
+      { id: 'dr-shanghai', name: 'dr-shanghai', type: 'secondary', isCurrent: false, k8sVersion: 'v1.29.4', nodeCount: 4, policyCount: 5,
+        namespaceNames: ['payments', 'orders', 'user-auth', 'message-queue', 'analytics'] },
+      { id: 'edge-singapore', name: 'edge-singapore', type: 'secondary', isCurrent: false, k8sVersion: 'v1.28.9', nodeCount: 3, policyCount: 3,
+        namespaceNames: ['cdn-cache', 'iot-ingest', 'user-auth'] },
+    ],
+    bsls: [
+      { name: 'local-snapshots', kind: 'local', role: 'snapshot', provider: 'CSI Snapshot', phase: 'Available', rpCount: 128, backedupNs: 7, lastBackupAt: ago(12) },
+      { name: 'minio-onprem', kind: 'local', provider: 'MinIO', bucket: 'supkube-backups', phase: 'Available', rpCount: 96, backedupNs: 6,
+        capacityBytes: 2048 * GiB, usedBytes: 690 * GiB, lastBackupAt: ago(23) },
+      { name: 's3-beijing', kind: 'cloud', provider: 'AWS S3', bucket: 'sk-cn-north-backups', phase: 'Available', rpCount: 84, backedupNs: 5, lastBackupAt: ago(34) },
+      { name: 's3-singapore-immutable', kind: 'cloud', provider: 'AWS S3', bucket: 'sk-ap-immutable', phase: 'Available', rpCount: 52, backedupNs: 4,
+        objectLockEnabled: true, objectLockMode: 'COMPLIANCE', lastBackupAt: ago(58) },
+      { name: 'azure-blob-dr', kind: 'cloud', role: 'copy', provider: 'Azure Blob', bucket: 'skdrblob', phase: 'Available', rpCount: 40, backedupNs: 3, lastBackupAt: ago(70) },
+    ],
+    flows: [
+      f('prod-beijing', 'payments', 'local-snapshots', 'snapshot', ['payments-6h'], 42),
+      f('prod-beijing', 'payments', 'minio-onprem', 'export', ['payments-6h'], 38),
+      f('prod-beijing', 'payments', 's3-singapore-immutable', 'copy', ['payments-offsite'], 30),
+      f('prod-beijing', 'orders', 'local-snapshots', 'snapshot', ['orders-daily'], 28),
+      f('prod-beijing', 'orders', 'minio-onprem', 'export', ['orders-daily'], 26),
+      f('prod-beijing', 'orders', 's3-beijing', 'copy', ['orders-offsite'], 22),
+      f('prod-beijing', 'inventory', 'minio-onprem', 'export', ['inventory-daily'], 18),
+      f('prod-beijing', 'user-auth', 'local-snapshots', 'snapshot', ['auth-critical'], 20),
+      f('prod-beijing', 'user-auth', 's3-singapore-immutable', 'copy', ['auth-offsite'], 16),
+      f('prod-beijing', 'analytics', 's3-beijing', 'export', ['analytics-weekly'], 12),
+      f('prod-beijing', 'cms', 'minio-onprem', 'export', ['cms-daily'], 14),
+      f('prod-beijing', 'search-es', 'minio-onprem', 'export', ['es-daily'], 10),
+      f('dr-shanghai', 'payments', 's3-beijing', 'copy', ['payments-dr'], 18),
+      f('dr-shanghai', 'user-auth', 's3-singapore-immutable', 'copy', ['auth-dr'], 12),
+      f('dr-shanghai', 'message-queue', 'minio-onprem', 'export', ['mq-daily'], 9),
+      f('edge-singapore', 'iot-ingest', 'azure-blob-dr', 'copy', ['iot-dr'], 8),
+      f('edge-singapore', 'cdn-cache', 'azure-blob-dr', 'copy', ['cdn-dr'], 6),
+      // Restore / failover: BSL → standby cluster B (col 3) — closes the DR loop
+      // (A backs up to a bucket, the bucket is restored on a schedule into B).
+      { type: 'restore', toBSL: 's3-beijing', fromNamespace: 'payments', toCluster: 'dr-standby-guangzhou', policyNames: ['payments-failover'], backupCount: 6 },
+      { type: 'restore', toBSL: 's3-singapore-immutable', fromNamespace: 'user-auth', toCluster: 'dr-standby-guangzhou', policyNames: ['auth-failover'], backupCount: 4 },
+      { type: 'restore', toBSL: 'minio-onprem', fromNamespace: 'orders', toCluster: 'dr-standby-guangzhou', policyNames: ['orders-failover'], backupCount: 3 },
+    ],
+    restoreTargets: [
+      { id: 'dr-standby-guangzhou', name: 'dr-standby-guangzhou', type: 'standby', k8sVersion: 'v1.29.4', nodeCount: 4, policyCount: 3,
+        namespaceNames: ['payments', 'user-auth', 'orders'] },
+    ],
+    score: { threeCopies: true, twoMedia: true, oneOffsite: true, oneImmutable: true, zeroErrors: true },
+    posture: { layer5Status: 'ok', lastDrillAt: ago(60 * 24 * 3), nextDrillAt: inDays(4) },
+    summary: { clusterCount: 3, policyCount: 15, rpCount: 400, namespaceCount: 12, localBSLCount: 2, cloudBSLCount: 3 },
+  }
+}
+
+function applyTopology(data) {
+  clusters.value = data.clusters || []
+  bsls.value = data.bsls || []
+  flows.value = data.flows || []
+  restoreTargets.value = data.restoreTargets || []
+  score.value = data.score || {}
+  summary.value = data.summary || {}
+  posture.value = data.posture || { layer5Status: 'muted' }
+}
+
+function toggleDemo() {
+  demoMode.value = !demoMode.value
+  try { localStorage.setItem(DEMO_KEY, String(demoMode.value)) } catch (_) {}
+  if (demoMode.value && !expanded.value) toggle() // auto-expand so the demo is visible
+  fetchTopology()
+}
+
 async function fetchTopology() {
+  // Demo mode short-circuits the network — pure client-side sample data.
+  if (demoMode.value) {
+    applyTopology(buildDemoTopology())
+    loading.value = false
+    return
+  }
   loading.value = true
   try {
     const res = await getTopology()
-    clusters.value = res.data.clusters || []
-    bsls.value = res.data.bsls || []
-    flows.value = res.data.flows || []
-    score.value = res.data.score || {}
-    summary.value = res.data.summary || {}
-    posture.value = res.data.posture || { layer5Status: 'muted' }
+    applyTopology(res.data)
   } catch (e) {
     // eslint-disable-next-line no-console
     console.warn('topology fetch failed', e?.response?.status)
@@ -495,6 +629,26 @@ function normalizeFlowType(rawType) {
   return 'export'
 }
 
+// makeFlow builds a flow-path record (pure). Shared by backup (cluster→BSL) and
+// restore (BSL→standby cluster) so the two directions stay consistent.
+function makeFlow(d, type, f, labelX, labelY, showLabel) {
+  const first = (f.policyNames && f.policyNames[0]) || ''
+  const extra = f.policyNames && f.policyNames.length > 1 ? ` +${f.policyNames.length - 1}` : ''
+  return {
+    d,
+    type,
+    width: Math.min(5, Math.max(1.5, 1 + (f.backupCount || 0) / 6)),
+    labelX,
+    labelY,
+    shortLabel: showLabel ? `${first}${extra}` : '',
+    from: f.fromNamespace,
+    to: type === 'restore' ? (f.toCluster || f.toBSL) : f.toBSL,
+    policyNames: f.policyNames || [],
+    backupCount: f.backupCount,
+    tipStyle: { left: `${labelX - 100}px`, top: `${labelY + 24}px` },
+  }
+}
+
 const layout = computed(() => {
   if (!clusters.value.length && !activeBSLs.value.length) return null
 
@@ -545,52 +699,84 @@ const layout = computed(() => {
     bslY += b.height + CARD_GAP
   }
 
-  const width = bslX + BSL_W + PAD
-  const height = Math.max(clusterY, bslY, 220) + PAD
+  // Restore-target cluster cards (col 3) — standby clusters that receive
+  // scheduled restores from a BSL (A → bucket → restore → B). Only present
+  // when the topology carries restoreTargets (demo, or a future backend that
+  // tracks restore schedules); otherwise the layout stays 2-column.
+  const targetX = bslX + BSL_W + COL_GAP
+  const targetCards = (restoreTargets.value || []).map((tc) => {
+    const nsVisible = (tc.namespaceNames || []).slice(0, NS_MAX_VISIBLE)
+    const nsRows = nsVisible.map((name, i) => ({ name, y: CLUSTER_HEADER + i * NS_ROW_H, hasFlow: true }))
+    const truncatedCount = (tc.namespaceNames || []).length - nsVisible.length
+    const height = Math.max(140, CLUSTER_HEADER + nsRows.length * NS_ROW_H + (truncatedCount > 0 ? 20 : 12))
+    return { ...tc, width: CLUSTER_W, height, nsRows, truncatedCount, isTarget: true }
+  })
+  let targetY = PAD
+  for (const tc of targetCards) { tc.x = targetX; tc.y = targetY; targetY += tc.height + CARD_GAP }
+  const hasTargets = targetCards.length > 0
 
-  // Flow paths — type drives styling via CSS class (ADR-040 D2)
+  const width = (hasTargets ? targetX + CLUSTER_W : bslX + BSL_W) + PAD
+  const height = Math.max(clusterY, bslY, targetY, 220) + PAD
+
+  // Split flows: backups (cluster→BSL) vs restores that land on a standby
+  // cluster (BSL→cluster B, col 3).
+  const backupFlows = flows.value.filter((f) => !(f.type === 'restore' && f.toCluster))
+  const restoreFlows = flows.value.filter((f) => f.type === 'restore' && f.toCluster)
+
+  // Fan inbound backup arrowheads along each BSL's LEFT edge so they spread
+  // out instead of stacking on one point (was the "black triangle" blob).
+  const inCount = {}
+  for (const f of backupFlows) inCount[f.toBSL] = (inCount[f.toBSL] || 0) + 1
+  const inSeen = {}
+  const entryY = (bsl) => {
+    const n = inCount[bsl.name] || 1
+    const i = (inSeen[bsl.name] = (inSeen[bsl.name] ?? -1) + 1)
+    const top = bsl.y + 14
+    const bot = bsl.y + bsl.height - 14
+    return n > 1 ? top + (bot - top) * (i / (n - 1)) : bsl.y + bsl.height / 2
+  }
+
   const flowPaths = []
-  for (const f of flows.value) {
+  // Backup flows: cluster (right edge) → BSL (left edge, fanned)
+  for (const f of backupFlows) {
     const cluster = clusterCards.find((c) => c.id === f.fromCluster)
     if (!cluster) continue
     const nsIdx = cluster.namespaceNames.indexOf(f.fromNamespace)
     if (nsIdx < 0 || nsIdx >= NS_MAX_VISIBLE) continue
     const bsl = bslCards.find((b) => b.name === f.toBSL)
     if (!bsl) continue
-
     const type = normalizeFlowType(f.type || 'export')
     const sx = cluster.x + cluster.width
     const sy = cluster.y + CLUSTER_HEADER + nsIdx * NS_ROW_H + NS_ROW_H / 2 - 4
     const ex = bsl.x
-    const ey = bsl.y + 10
+    const ey = entryY(bsl)
     const cx = (sx + ex) / 2
-
-    // restore is the only reverse-direction arrow → curve back-and-up
-    const d = type === 'restore'
-      ? `M ${ex} ${ey} C ${cx} ${ey}, ${cx} ${sy - 30}, ${sx} ${sy}`
-      : `M ${sx} ${sy} C ${cx} ${sy}, ${cx} ${ey}, ${ex} ${ey}`
-
-    const w = Math.min(6, Math.max(1.5, 1 + (f.backupCount || 0) / 5))
-    const first = (f.policyNames && f.policyNames[0]) || ''
-    const extra = f.policyNames && f.policyNames.length > 1 ? ` +${f.policyNames.length - 1}` : ''
-    const shortLabel = (ex - sx) > 80 ? `${first}${extra}` : ''
-
-    flowPaths.push({
-      d,
-      type,
-      width: w,
-      labelX: cx,
-      labelY: (sy + ey) / 2 - 4,
-      shortLabel,
-      from: f.fromNamespace,
-      to: f.toBSL,
-      policyNames: f.policyNames || [],
-      backupCount: f.backupCount,
-      tipStyle: { left: `${cx - 100}px`, top: `${(sy + ey) / 2 + 20}px` },
-    })
+    const d = `M ${sx} ${sy} C ${cx} ${sy}, ${cx} ${ey}, ${ex} ${ey}`
+    flowPaths.push(makeFlow(d, type, f, cx, (sy + ey) / 2 - 4, (ex - sx) > 80))
+  }
+  // Restore flows: BSL (right edge) → standby cluster B (left edge, fanned)
+  const tInCount = {}
+  for (const f of restoreFlows) tInCount[f.toCluster] = (tInCount[f.toCluster] || 0) + 1
+  const tInSeen = {}
+  for (const f of restoreFlows) {
+    const bsl = bslCards.find((b) => b.name === f.toBSL)
+    const tc = targetCards.find((c) => c.id === f.toCluster || c.name === f.toCluster)
+    if (!bsl || !tc) continue
+    const key = tc.id || tc.name
+    const n = tInCount[f.toCluster] || 1
+    const i = (tInSeen[key] = (tInSeen[key] ?? -1) + 1)
+    const top = tc.y + 20
+    const bot = tc.y + tc.height - 20
+    const sx = bsl.x + bsl.width
+    const sy = bsl.y + bsl.height / 2
+    const ex = tc.x
+    const ey = n > 1 ? top + (bot - top) * (i / (n - 1)) : tc.y + tc.height / 2
+    const cx = (sx + ex) / 2
+    const d = `M ${sx} ${sy} C ${cx} ${sy}, ${cx} ${ey}, ${ex} ${ey}`
+    flowPaths.push(makeFlow(d, 'restore', f, cx, (sy + ey) / 2 - 4, (ex - sx) > 80))
   }
 
-  return { width, height, clusters: clusterCards, bsls: bslCards, flowPaths }
+  return { width, height, clusters: clusterCards, bsls: bslCards, targets: targetCards, flowPaths }
 })
 
 const hoverFlow = ref(null)
@@ -653,6 +839,91 @@ defineExpose({ FLOW_TYPES, l5State, classifyBSL, normalizeFlowType })
 .dr-chevron.is-open { transform: rotate(90deg); }
 .dr-title { margin: 0; }
 .dr-subtitle { margin: 2px 0 0 0; }
+.dr-demo-toggle {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--sk-border, #d0d5dd);
+  background: var(--sk-bg-subtle, #f4f5f7);
+  color: var(--sk-text-caption);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.dr-demo-toggle:hover { border-color: var(--sk-primary, #2f6feb); color: var(--sk-primary, #2f6feb); }
+.dr-demo-toggle.is-on {
+  background: var(--sk-primary, #2f6feb);
+  border-color: var(--sk-primary, #2f6feb);
+  color: #fff;
+}
+
+/* Zoom controls (float top-right of the canvas; canvas pans via overflow) */
+.dr-canvas { position: relative; overflow: auto; }
+.dr-zoom {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--sk-bg, #fff);
+  border: 1px solid var(--sk-border, #d0d5dd);
+  border-radius: 8px;
+  padding: 2px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+.dr-zoom-btn, .dr-zoom-level {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--sk-text, #333);
+  font-size: 15px;
+  line-height: 1;
+  padding: 4px 9px;
+  border-radius: 6px;
+}
+.dr-zoom-level { font-size: 11px; min-width: 46px; font-weight: 600; }
+.dr-zoom-btn:hover:not(:disabled), .dr-zoom-level:hover { background: var(--sk-bg-subtle, #f0f1f3); }
+.dr-zoom-btn:disabled { opacity: 0.35; cursor: default; }
+
+/* Legend — flow-line types + storage layers */
+.dr-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 28px;
+  padding: 12px 16px 4px;
+  font-size: 12px;
+  color: var(--sk-text-caption);
+}
+.dr-legend-group { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; }
+.dr-legend-title { font-weight: 600; color: var(--sk-text, #333); margin-right: 2px; }
+.dr-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.dr-legend-swatch { flex-shrink: 0; }
+/* Legend swatches are plain line segments — no arrowhead (the svg-arrow-*
+   classes add a marker-end; strip it here so only the coloured line shows). */
+.dr-legend-swatch line { marker-end: none; }
+.dr-legend-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+}
+.dr-lg-l1 { background: #10b981; }
+.dr-lg-l2 { background: #f59e0b; }
+.dr-lg-l3 { background: #8b5cf6; }
+.dr-lg-l4 { background: #ec4899; }
+
+/* Standby (restore-target) badge — SVG text fill */
+.dr-card-badge-standby { fill: #7c3aed; font-weight: 600; }
 
 .dr-header-score {
   display: flex;
