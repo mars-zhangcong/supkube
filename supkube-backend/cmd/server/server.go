@@ -24,6 +24,7 @@ import (
 	"github.com/supkube/supkube-backend/internal/metrics"
 	"github.com/supkube/supkube-backend/internal/policypair"
 	"github.com/supkube/supkube-backend/internal/velerons"
+	"github.com/supkube/supkube-backend/pkg/license"
 	velerov1 "github.com/vmware-tanzu/velero/pkg/apis/velero/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -150,6 +151,18 @@ func Run() error {
 			return
 		}
 		csi.Run(context.Background(), k8sCli, dynCli, 10*time.Minute)
+	}()
+
+	// License consumer (Phase 4): read supkube-license Secret → verify signature
+	// → enforce node quota → report status. Degrades gracefully (never aborts
+	// the server); reads/restores always allowed, only new backups are gated.
+	go func() {
+		k8sCli, err := k8s.GetClient()
+		if err != nil {
+			log.Printf("[license] k8s client unavailable; license enforcement disabled: %v", err)
+			return
+		}
+		license.Run(context.Background(), k8sCli)
 	}()
 
 	// PRD-007 §4.4 ImportPolicy fingerprint — source-side signer + dest-
@@ -401,9 +414,14 @@ func Run() error {
 		api.GET("/backup-advisor", v1.GetBackupAdvisor)
 		api.GET("/backup-advisor/:namespace", v1.GetBackupAdvisorForNamespace)
 
+		// License status (read-only; for the future License UI).
+		api.GET("/license/status", v1.GetLicenseStatus)
+
 		// Backups
 		api.GET("/backups", v1.ListBackups)
-		api.POST("/backups", v1.CreateBackup)
+		// LicenseWriteGate: new backup tasks require a licensed/grace license
+		// (402 otherwise). Restores + reads below stay ungated on purpose.
+		api.POST("/backups", v1.LicenseWriteGate, v1.CreateBackup)
 		api.GET("/backups/:name", v1.GetBackup)
 		api.GET("/backups/:name/resources", v1.GetBackupResources)
 		api.GET("/backups/:name/artifacts", v1.ListBackupArtifacts)
@@ -483,10 +501,10 @@ func Run() error {
 
 		// Schedules
 		api.GET("/schedules", v1.ListSchedules)
-		api.POST("/schedules", v1.CreateSchedule)
+		api.POST("/schedules", v1.LicenseWriteGate, v1.CreateSchedule)
 		api.GET("/schedules/:name", v1.GetSchedule)
 		api.PATCH("/schedules/:name", v1.PatchSchedule)
-		api.POST("/schedules/:name/run-once", v1.RunScheduleOnce)
+		api.POST("/schedules/:name/run-once", v1.LicenseWriteGate, v1.RunScheduleOnce)
 		api.DELETE("/schedules/:name", v1.DeleteSchedule)
 
 		// Storage locations
